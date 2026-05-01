@@ -1654,70 +1654,81 @@ GameScene.prototype._handleOptionClick = function (self, optBg, optKey, aiId, q)
     fontSize: '13px', color: '#FFFFFF', fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(306);
   closeBg.setInteractive(new Phaser.Geom.Rectangle(510, btnY, 220, 40), Phaser.Geom.Rectangle.Contains);
-  closeBg.on('pointerup', function () { self._destroyChaos(); });
+  closeBg.on('pointerup', function () {
+    self._destroyChaos();
+  });
   self.chaosElements.push(closeBg, closeTxt);
 
-  // B37: 换牌事件检测 — 答题后调API检查是否触发换牌
-  if (self.isAPIMode && typeof ApiClient !== 'undefined' && ApiClient.checkChaosTrigger) {
-    ApiClient.checkChaosTrigger({
-      round: self.chaosScore || 0,
-      result: isCorrect ? 'correct' : 'wrong'
-    })
-      .then(function (res) {
-        if (res.triggered && res.event && res.event.type === 'cardSwap') {
-          self._showCardSwapAnimation(res.event, aiId);
-        }
-      })
-      .catch(function () {});
-  }
+  // B3: 答完题始终触发换牌（答对玩家从AI赢牌、答错AI从玩家拿牌）
+  self._doCardSwap(aiId, isCorrect);
 };
 
 // ================================================================
-// B37: 搞事情 - 换牌动画（AI从你手牌换走一张）
+// B3: 答完题换牌 — 答对玩家从AI拿牌、答错AI从玩家拿牌
 // ================================================================
-GameScene.prototype._showCardSwapAnimation = function (event, aiId) {
+GameScene.prototype._doCardSwap = function (aiId, isCorrect) {
   var self = this;
   if (!self.playerHand || self.playerHand.length === 0) return;
 
-  // 随机选一张玩家手牌
-  var idx = Math.floor(Math.random() * self.playerHand.length);
-  var swappedCard = self.playerHand[idx];
-  self.playerHand.splice(idx, 1);
-
-  // 加入AI手牌
   var aiHand = aiId === 'duidui' ? self.ai1Hand : self.ai2Hand;
-  aiHand.push(swappedCard);
-  aiHand.sort(function (a, b) { return a.rank !== b.rank ? b.rank - a.rank : a.suit - b.suit; });
-
   var aiName = aiId === 'duidui' ? '王怼怼' : '苏甜甜';
 
-  // 换牌提示文字动画
-  var swapText = self.add.text(480, 184, '🔄 ' + aiName + ' 换走了你的牌！', {
-    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '17px', color: '#FF6B35', fontStyle: 'bold',
-    stroke: '#000000', strokeThickness: 3
-  }).setOrigin(0.5).setDepth(310);
+  if (isCorrect) {
+    // 答对：玩家从AI手牌随机拿一张
+    if (!aiHand || aiHand.length === 0) return;
+    var aiIdx = Math.floor(Math.random() * aiHand.length);
+    var wonCard = aiHand[aiIdx];
+    aiHand.splice(aiIdx, 1);
+    self.playerHand.push(wonCard);
+    self.playerHand = Doudizhu.sortCards(self.playerHand);
 
-  // 显示已被换走的牌
-  var rankStr = Doudizhu.RANK_NAMES ? Doudizhu.RANK_NAMES[swappedCard.rank] : (swappedCard.rank || '');
-  var suitStr = Doudizhu.SUIT_NAMES ? Doudizhu.SUIT_NAMES[swappedCard.suit] : (swappedCard.suit || '');
-  var cardText = self.add.text(480, 210, '[' + suitStr + rankStr + ']', {
-    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '14px', color: '#FFFFFF',
-    stroke: '#000000', strokeThickness: 2
-  }).setOrigin(0.5).setDepth(310);
+    var rankStr = Doudizhu.RANK_NAMES ? Doudizhu.RANK_NAMES[wonCard.rank] : (wonCard.rank || '');
+    var suitStr = Doudizhu.SUIT_NAMES ? Doudizhu.SUIT_NAMES[wonCard.suit] : (wonCard.suit || '');
+    var swapText = self.add.text(480, 184, '🎉 答对了！从 ' + aiName + ' 赢了一张牌！', {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '15px', color: '#4CAF50', fontStyle: 'bold',
+      stroke: '#000000', strokeThickness: 2
+    }).setOrigin(0.5).setDepth(310);
+    var cardText = self.add.text(480, 206, '[' + suitStr + rankStr + ']', {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '13px', color: '#FFFFFF',
+      stroke: '#000000', strokeThickness: 2
+    }).setOrigin(0.5).setDepth(310);
+    self.chaosElements.push(swapText, cardText);
+    self.time.delayedCall(3000, function () {
+      if (swapText) swapText.destroy();
+      if (cardText) cardText.destroy();
+    });
+  } else {
+    // 答错：AI从玩家手牌随机拿一张
+    var idx = Math.floor(Math.random() * self.playerHand.length);
+    var lostCard = self.playerHand[idx];
+    self.playerHand.splice(idx, 1);
+    aiHand.push(lostCard);
+    aiHand.sort(function (a, b) { return a.rank !== b.rank ? b.rank - a.rank : a.suit - b.suit; });
 
-  self.chaosElements.push(swapText, cardText);
+    var rankStr = Doudizhu.RANK_NAMES ? Doudizhu.RANK_NAMES[lostCard.rank] : (lostCard.rank || '');
+    var suitStr = Doudizhu.SUIT_NAMES ? Doudizhu.SUIT_NAMES[lostCard.suit] : (lostCard.suit || '');
+    var swapText = self.add.text(480, 184, '😈 ' + aiName + ' 从你手中拿走了一张牌！', {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '15px', color: '#FF6B35', fontStyle: 'bold',
+      stroke: '#000000', strokeThickness: 2
+    }).setOrigin(0.5).setDepth(310);
+    var cardText = self.add.text(480, 206, '[' + suitStr + rankStr + ']', {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '13px', color: '#FFFFFF',
+      stroke: '#000000', strokeThickness: 2
+    }).setOrigin(0.5).setDepth(310);
+    self.chaosElements.push(swapText, cardText);
+    self.time.delayedCall(3000, function () {
+      if (swapText) swapText.destroy();
+      if (cardText) cardText.destroy();
+    });
+  }
 
-  // 更新玩家手牌显示
-  self.renderHandCards();
+  // 更新手牌显示
+  self.renderPlayerHand();
   self.updateAICount(aiId === 'duidui' ? 0 : 1);
-
-  // 2.5秒后自动消失
-  self.time.delayedCall(2500, function () {
-    if (swapText) swapText.destroy();
-    if (cardText) cardText.destroy();
-  });
 };
 
 // ================================================================
