@@ -224,28 +224,25 @@ GameScene.prototype.create = function () {
   }).setOrigin(1, 0.5).setInteractive().setDepth(200);
 
   function zoomCanvasToFill() {
-    var canvas = document.querySelector('#game-container canvas');
-    if (!canvas) return;
+    var container = document.getElementById('game-container');
+    if (!container) return;
     if (document.fullscreenElement || document.webkitFullscreenElement) {
-      // 第一步：重置canvas到原始尺寸960×600（覆盖Phaser的FIT缩放）
-      canvas.style.width = '960px';
-      canvas.style.height = '600px';
-      // 第二步：计算填满屏幕宽度的缩放比
-      var scale = window.innerWidth / 960;
-      canvas.style.transform = 'scale(' + scale + ')';
-      canvas.style.transformOrigin = 'center center';
-      // 第三步：固定定位+居中
-      canvas.style.position = 'fixed';
-      canvas.style.left = ((window.innerWidth - 960) / 2) + 'px';
-      canvas.style.top = ((window.innerHeight - 600 * scale) / 2) + 'px';
+      // 全屏：容器撑满全屏，Phaser.FIT自动缩放，保持清晰
+      container.style.width = window.innerWidth + 'px';
+      container.style.height = window.innerHeight + 'px';
+      container.style.position = 'fixed';
+      container.style.top = '0';
+      container.style.left = '0';
+      // 触发Phaser重新计算FIT缩放（带设备像素比）
+      if (game && game.scale) game.scale.refresh();
     } else {
-      // 退出全屏：清空自定义样式，让Phaser重新接管FIT
-      canvas.style.width = '';
-      canvas.style.height = '';
-      canvas.style.transform = '';
-      canvas.style.position = '';
-      canvas.style.left = '';
-      canvas.style.top = '';
+      // 退出全屏：恢复原始样式
+      container.style.width = '';
+      container.style.height = '';
+      container.style.position = '';
+      container.style.top = '';
+      container.style.left = '';
+      if (game && game.scale) game.scale.refresh();
     }
   }
 
