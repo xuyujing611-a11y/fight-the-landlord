@@ -12,6 +12,8 @@
  *   GET  /api/wrong-book      - 错题本查询
  */
 
+require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
