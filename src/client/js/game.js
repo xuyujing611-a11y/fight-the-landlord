@@ -659,7 +659,6 @@ GameScene.prototype.doAIBidding = function (aiIndex) {
 
   var bidLabel = bid === 0 ? '\u4E0D\u53EB' : bid + '\u5206';
   this.setStatusText(aiName + ' \u53EB\u4E86 ' + bidLabel);
-  if (bid > 0) { SoundManager.bid(); } else { SoundManager.passBid(); }
 
   if (this.isAPIMode && this.biddingId) {
     ApiClient.placeBid(this.biddingId, aiIndex, bid)
@@ -1099,12 +1098,10 @@ GameScene.prototype.handleAIPlay = function (aiIndex, aiName, res) {
   this.updateAICount(aiIndex);
   // \u51FA\u724C\u8BB0\u5F55+\u97F3\u6548
   this.addPlayHistory(aiIndex === 0 ? 'ai1' : 'ai2', playCards);
-  SoundManager.playCard();
   if (hand.length === 0) {
     this.setStatusText(aiName + ' \u51FA\u5B8C\u4E86\uFF01\u83B7\u80DC\uFF01');
     showToast(this, aiName + '\u83B7\u80DC\uFF01');
     this.gameState = GAME_STATE.ROUND_END;
-    SoundManager.lose();
     return;
   }
   if (aiIndex === 0) {
@@ -1183,12 +1180,10 @@ GameScene.prototype.localAIPlay = function (aiIndex, aiName) {
   this.updateAICount(aiIndex);
   // \u51FA\u724C\u8BB0\u5F55+\u97F3\u6548
   this.addPlayHistory(aiIndex === 0 ? 'ai1' : 'ai2', chosen);
-  SoundManager.playCard();
   if (hand.length === 0) {
     this.setStatusText(aiName + ' \u51FA\u5B8C\u4E86\uFF01\u83B7\u80DC\uFF01');
     showToast(this, aiName + '\u83B7\u80DC\uFF01');
     this.gameState = GAME_STATE.ROUND_END;
-    SoundManager.lose();
     return;
   }
   if (aiIndex === 0) {
@@ -1257,7 +1252,7 @@ GameScene.prototype.doAction = function () {
   var aiName = aiId === 'duidui' ? '\u738B\u603C\u603C' : '\u82CF\u751C\u751C';
 
   // \u521B\u5EFA\u906E\u7F69
-  self._createChaosOverlay(function () {
+  self._createChaosOverlay(aiId, function () {
     // \u7F29\u7565\u56DE\u8C03 - \u89E6\u53D1\u51FA\u9898
     self._showChaosQuestion(aiId, aiName);
   });
@@ -1266,7 +1261,7 @@ GameScene.prototype.doAction = function () {
 // ================================================================
 // 搞事情 - 创建遮罩
 // ================================================================
-GameScene.prototype._createChaosOverlay = function (callback) {
+GameScene.prototype._createChaosOverlay = function (aiId, callback) {
   if (this.chaosOverlay) return;
   var self = this;
 
