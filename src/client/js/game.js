@@ -20,7 +20,7 @@ var GAME_STATE = {
 var GameConfig = {
   type: Phaser.AUTO,
   width: 960,
-  height: 442,
+  height: 600,
   parent: 'game-container',
   backgroundColor: '#1B5E20',
   dom: { createContainer: true },
@@ -331,7 +331,7 @@ function createTopBar(scene) {
   }).setDepth(11);
 
   // center status text
-  scene.statusText = scene.add.text(480, 10, '', {
+  scene.statusText = scene.add.text(480, 8, '', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '10px', color: '#A5D6A7', fontStyle: 'bold'
   }).setOrigin(0.5, 0).setDepth(11);
@@ -393,7 +393,7 @@ function createPlayArea(scene) {
 function createHandArea(scene) {
   var handBg = scene.add.graphics();
   handBg.fillStyle(0x000000, 0.15);
-  handBg.fillRoundedRect(20, 286, 920, 96, 10).setDepth(10);
+  handBg.fillRoundedRect(20, 300, 920, 115, 10).setDepth(10);
   scene.add.text(68, 305, '\u4F60\u7684\u624B\u724C', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '11px', color: '#A5D6A7'
@@ -416,11 +416,12 @@ GameScene.prototype.renderPlayerHand = function () {
   this.cardDomElements = [];
   this.handCards = [];
 
-  var n = hand.length, cw = 50, ch = 72;
-  var overlap = n > 6 ? Math.min(30, (680 - cw) / (n - 1)) : 30;
+  // B4: 增大手牌尺寸以适配600px画布
+  var n = hand.length, cw = 56, ch = 80;
+  var overlap = n > 6 ? Math.min(33, (700 - cw) / (n - 1)) : 33;
   var totalWidth = cw + (n - 1) * overlap;
-  var startX = 200 + (680 - totalWidth) / 2;
-  var baseY = 310;
+  var startX = 180 + (700 - totalWidth) / 2;
+  var baseY = 345;
 
   for (var ii = 0; ii < n; ii++) {
     var card = hand[ii];
@@ -1270,9 +1271,9 @@ GameScene.prototype.displayPlay = function (cards, player) {
 
   // \u786E\u5B9A\u4F4D\u7F6E
   var positions = {
-    player: { x: 360, y: 184, w: 44, h: 64, origin: 0.5 },
-    ai1:    { x: 280, y: 133, w: 36, h: 52, origin: 0.5 },
-    ai2:    { x: 680, y: 133, w: 36, h: 52, origin: 0.5 }
+    player: { x: 360, y: 195, w: 50, h: 72, origin: 0.5 },
+    ai1:    { x: 280, y: 133, w: 42, h: 60, origin: 0.5 },
+    ai2:    { x: 680, y: 133, w: 42, h: 60, origin: 0.5 }
   };
   var pos = positions[player] || positions.player;
   var n = cards.length;
@@ -1980,10 +1981,10 @@ GameScene.prototype._destroyChaos = function () {
 // 功能按钮
 // ================================================================
 function createActionButtons(scene) {
-  var bw = 65, bh = 44, gap = 12;
+  var bw = 72, bh = 48, gap = 14;
   var totalW = bw * 5 + gap * 4;
   var startX = (960 - totalW) / 2;
-  var btnY = 372;
+  var btnY = 442;
 
   var buttons = [
     { label: '\u51FA\u724C', color: 0x4ECDC4, key: 'play' },
@@ -2004,7 +2005,7 @@ function createActionButtons(scene) {
     bg.setInteractive(new Phaser.Geom.Rectangle(bx, btnY, bw, bh), Phaser.Geom.Rectangle.Contains);
     scene.actionButtons.push(bg);
 
-    var txt = scene.add.text(bx + bw / 2, btnY + bh / 2, b.label, {
+    var txt = scene.add.text(bx + bw / 2, btnY + bh / 2 - 1, b.label, {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
       fontSize: '13px', color: '#FFFFFF', fontStyle: 'bold'
     }).setOrigin(0.5).setDepth(101);
@@ -2048,14 +2049,14 @@ function showToast(scene, message) {
 function createPlayHistoryArea(scene) {
   var bg = scene.add.graphics();
   bg.fillStyle(0x000000, 0.25);
-  bg.fillRoundedRect(12, 398, 936, 52, 6).setDepth(200);
+  bg.fillRoundedRect(12, 500, 936, 55, 6).setDepth(200);
 
-  scene.add.text(20, 543, '最近出牌', {
+  scene.add.text(20, 510, '最近出牌', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '8px', color: '#81C784'
   }).setDepth(201);
 
-  scene.playHistoryText = scene.add.text(20, 554, '', {
+  scene.playHistoryText = scene.add.text(20, 522, '', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '10px', color: '#C8E6C9',
     lineSpacing: 2,
