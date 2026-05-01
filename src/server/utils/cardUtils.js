@@ -64,11 +64,23 @@ function serializeCards(cards) {
 }
 
 /**
+ * 有效 rank 范围 0-14
+ */
+function isValidRank(rank) {
+  return Number.isInteger(rank) && rank >= 0 && rank <= 14;
+}
+
+/**
  * 快速构造测试用卡片数组（按 rank 数组）
- * 例: createCards([0,0,0,1,1,1]) → 333444
+ * 例: createCardsByRank([0,0,0,1,1,1]) → 333444
+ *
+ * @throws {Error} 如果 rank 不在 0-14 范围内
  */
 function createCardsByRank(ranks) {
   return ranks.map((rank, i) => {
+    if (!isValidRank(rank)) {
+      throw new Error(`Invalid rank at index ${i}: ${rank}. Rank must be 0-14.`);
+    }
     if (rank === 13) return new Doudizhu.Card('joker', 13);
     if (rank === 14) return new Doudizhu.Card('joker', 14);
     return new Doudizhu.Card(SUITS[i % 4], rank);
