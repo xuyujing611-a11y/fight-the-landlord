@@ -216,6 +216,41 @@ GameScene.prototype.create = function () {
     self.checkAPIConnection();
   });
 
+  // B40: 全屏/缩放填满按钮（右上角）
+  var fsBtn = self.add.text(940, 24, '⛶', {
+    fontSize: '26px', color: '#FFFFFF',
+    backgroundColor: '#00000066',
+    padding: { x: 8, y: 6 }
+  }).setOrigin(1, 0.5).setInteractive().setDepth(200);
+
+  function zoomCanvasToFill() {
+    var canvas = document.querySelector('#game-container canvas');
+    if (!canvas) return;
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      var containerW = window.innerWidth;
+      var scale = containerW / 960;
+      canvas.style.transform = 'scale(' + scale + ')';
+      canvas.style.transformOrigin = 'center center';
+    } else {
+      canvas.style.transform = '';
+    }
+  }
+
+  fsBtn.on('pointerdown', function () {
+    var el = document.documentElement;
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      if (document.exitFullscreen) document.exitFullscreen();
+      else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+    } else {
+      if (el.requestFullscreen) el.requestFullscreen();
+      else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+    }
+  });
+
+  document.addEventListener('fullscreenchange', zoomCanvasToFill);
+  document.addEventListener('webkitfullscreenchange', zoomCanvasToFill);
+  window.addEventListener('resize', zoomCanvasToFill);
+
   // 叫分阶段
   this.time.delayedCall(800, function () {
     self.startBiddingPhase();
