@@ -3,7 +3,9 @@
  * 对接后端端口 3100，封装所有接口调用
  */
 
-var API_BASE = 'http://localhost:3100';
+var API_BASE = (typeof window !== 'undefined' && window.__API_BASE__) ||
+  (typeof process !== 'undefined' && process.env && process.env.API_BASE) ||
+  'http://localhost:3100';
 
 var ApiClient = {
   // ============================================================
