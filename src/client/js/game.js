@@ -1274,23 +1274,22 @@ GameScene.prototype._createChaosOverlay = function (callback) {
   var overlay = self.add.graphics();
   overlay.fillStyle(0x000000, 0.75);
   overlay.fillRect(0, 0, 960, 600).setDepth(300);
-  overlay.setInteractive(new Phaser.Geom.Rectangle(0, 0, 600, 960), Phaser.Geom.Rectangle.Contains);
+  overlay.setInteractive(new Phaser.Geom.Rectangle(0, 0, 960, 600), Phaser.Geom.Rectangle.Contains);
   self.chaosElements = [overlay];
   self.chaosOverlay = overlay;
 
   // \u767D\u8272\u9898\u76EE\u5361\u7247\u80CC\u666F
   var cardBg = self.add.graphics();
   cardBg.fillStyle(0xFFFFFF, 1);
-  cardBg.fillRoundedRect(36, 80, 528, 440, 16);
-  // \u9634\u5F71\u6A21\u62DF
+  cardBg.fillRoundedRect(200, 95, 560, 250, 12);
   cardBg.fillStyle(0x000000, 0.08);
-  cardBg.fillRoundedRect(40, 84, 528, 440, 16);
+  cardBg.fillRoundedRect(204, 99, 560, 250, 12);
   cardBg.setDepth(301);
   self.chaosElements.push(cardBg);
   self.chaosCardBg = cardBg;
 
   // \u201C\u641E\u4E8B\u60C5\u201D \u6807\u9898
-  var title = self.add.text(300, 96, '🔥 搞\u4E8B\u60C5\uFF01 答\u9898\u6311\u6218', {
+  var title = self.add.text(480, 102, '🔥 搞\u4E8B\u60C5\uFF01 答\u9898\u6311\u6218', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '22px', color: '#FF6B35', fontStyle: 'bold'
   }).setOrigin(0.5, 0).setDepth(302);
@@ -1298,7 +1297,7 @@ GameScene.prototype._createChaosOverlay = function (callback) {
   self.chaosTitle = title;
 
   // \u5206\u6570\u663E\u793A
-  var scoreText = self.add.text(420, 100, '得分: ' + (self.chaosScore || 0), {
+  var scoreText = self.add.text(660, 102, '得分: ' + (self.chaosScore || 0), {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '14px', color: '#333333'
   }).setDepth(302);
@@ -1306,17 +1305,17 @@ GameScene.prototype._createChaosOverlay = function (callback) {
   self.chaosScoreText = scoreText;
 
   // AI \u53F0\u8BCD\u6C14\u6CE1
-  self._showAiBubble(aiId, 'easy', 120);
+  self._showAiBubble(aiId, 'easy', 290);
 
   // \u5173\u6389\u6309\u94AE
   var closeBtnBg = self.add.graphics();
   closeBtnBg.fillStyle(0xE53935, 1);
-  closeBtnBg.fillRoundedRect(520, 84, 36, 36, 18).setDepth(302);
-  var closeBtnText = self.add.text(538, 102, '✖', {
+  closeBtnBg.fillRoundedRect(720, 98, 28, 28, 14).setDepth(302);
+  var closeBtnText = self.add.text(734, 112, '✖', {
     fontFamily: '"PingFang SC",sans-serif',
     fontSize: '18px', color: '#FFFFFF'
   }).setOrigin(0.5).setDepth(303);
-  closeBtnBg.setInteractive(new Phaser.Geom.Rectangle(520, 84, 36, 36), Phaser.Geom.Rectangle.Contains);
+  closeBtnBg.setInteractive(new Phaser.Geom.Rectangle(720, 98, 28, 28), Phaser.Geom.Rectangle.Contains);
   closeBtnBg.on('pointerup', function () { self._destroyChaos(); });
   self.chaosElements.push(closeBtnBg, closeBtnText);
 
@@ -1354,89 +1353,84 @@ GameScene.prototype._renderQuestion = function (q, aiId) {
   var self = this;
   self._clearQuestionArea();
 
-  // \u9898\u76EE\u7C7B\u578B\u6807\u7B7E
-  var typeLabel = q.questionType || q.type || '\u77E5\u8BC6\u9898';
-  var typeIcon = '\U0001F9E0';
-  if (typeLabel.indexOf('voc') >= 0 || typeLabel.indexOf('word') >= 0) typeIcon = '\U0001F4DA';
-  if (typeLabel.indexOf('expr') >= 0) typeIcon = '\U0001F4AC';
-  if (typeLabel.indexOf('trivia') >= 0) typeIcon = '\U0001F4A1';
-  if (typeLabel.indexOf('life') >= 0) typeIcon = '\U0001F3E0';
+  var typeLabel = q.questionType || q.type || '知识题';
+  var typeIcon = 'U0001F9E0';
+  if (typeLabel.indexOf('voc') >= 0 || typeLabel.indexOf('word') >= 0) typeIcon = 'U0001F4DA';
+  if (typeLabel.indexOf('expr') >= 0) typeIcon = 'U0001F4AC';
+  if (typeLabel.indexOf('trivia') >= 0) typeIcon = 'U0001F4A1';
+  if (typeLabel.indexOf('life') >= 0) typeIcon = 'U0001F3E0';
 
-  var tag = self.add.text(52, 150, typeIcon + ' ' + typeLabel, {
+  var tag = self.add.text(220, 132, typeIcon + ' ' + typeLabel, {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '13px', color: '#FF6B35', fontStyle: 'bold'
   }).setDepth(302);
   self.chaosElements.push(tag);
 
-  // \u9898\u76EE\u6B63\u6587
-  var questionText = q.question || q.text || '\u6682\u65E0\u9898\u76EE';
-  var qText = self.add.text(52, 176, questionText, {
+  var questionText = q.question || q.text || '暂无题目';
+  var qText = self.add.text(220, 155, questionText, {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '15px', color: '#222222',
-    wordWrap: { width: 490 }, lineSpacing: 4
+    fontSize: '14px', color: '#222222',
+    wordWrap: { width: 520 }, lineSpacing: 3
   }).setDepth(302);
   self.chaosElements.push(qText);
 
-  // 4 \u4E2A\u9009\u9879\u6309\u94AE
   var options = q.options || {};
   var optionKeys = ['A', 'B', 'C', 'D'];
-  var spacing = 54;
-  var optStartY = 290;
-  var optionLabels = { A: 'A', B: 'B', C: 'C', D: 'D' };
-
   self.chaosQuestionAnswered = false;
+
+  // 2×2 网格布局
+  var gridX = [215, 495];
+  var gridY = [224, 272];
 
   for (var oi = 0; oi < optionKeys.length; oi++) {
     var ok = optionKeys[oi];
     var optText = options[ok];
     if (!optText) continue;
 
-    var optY = optStartY + oi * spacing;
+    var gx = gridX[oi % 2];
+    var gy = gridY[Math.floor(oi / 2)];
+
     var optBg = self.add.graphics();
     optBg.fillStyle(0xF5F5F5, 1);
-    optBg.fillRoundedRect(48, optY, 504, 46, 10).setDepth(302);
+    optBg.fillRoundedRect(gx, gy, 260, 42, 8).setDepth(302);
     optBg.lineStyle(1.5, 0xCCCCCC, 1);
-    optBg.strokeRoundedRect(48, optY, 504, 46, 10);
-    optBg.setInteractive(new Phaser.Geom.Rectangle(48, optY, 504, 46), Phaser.Geom.Rectangle.Contains);
+    optBg.strokeRoundedRect(gx, gy, 260, 42, 8);
+    optBg.setInteractive(new Phaser.Geom.Rectangle(gx, gy, 260, 42), Phaser.Geom.Rectangle.Contains);
 
-    // \u9009\u9879\u6807\u8BB0
     var optMarkBg = self.add.graphics();
     optMarkBg.fillStyle(0x4ECDC4, 1);
-    optMarkBg.fillCircle(74, optY + 23, 14).setDepth(303);
-    var optMarkTxt = self.add.text(74, optY + 23, ok, {
+    optMarkBg.fillCircle(gx + 20, gy + 21, 12).setDepth(303);
+    var optMarkTxt = self.add.text(gx + 20, gy + 21, ok, {
       fontFamily: '"PingFang SC",sans-serif',
-      fontSize: '14px', color: '#FFFFFF', fontStyle: 'bold'
+      fontSize: '12px', color: '#FFFFFF', fontStyle: 'bold'
     }).setOrigin(0.5).setDepth(304);
 
-    // \u9009\u9879\u6587\u672C
-    // \u622A\u65AD\u592A\u957F\u7684\u6587\u672C
-    var displayOpt = optText.length > 28 ? optText.substring(0, 28) + '...' : optText;
-    var optTxt = self.add.text(96, optY + 23, displayOpt, {
+    var displayOpt = optText.length > 18 ? optText.substring(0, 18) + '...' : optText;
+    var optTxt = self.add.text(gx + 40, gy + 21, displayOpt, {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '14px', color: '#333333'
+      fontSize: '13px', color: '#333333'
     }).setOrigin(0, 0.5).setDepth(303);
 
-    // \u4FDD\u5B58\u9009\u9879\u6570\u636E
     optBg.setData('optKey', ok);
     optBg.setData('optBg', optBg);
     optBg.setData('optTxt', optTxt);
     optBg.setData('optMarkBg', optMarkBg);
     optBg.setData('optMarkTxt', optMarkTxt);
     optBg.setData('answer', q.answer);
+    optBg.setData('origGx', gx);
+    optBg.setData('origGy', gy);
 
-    // \u7ED1\u5B9A\u70B9\u51FB\u4E8B\u4EF6
-    (function (optBg, ok, optY) {
+    (function (optBg, ok, gx, gy) {
       optBg.on('pointerdown', function () {
         if (self.chaosQuestionAnswered) return;
         self.chaosQuestionAnswered = true;
         self._handleOptionClick(self, optBg, ok, aiId, q);
       });
-    })(optBg, ok, optY);
+    })(optBg, ok, gx, gy);
 
     self.chaosElements.push(optBg, optMarkBg, optMarkTxt, optTxt);
   }
 };
-
 // ================================================================
 // 搞事情 - 处理选项点击
 // ================================================================
@@ -1477,7 +1471,7 @@ GameScene.prototype._handleOptionClick = function (self, optBg, optKey, aiId, q)
   var resultColor = isCorrect ? '#4CAF50' : '#E53935';
 
   // \u53CD\u9988\u6807\u5FD7
-  var fbIcon = self.add.text(300, 420, resultIcon + ' ' + resultText, {
+  var fbIcon = self.add.text(480, 200, resultIcon + ' ' + resultText, {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '20px', color: resultColor, fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(305);
@@ -1485,7 +1479,7 @@ GameScene.prototype._handleOptionClick = function (self, optBg, optKey, aiId, q)
 
   // \u663E\u793A\u6B63\u786E\u7B54\u6848\u548C\u89E3\u6790
   if (!isCorrect && q.answer) {
-    var correctAns = self.add.text(52, 450, '正确答案: ' + q.answer + '. ' + (q.options[q.answer] || ''), {
+    var correctAns = self.add.text(220, 225, '正确答案: ' + q.answer + '. ' + (q.options[q.answer] || ''), {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
       fontSize: '12px', color: '#4CAF50',
       wordWrap: { width: 490 }
@@ -1494,7 +1488,7 @@ GameScene.prototype._handleOptionClick = function (self, optBg, optKey, aiId, q)
   }
 
   if (q.explanation) {
-    var expl = self.add.text(52, 474, q.explanation, {
+    var expl = self.add.text(220, 248, q.explanation, {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
       fontSize: '12px', color: '#666666',
       wordWrap: { width: 490 }
@@ -1510,12 +1504,12 @@ GameScene.prototype._handleOptionClick = function (self, optBg, optKey, aiId, q)
   // \u201C\u7EE7\u7EED\u201D \u6309\u94AE
   var againBg = self.add.graphics();
   againBg.fillStyle(0x4ECDC4, 1);
-  againBg.fillRoundedRect(60, btnY, 200, 40, 10).setDepth(305);
-  var againTxt = self.add.text(160, btnY + 20, '🔄 \u518D\u6765\u4E00\u9898', {
+  againBg.fillRoundedRect(230, 304, 220, 36, 8).setDepth(305);
+  var againTxt = self.add.text(340, 322, '🔄 \u518D\u6765\u4E00\u9898', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '15px', color: '#FFFFFF', fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(306);
-  againBg.setInteractive(new Phaser.Geom.Rectangle(60, btnY, 200, 40), Phaser.Geom.Rectangle.Contains);
+  againBg.setInteractive(new Phaser.Geom.Rectangle(230, 304, 220, 36), Phaser.Geom.Rectangle.Contains);
   againBg.on('pointerup', function () {
     // \u518D\u6765\u4E00\u9898
     self.chaosQuestionAnswered = false;
@@ -1528,12 +1522,12 @@ GameScene.prototype._handleOptionClick = function (self, optBg, optKey, aiId, q)
   // \u201C\u5173\u6389\u201D \u6309\u94AE
   var closeBg = self.add.graphics();
   closeBg.fillStyle(0xFF6B6B, 1);
-  closeBg.fillRoundedRect(340, btnY, 200, 40, 10).setDepth(305);
-  var closeTxt = self.add.text(440, btnY + 20, '✖ \u5173掉\u56DE\u724C', {
+  closeBg.fillRoundedRect(510, 304, 220, 36, 8).setDepth(305);
+  var closeTxt = self.add.text(620, 322, '✖ \u5173掉\u56DE\u724C', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '15px', color: '#FFFFFF', fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(306);
-  closeBg.setInteractive(new Phaser.Geom.Rectangle(340, btnY, 200, 40), Phaser.Geom.Rectangle.Contains);
+  closeBg.setInteractive(new Phaser.Geom.Rectangle(510, 304, 220, 36), Phaser.Geom.Rectangle.Contains);
   closeBg.on('pointerup', function () { self._destroyChaos(); });
   self.chaosElements.push(closeBg, closeTxt);
 
@@ -1614,10 +1608,10 @@ GameScene.prototype._showAiBubble = function (aiId, sceneKey, y) {
   // \u53F0\u8BCD\u6C14\u6CE1
   var bubble = self.add.graphics();
   bubble.fillStyle(0x000000, 0.08);
-  bubble.fillRoundedRect(100, y + 10, 440, 32, 8).setDepth(302);
+  bubble.fillRoundedRect(230, y + 10, 500, 28, 6).setDepth(302);
   self.chaosBubbleElements.push(bubble);
 
-  var bubbleTxt = self.add.text(112, y + 26, line, {
+  var bubbleTxt = self.add.text(240, y + 24, line, {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '13px', color: '#444444'
   }).setDepth(303);
@@ -1631,7 +1625,7 @@ GameScene.prototype._clearQuestionArea = function () {
   var self = this;
   if (!self.chaosElements) return;
   // \u4FDD\u7559\u524D3\u4E2A\u5143\u7D20\uFF08\u906E\u7F69\u3001\u5361\u724C\u80CC\u666F\u3001\u6807\u9898\u3001\u5206\u6570\u3001\u5173\u6389\u6309\u94AE\uFF09
-  var toKeep = self.chaosElements.slice(0, 5); // overlay, cardBg, title, scoreText, AI bubble area elements
+  var toKeep = self.chaosElements.slice(0, 4); // overlay, cardBg, title, scoreText, AI bubble area elements
   for (var di = 5; di < self.chaosElements.length; di++) {
     if (self.chaosElements[di]) self.chaosElements[di].destroy();
   }
