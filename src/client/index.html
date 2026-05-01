@@ -75,6 +75,13 @@
   <!-- 游戏主逻辑 -->
   <script src="js/game.js"></script>
 
+  <!-- B40: 竖屏提示覆盖层 -->
+  <div id="portrait-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:#0D3B0F;z-index:99999;flex-direction:column;align-items:center;justify-content:center;color:#fff;">
+    <div style="font-size:64px;margin-bottom:20px;">📱</div>
+    <div style="font-size:20px;font-weight:bold;margin-bottom:10px;">请横屏体验</div>
+    <div style="font-size:14px;color:#A5D6A7;">请将手机旋转至横屏模式</div>
+  </div>
+
   <script>
     // 监听游戏启动后隐藏加载画面
     window.addEventListener('load', function () {
@@ -84,6 +91,20 @@
         if (ls) ls.classList.add('hidden');
       }, 1200);
     });
+
+    // B40: 竖屏方向检测
+    function checkOrientation() {
+      var overlay = document.getElementById('portrait-overlay');
+      if (!overlay) return;
+      if (window.innerWidth < window.innerHeight) {
+        overlay.style.display = 'flex';
+      } else {
+        overlay.style.display = 'none';
+      }
+    }
+    window.addEventListener('resize', checkOrientation);
+    window.addEventListener('load', checkOrientation);
+    checkOrientation();
   </script>
 </body>
 </html>

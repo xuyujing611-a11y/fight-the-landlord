@@ -134,6 +134,20 @@ GameScene.prototype = Object.create(Phaser.Scene.prototype);
 GameScene.prototype.constructor = GameScene;
 
 GameScene.prototype.init = function () {
+  // B40: 竖屏检测 — 与 index.html 的 portrait-overlay 联动
+  var self = this;
+  function checkOrientation() {
+    var overlay = document.getElementById('portrait-overlay');
+    if (!overlay) return;
+    if (window.innerWidth < window.innerHeight) {
+      overlay.style.display = 'flex';
+    } else {
+      overlay.style.display = 'none';
+    }
+  }
+  checkOrientation();
+  window.addEventListener('resize', checkOrientation);
+
   var deck = new Doudizhu.Deck();
   deck.shuffle();
   var dealResult = deck.deal(3, 17);
