@@ -22,6 +22,7 @@ const aiRouter = require('./routes/ai');
 const quizRouter = require('./routes/quiz');
 const verifyRouter = require('./routes/verify');
 const wrongbookRouter = require('./routes/wrongbook');
+const chaosRouter = require('./routes/chaos');
 
 const app = express();
 const PORT = process.env.PORT || 3100;
@@ -49,6 +50,7 @@ app.use('/api/ai', aiRouter);
 app.use('/api/quiz', quizRouter);
 app.use('/api/verify', verifyRouter);
 app.use('/api/wrong-book', wrongbookRouter);
+app.use('/api/chaos', chaosRouter);
 
 // 健康检查
 app.get('/api/health', (req, res) => {

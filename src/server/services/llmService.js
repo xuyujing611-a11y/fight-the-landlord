@@ -1,16 +1,16 @@
 /**
  * src/server/services/llmService.js
  *
- * 大模型调用服务（对接 MiniMax / DeepSeek）
+ * 大模型调用服务（对接 DeepSeek / MiniMax）
  *
  * 配置方式（环境变量）:
- *   LLM_PROVIDER="minimax" | "deepseek"
+ *   LLM_PROVIDER="minimax" | "deepseek"   (默认 deepseek)
  *   LLM_API_KEY="sk-xxx"
  *   LLM_MODEL="..."  (默认 auto)
  *
- * 当前支持的 provider:
- *   - minimax  : MiniMax 大模型
- *   - deepseek : DeepSeek API
+ * 导出:
+ *   callLLM(systemPrompt, userPrompt, opts) - 通用调用
+ *   callLLMForPlay(hand, lastPlay, difficulty) - 出牌决策（向后兼容）
  */
 
 const https = require('https');
@@ -23,23 +23,16 @@ const PROVIDERS = {
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json'
     }),
-    parseBody: (model, content) => ({
+    parseBody: (model, messages, opts) => ({
       model,
-      messages: [
-        { role: 'system', content: '你是斗地主AI出牌专家。请根据手牌和局面给出最优出牌建议。仅返回JSON。' },
-        { role: 'user', content }
-      ],
-      temperature: 0.7,
-      max_tokens: 500
+      messages,
+      temperature: opts.temperature ?? 0.7,
+      max_tokens: opts.maxTokens ?? 500
     }),
     parseResponse: (data) => {
-      try {
-        const json = JSON.parse(data);
-        const text = json.choices?.[0]?.message?.content || '';
-        return JSON.parse(cleanJsonString(text));
-      } catch (e) {
-        throw new Error(`MiniMax parse error: ${e.message}`);
-      }
+      const json = JSON.parse(data);
+      const text = json.choices?.[0]?.message?.content || '';
+      return JSON.parse(cleanJsonString(text));
     }
   },
   deepseek: {
@@ -49,31 +42,22 @@ const PROVIDERS = {
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json'
     }),
-    parseBody: (model, content) => ({
+    parseBody: (model, messages, opts) => ({
       model,
-      messages: [
-        { role: 'system', content: '你是斗地主AI出牌专家。根据手牌和局面选择最优出牌。仅返回JSON。' },
-        { role: 'user', content }
-      ],
-      temperature: 0.7,
-      max_tokens: 500,
+      messages,
+      temperature: opts.temperature ?? 0.7,
+      max_tokens: opts.maxTokens ?? 1000,
       stream: false
     }),
     parseResponse: (data) => {
-      try {
-        const json = JSON.parse(data);
-        const text = json.choices?.[0]?.message?.content || '';
-        return JSON.parse(cleanJsonString(text));
-      } catch (e) {
-        throw new Error(`DeepSeek parse error: ${e.message}`);
-      }
+      const json = JSON.parse(data);
+      const text = json.choices?.[0]?.message?.content || '';
+      return JSON.parse(cleanJsonString(text));
     }
   }
 };
 
-/**
- * 清理 JSON 字符串（去除 markdown 代码块标记）
- */
+/** 清理 JSON 字符串（去除 markdown 代码块标记） */
 function cleanJsonString(str) {
   return str
     .replace(/^```(?:json)?\s*/i, '')
@@ -81,39 +65,28 @@ function cleanJsonString(str) {
     .trim();
 }
 
-/**
- * 通用 HTTP POST 请求
- */
+/** 通用 HTTP POST 请求 */
 function httpPost(url, headers, body) {
   return new Promise((resolve, reject) => {
     const bodyStr = JSON.stringify(body);
     const urlObj = new URL(url);
-
     const options = {
       hostname: urlObj.hostname,
       port: urlObj.port || 443,
       path: urlObj.pathname + urlObj.search,
       method: 'POST',
-      headers: {
-        ...headers,
-        'Content-Length': Buffer.byteLength(bodyStr)
-      },
-      timeout: 15000
+      headers: { ...headers, 'Content-Length': Buffer.byteLength(bodyStr) },
+      timeout: 20000
     };
-
     const req = https.request(options, (res) => {
       const chunks = [];
-      res.on('data', (chunk) => chunks.push(chunk));
+      res.on('data', (c) => chunks.push(c));
       res.on('end', () => {
         const data = Buffer.concat(chunks).toString();
-        if (res.statusCode >= 200 && res.statusCode < 300) {
-          resolve(data);
-        } else {
-          reject(new Error(`HTTP ${res.statusCode}: ${data.slice(0, 200)}`));
-        }
+        if (res.statusCode >= 200 && res.statusCode < 300) resolve(data);
+        else reject(new Error(`HTTP ${res.statusCode}: ${data.slice(0, 200)}`));
       });
     });
-
     req.on('error', reject);
     req.on('timeout', () => { req.destroy(); reject(new Error('Request timeout')); });
     req.write(bodyStr);
@@ -122,52 +95,69 @@ function httpPost(url, headers, body) {
 }
 
 /**
- * 调用大模型出牌决策
- *
- * @param {Array} hand - 手牌 [{suit, rank}]
- * @param {Array|null} lastPlay - 上家出的牌
- * @param {string} difficulty - 'easy'|'normal'|'hard'
- * @returns {Object|null} { cards: [{suit, rank}], explanation: string }
+ * 通用大模型调用
+ * @param {string} systemPrompt - 系统提示词
+ * @param {string} userPrompt   - 用户消息
+ * @param {Object} [opts]
+ * @param {number}  [opts.temperature=0.7]
+ * @param {number}  [opts.maxTokens=1000]
+ * @param {string}  [opts.model]
+ * @returns {Object} 解析后的 JSON 对象
  */
-async function callLLMForPlay(hand, lastPlay, difficulty) {
-  const providerName = process.env.LLM_PROVIDER || 'minimax';
+async function callLLM(systemPrompt, userPrompt, opts) {
+  const providerName = process.env.LLM_PROVIDER || 'deepseek';
   const apiKey = process.env.LLM_API_KEY;
-
-  if (!apiKey) {
-    console.warn('LLM_API_KEY not set, skipping LLM call');
-    return null;
-  }
+  if (!apiKey) throw new Error('LLM_API_KEY not set');
 
   const provider = PROVIDERS[providerName];
-  if (!provider) {
-    throw new Error(`Unknown LLM provider: ${providerName}`);
-  }
+  if (!provider) throw new Error(`Unknown provider: ${providerName}`);
 
-  const model = process.env.LLM_MODEL || provider.defaultModel;
+  const model = opts?.model || process.env.LLM_MODEL || provider.defaultModel;
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: userPrompt }
+  ];
+  const safeOpts = {
+    temperature: opts?.temperature ?? 0.7,
+    maxTokens: opts?.maxTokens ?? 1000
+  };
+  const body = provider.parseBody(model, messages, safeOpts);
+  const raw = await httpPost(provider.baseUrl, provider.headers(apiKey), body);
+  return provider.parseResponse(raw);
+}
 
-  // 构建 Prompt
+/**
+ * 调用大模型出牌决策（向后兼容）
+ * @param {Array} hand - 手牌
+ * @param {Array|null} lastPlay - 上家出的牌
+ * @param {string} difficulty
+ * @returns {Object|null}
+ */
+async function callLLMForPlay(hand, lastPlay, difficulty) {
   const handStr = JSON.stringify(hand.map(c => `${c.suit}:${c.rank}`));
   const lastStr = lastPlay ? JSON.stringify(lastPlay.map(c => `${c.suit}:${c.rank}`)) : 'null';
-
   const prompt = [
-    `【斗地主 AI 出牌决策】`,
+    '【斗地主 AI 出牌决策】',
     `当前手牌: ${handStr}`,
     `上家出的牌: ${lastStr}`,
     `难度: ${difficulty || 'normal'}`,
-    ``,
-    `请返回以下 JSON 格式（不要多余文字）：`,
-    `{`,
-    `  "cards": [{ "suit": "spade", "rank": 0 }],  // 要出的牌`,
-    `  "explanation": "出牌理由"`,
-    `}`
+    '',
+    '请返回以下 JSON 格式（不要多余文字）：',
+    '{',
+    '  "cards": [{ "suit": "spade", "rank": 0 }],',
+    '  "explanation": "出牌理由"',
+    '}'
   ].join('\n');
-
-  const body = provider.parseBody(model, prompt);
-  const url = provider.baseUrl;
-  const headers = provider.headers(apiKey);
-
-  const rawResponse = await httpPost(url, headers, body);
-  return provider.parseResponse(rawResponse);
+  try {
+    return await callLLM(
+      '你是斗地主AI出牌专家。请根据手牌和局面给出最优出牌建议。仅返回JSON。',
+      prompt,
+      { temperature: 0.7, maxTokens: 500 }
+    );
+  } catch (e) {
+    console.warn('LLM call failed:', e.message);
+    return null;
+  }
 }
 
-module.exports = { callLLMForPlay };
+module.exports = { callLLM, callLLMForPlay };
