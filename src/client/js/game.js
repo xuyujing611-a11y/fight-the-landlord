@@ -431,7 +431,7 @@ GameScene.prototype.renderPlayerHand = function () {
         this.setData('selected', false);
         var pos = self.selectedCards.indexOf(idx2);
         if (pos >= 0) self.selectedCards.splice(pos, 1);
-      SoundManager.deselectCard();
+        SoundManager.deselectCard();
     } else {
         bg.clear();
         bg.fillStyle(0xFFFFFF, 1);
@@ -441,7 +441,7 @@ GameScene.prototype.renderPlayerHand = function () {
         this.y -= 28;
         this.setData('selected', true);
         self.selectedCards.push(idx2);
-      SoundManager.selectCard();
+        SoundManager.selectCard();
       }
     });
 
