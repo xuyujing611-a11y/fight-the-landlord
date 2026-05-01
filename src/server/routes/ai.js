@@ -26,6 +26,17 @@ const STRATEGY_WEIGHTS = {
 /**
  * 策略引擎：根据手牌和局面选出最优出牌
  */
+/**
+ * 获取给定难度对应的策略权重
+ */
+function getStrategyWeights(difficulty) {
+  switch (difficulty) {
+    case 'easy':   return STRATEGY_WEIGHTS.defensive;
+    case 'hard':   return STRATEGY_WEIGHTS.aggressive;
+    default:       return STRATEGY_WEIGHTS.normal;  // 'normal'
+  }
+}
+
 function strategyPlay(hand, lastPlay, difficulty) {
   const handCards = cardUtils.toCards(hand);
   const lastCards = lastPlay ? cardUtils.toCards(lastPlay) : null;
@@ -51,6 +62,8 @@ function strategyPlay(hand, lastPlay, difficulty) {
  * 先手出牌策略
  */
 function chooseFirstPlay(plays, hand, difficulty) {
+  const weights = getStrategyWeights(difficulty);
+
   // 按类型优先级排序
   const typePriority = {
     SINGLE: 5, PAIR: 4, TRIPLE: 3,
@@ -73,21 +86,29 @@ function chooseFirstPlay(plays, hand, difficulty) {
     // 手牌数越少，越应该出能一次走完的牌
     const remainingAfter = hand.length - play.length;
     if (remainingAfter === 0) {
-      score += 100; // 一手出完！
+      score += 100 * (weights.aggressive / 10); // 一手出完！
     } else if (remainingAfter <= 3) {
-      score += 40; // 接近胜利
+      score += 40 * (weights.aggressive / 10); // 接近胜利
     }
 
-    // rank 评估：大的 rank 高分（单张/对子），小的 rank 优先出
+    // rank 评估 — 难度越低越倾向出小牌，难度越高越敢保留大牌
     if (info.type === HAND_TYPES.SINGLE || info.type === HAND_TYPES.PAIR) {
-      if (info.rank <= 6) score += 20;  // 3-6 先出小牌
-      else if (info.rank <= 10) score += 10; // 中等
-      else if (info.rank === 14) score -= 10; // 大王保留
+      if (info.rank <= 6) score += 20 * (weights.small / 10);  // 3-6 先出小牌
+      else if (info.rank <= 10) score += 10 * (weights.medium / 10); // 中等
+      else if (info.rank >= 13) score -= 10 * (weights.big / 10); // 大牌/王保留
     }
 
-    // 保留炸弹和火箭
-    if (info.type === HAND_TYPES.BOMB || info.type === HAND_TYPES.ROCKET) {
-      score -= 30;
+    // 炸弹和火箭 — 难度越低越倾向保留，难度越高越果断
+    if (info.type === HAND_TYPES.BOMB) {
+      score -= 30 * (weights.bomb / 10);
+    }
+    if (info.type === HAND_TYPES.ROCKET) {
+      score -= 30 * (weights.rocket / 10);
+    }
+
+    // 跟牌倾向 — 难度越低越倾向于 pass
+    if (info.type !== HAND_TYPES.BOMB && info.type !== HAND_TYPES.ROCKET) {
+      score -= weights.pass * 2;
     }
 
     if (score > bestScore) {
@@ -103,6 +124,7 @@ function chooseFirstPlay(plays, hand, difficulty) {
  * 跟牌策略
  */
 function chooseFollowPlay(plays, hand, lastPlay, difficulty) {
+  const weights = getStrategyWeights(difficulty);
   const lastInfo = Doudizhu.identifyType(lastPlay);
   if (!lastInfo || lastInfo.type === HAND_TYPES.INVALID) return null;
 
@@ -135,26 +157,32 @@ function chooseFollowPlay(plays, hand, lastPlay, difficulty) {
         }
       }
     }
-
-    // 用炸弹压（保留选项，除非没有其他选择）
   }
 
-  // 如果没有普通牌能压，考虑用炸弹
+  // 用炸弹的决定受难度影响
+  const useBombThreshold = weights.bomb > 7 ? 0 : (weights.bomb > 5 ? 1 : 2);
+
   if (!bestPlay) {
+    let bestBomb = null;
     for (const play of plays) {
       const info = Doudizhu.identifyType(play);
       if (info.type === HAND_TYPES.BOMB) {
-        if (!bestPlay) bestPlay = play;
+        if (!bestBomb) bestBomb = play;
       }
+    }
+    // 难度高（aggressive）更倾向于用炸弹，难度低（defensive）倾向于不炸
+    if (bestBomb && useBombThreshold === 0) {
+      bestPlay = bestBomb;
     }
   }
 
-  // 还没有就出火箭
+  // 火箭 — 同样受难度影响
   if (!bestPlay) {
     for (const play of plays) {
       const info = Doudizhu.identifyType(play);
       if (info.type === HAND_TYPES.ROCKET) {
-        bestPlay = play;
+        if (weights.rocket > 7) bestPlay = play;
+        break;
       }
     }
   }
