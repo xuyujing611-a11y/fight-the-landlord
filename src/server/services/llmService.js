@@ -32,7 +32,7 @@ const PROVIDERS = {
     parseResponse: (data) => {
       const json = JSON.parse(data);
       const text = json.choices?.[0]?.message?.content || '';
-      return JSON.parse(cleanJsonString(text));
+      return safeParseJson(cleanJsonString(text));
     }
   },
   deepseek: {
@@ -52,7 +52,7 @@ const PROVIDERS = {
     parseResponse: (data) => {
       const json = JSON.parse(data);
       const text = json.choices?.[0]?.message?.content || '';
-      return JSON.parse(cleanJsonString(text));
+      return safeParseJson(cleanJsonString(text));
     }
   }
 };
@@ -63,6 +63,16 @@ function cleanJsonString(str) {
     .replace(/^```(?:json)?\s*/i, '')
     .replace(/\s*```$/i, '')
     .trim();
+}
+
+/** 安全 JSON 解析，解析失败时返回包含 rawText 的 fallback 对象 */
+function safeParseJson(str) {
+  try {
+    return JSON.parse(str);
+  } catch (e) {
+    console.warn('[LLM] JSON parse failed, raw text:', str.slice(0, 200));
+    return { error: 'JSON_PARSE_ERROR', rawText: str.slice(0, 500), _parseError: e.message };
+  }
 }
 
 /** 通用 HTTP POST 请求 */
