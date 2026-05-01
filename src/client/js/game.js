@@ -30,6 +30,99 @@ var GameConfig = {
 var game = new Phaser.Game(GameConfig);
 
 // ================================================================
+// SoundManager - Web Audio API 音效
+// ================================================================
+var SoundManager = {
+  ctx: null,
+  init: function () {
+    try {
+      this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    } catch (e) {
+      console.warn('Web Audio API not available');
+    }
+  },
+  _play: function (freq, duration, type, volume, delay) {
+    if (!this.ctx) return;
+    try {
+      if (this.ctx.state === 'suspended') this.ctx.resume();
+      var t = this.ctx.currentTime + (delay || 0);
+      var osc = this.ctx.createOscillator();
+      var gain = this.ctx.createGain();
+      osc.type = type || 'sine';
+      osc.frequency.setValueAtTime(freq, t);
+      gain.gain.setValueAtTime(volume || 0.3, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(t);
+      osc.stop(t + duration);
+    } catch (e) { /* ignore audio errors */ }
+  },
+  // 出牌 - 短促的"哒"点击声
+  playCard: function () { this._play(880, 0.06, 'square', 0.12); },
+  // 选牌 - 高音滴
+  selectCard: function () { this._play(660, 0.08, 'sine', 0.15); },
+  // 取消选牌 - 低音滴
+  deselectCard: function () { this._play(480, 0.08, 'sine', 0.12); },
+  // 轮到玩家 - 上升提示音
+  playerTurn: function () {
+    if (!this.ctx) return;
+    try {
+      if (this.ctx.state === 'suspended') this.ctx.resume();
+      var osc = this.ctx.createOscillator();
+      var gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(500, this.ctx.currentTime);
+      osc.frequency.linearRampToValueAtTime(880, this.ctx.currentTime + 0.15);
+      gain.gain.setValueAtTime(0.18, this.ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.25);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start();
+      osc.stop(this.ctx.currentTime + 0.25);
+    } catch (e) {}
+  },
+  // 叫分 - 三连升调
+  bid: function () {
+    this._play(440, 0.1, 'triangle', 0.18, 0);
+    this._play(660, 0.1, 'triangle', 0.18, 0.12);
+    this._play(880, 0.18, 'triangle', 0.22, 0.24);
+  },
+  // 不叫 - 简短下降
+  passBid: function () {
+    this._play(440, 0.08, 'sine', 0.12, 0);
+    this._play(300, 0.12, 'sine', 0.10, 0.08);
+  },
+  // 胜利 - 凯旋号角
+  win: function () {
+    this._play(523, 0.15, 'sine', 0.22, 0);
+    this._play(659, 0.15, 'sine', 0.22, 0.18);
+    this._play(784, 0.15, 'sine', 0.22, 0.36);
+    this._play(1047, 0.35, 'sine', 0.28, 0.54);
+  },
+  // 失败 - 低沉衰退
+  lose: function () {
+    if (!this.ctx) return;
+    try {
+      if (this.ctx.state === 'suspended') this.ctx.resume();
+      var osc = this.ctx.createOscillator();
+      var gain = this.ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(350, this.ctx.currentTime);
+      osc.frequency.linearRampToValueAtTime(120, this.ctx.currentTime + 0.5);
+      gain.gain.setValueAtTime(0.12, this.ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.6);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start();
+      osc.stop(this.ctx.currentTime + 0.6);
+    } catch (e) {}
+  },
+  // 轮到AI思考 - 轻微提示
+  aiThink: function () { this._play(350, 0.06, 'sine', 0.08); }
+};
+
+// ================================================================
 // 工具函数
 // ================================================================
 function makeAvatarImage(scene, key, x, y, bgColor, name) {
@@ -83,6 +176,7 @@ GameScene.prototype.init = function () {
   this.biddingUI = [];
   this.landlordIndex = -1;
   this.isLandlord = false;
+  this.playHistory = [];
 };
 
 GameScene.prototype.preload = function () {
@@ -102,6 +196,12 @@ GameScene.prototype.create = function () {
   this.domContainer = this.add.dom(0, 0).setOrigin(0, 0).setDepth(100);
   this.renderPlayerHand();
   this.setStatusText('\u8F6E\u5230\u4F60\u51FA\u724C\uFF08\u81EA\u7531\u51FA\u724C\uFF09');
+
+  // 初始化音效
+  SoundManager.init();
+
+  // 创建出牌记录区域
+  createPlayHistoryArea(this);
 
   this.time.delayedCall(500, function () {
     self.checkAPIConnection();
@@ -331,7 +431,8 @@ GameScene.prototype.renderPlayerHand = function () {
         this.setData('selected', false);
         var pos = self.selectedCards.indexOf(idx2);
         if (pos >= 0) self.selectedCards.splice(pos, 1);
-      } else {
+      SoundManager.deselectCard();
+    } else {
         bg.clear();
         bg.fillStyle(0xFFFFFF, 1);
         bg.fillRoundedRect(cx - cw/2, cy - ch/2, cw, ch, 4);
@@ -340,6 +441,7 @@ GameScene.prototype.renderPlayerHand = function () {
         this.y -= 28;
         this.setData('selected', true);
         self.selectedCards.push(idx2);
+      SoundManager.selectCard();
       }
     });
 
@@ -524,6 +626,7 @@ GameScene.prototype.handlePlayerBid = function (bid) {
 
   var bidLabel = bid === 0 ? '\u4E0D\u53EB' : bid + '\u5206';
   this.setStatusText('\u4F60\u53EB\u4E86 ' + bidLabel);
+  if (bid > 0) { SoundManager.bid(); } else { SoundManager.passBid(); }
 
   if (this.isAPIMode && this.biddingId) {
     ApiClient.placeBid(this.biddingId, 0, bid)
@@ -609,6 +712,7 @@ GameScene.prototype.doAIBidding = function (aiIndex) {
 
   var bidLabel = bid === 0 ? '\u4E0D\u53EB' : bid + '\u5206';
   this.setStatusText(aiName + ' \u53EB\u4E86 ' + bidLabel);
+  if (bid > 0) { SoundManager.bid(); } else { SoundManager.passBid(); }
 
   if (this.isAPIMode && this.biddingId) {
     ApiClient.placeBid(this.biddingId, aiIndex, bid)
@@ -668,6 +772,7 @@ GameScene.prototype.finishBidding = function (res) {
     self.gameState = GAME_STATE.PLAYER_TURN;
     self.setStatusText('\u8F6E\u5230\u4F60\u51FA\u724C\uFF08\u81EA\u7531\u51FA\u724C\uFF09');
     self.showActionButtons();
+    SoundManager.playerTurn();
   });
 };
 
@@ -857,10 +962,15 @@ GameScene.prototype.confirmPlay = function (playCards, info) {
   this.selectedCards = [];
   this.renderPlayerHand();
 
+  // \u51FA\u724C\u8BB0\u5F55+\u97F3\u6548
+  this.addPlayHistory('player', playCards);
+  SoundManager.playCard();
+
   if (this.playerHand.length === 0) {
     this.setStatusText('\u606D\u559C\u4F60\u8D62\u4E86\uFF01');
     showToast(this, '\u606D\u559C\u4F60\u8D62\u4E86\uFF01');
     this.gameState = GAME_STATE.ROUND_END;
+    SoundManager.win();
     return;
   }
   this.time.delayedCall(600, function () { self.doAITurn(0); });
@@ -876,6 +986,7 @@ GameScene.prototype.doPlayerPass = function () {
   showToast(this, '\u4E0D\u51FA');
   this.setStatusText('\u4F60\u9009\u62E9\u4E0D\u51FA');
   this.selectedCards = [];
+  this.addPlayHistory('player', true);
   if (this.passCount >= 2) {
     this.passCount = 0;
     this.lastPlay = null;
@@ -959,6 +1070,7 @@ GameScene.prototype.doAITurn = function (aiIndex) {
 
   this.gameState = GAME_STATE.WAITING_AI;
   this.setStatusText(aiName + ' \u601D\u8003\u4E2D...');
+  SoundManager.aiThink();
 
   if (hand.length === 0) {
     this.setStatusText(aiName + ' \u5DF2\u51FA\u5B8C\uFF0C' + aiName + '\u83B7\u80DC\uFF01');
@@ -1008,10 +1120,14 @@ GameScene.prototype.handleAIPlay = function (aiIndex, aiName, res) {
   this.displayPlay(playCards, aiIndex === 0 ? 'ai1' : 'ai2');
   this.setStatusText(aiName + ' \u51FA\u4E86 ' + (Doudizhu.HAND_TYPE_NAMES[info.type] || info.type));
   this.updateAICount(aiIndex);
+  // \u51FA\u724C\u8BB0\u5F55+\u97F3\u6548
+  this.addPlayHistory(aiIndex === 0 ? 'ai1' : 'ai2', playCards);
+  SoundManager.playCard();
   if (hand.length === 0) {
     this.setStatusText(aiName + ' \u51FA\u5B8C\u4E86\uFF01\u83B7\u80DC\uFF01');
     showToast(this, aiName + '\u83B7\u80DC\uFF01');
     this.gameState = GAME_STATE.ROUND_END;
+    SoundManager.lose();
     return;
   }
   if (aiIndex === 0) {
@@ -1021,6 +1137,7 @@ GameScene.prototype.handleAIPlay = function (aiIndex, aiName, res) {
     this.time.delayedCall(600, function () { self.doAITurn(1); });
   } else {
     this.gameState = GAME_STATE.PLAYER_TURN;
+    SoundManager.playerTurn();
     this.setStatusText('\u8F6E\u5230\u4F60\u51FA\u724C');
   }
 };
@@ -1029,6 +1146,7 @@ GameScene.prototype.handleAIPass = function (aiIndex, aiName) {
   this.passCount++;
   this.setStatusText(aiName + ' \u4E0D\u51FA');
   this.updateAICount(aiIndex);
+  this.addPlayHistory(aiIndex === 0 ? 'ai1' : 'ai2', true);
   if (this.passCount >= 2) {
     this.passCount = 0;
     this.lastPlay = null;
@@ -1068,10 +1186,14 @@ GameScene.prototype.localAIPlay = function (aiIndex, aiName) {
   this.displayPlay(chosen, aiIndex === 0 ? 'ai1' : 'ai2');
   this.setStatusText(aiName + ' \u51FA\u4E86 ' + (Doudizhu.HAND_TYPE_NAMES[info.type] || info.type));
   this.updateAICount(aiIndex);
+  // \u51FA\u724C\u8BB0\u5F55+\u97F3\u6548
+  this.addPlayHistory(aiIndex === 0 ? 'ai1' : 'ai2', chosen);
+  SoundManager.playCard();
   if (hand.length === 0) {
     this.setStatusText(aiName + ' \u51FA\u5B8C\u4E86\uFF01\u83B7\u80FD\uFF01');
     showToast(this, aiName + '\u83B7\u80DC\uFF01');
     this.gameState = GAME_STATE.ROUND_END;
+    SoundManager.lose();
     return;
   }
   if (aiIndex === 0) {
@@ -1080,6 +1202,7 @@ GameScene.prototype.localAIPlay = function (aiIndex, aiName) {
     this.time.delayedCall(600, function () { self.doAITurn(1); });
   } else {
     this.gameState = GAME_STATE.PLAYER_TURN;
+    SoundManager.playerTurn();
     this.setStatusText('\u8F6E\u5230\u4F60\u51FA\u724C');
   }
 };
@@ -1232,6 +1355,60 @@ function showToast(scene, message) {
     toastText.destroy();
   });
 }
+
+// ================================================================
+// 出牌记录区域
+// ================================================================
+function createPlayHistoryArea(scene) {
+  var bg = scene.add.graphics();
+  bg.fillStyle(0x000000, 0.25);
+  bg.fillRoundedRect(12, 876, 576, 78, 8).setDepth(200);
+
+  scene.add.text(24, 880, '最近出牌', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '9px', color: '#81C784'
+  }).setDepth(201);
+
+  scene.playHistoryText = scene.add.text(24, 892, '', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '10px', color: '#C8E6C9',
+    lineSpacing: 2,
+    wordWrap: { width: 560 }
+  }).setDepth(201);
+}
+
+GameScene.prototype.addPlayHistory = function (player, cardsOrPass) {
+  var labels = { player: '你', ai1: '王怼怼', ai2: '苏甜甜' };
+  var label = labels[player] || player;
+  var entry;
+  if (cardsOrPass === true) {
+    // pass
+    entry = { text: label + ': 不出', pass: true };
+  } else if (cardsOrPass && cardsOrPass.length > 0) {
+    var display = cardsOrPass.map(function (c) {
+      return Doudizhu.RANK_NAME_MAP[c.rank] || '?';
+    }).join(' ');
+    entry = { text: label + ': ' + display, cards: cardsOrPass };
+  } else {
+    return; // ignore empty entries
+  }
+  this.playHistory.push(entry);
+  // 只保留最近8条
+  if (this.playHistory.length > 8) {
+    this.playHistory = this.playHistory.slice(-8);
+  }
+  this.renderPlayHistory();
+};
+
+GameScene.prototype.renderPlayHistory = function () {
+  if (!this.playHistoryText) return;
+  var lines = [];
+  for (var i = 0; i < this.playHistory.length; i++) {
+    var entry = this.playHistory[i];
+    lines.push(entry.text);
+  }
+  this.playHistoryText.setText(lines.join('\n'));
+};
 
 // ================================================================
 // CSS
