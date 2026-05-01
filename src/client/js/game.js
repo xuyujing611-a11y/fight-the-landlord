@@ -2049,16 +2049,16 @@ function showToast(scene, message) {
 function createPlayHistoryArea(scene) {
   var bg = scene.add.graphics();
   bg.fillStyle(0x000000, 0.25);
-  bg.fillRoundedRect(12, 500, 936, 55, 6).setDepth(200);
+  bg.fillRoundedRect(12, 500, 936, 92, 6).setDepth(200);
 
   scene.add.text(20, 510, '最近出牌', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '8px', color: '#81C784'
+    fontSize: '10px', color: '#81C784'
   }).setDepth(201);
 
-  scene.playHistoryText = scene.add.text(20, 522, '', {
+  scene.playHistoryText = scene.add.text(20, 516, '', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '10px', color: '#C8E6C9',
+    fontSize: '11px', color: '#C8E6C9',
     lineSpacing: 2,
     wordWrap: { width: 920 }
   }).setDepth(201);
