@@ -1116,7 +1116,7 @@ GameScene.prototype.handleAIPlay = function (aiIndex, aiName, res) {
     // AI1 played, now AI2's turn
     var self = this;
     this.setStatusText(aiName + ' \u51FA\u4E86 ' + (Doudizhu.HAND_TYPE_NAMES[info.type] || info.type) + '\uFF0C\u8F6E\u5230\u82CF\u751C\u751C');
-    this.time.delayedCall(600, function () { self.doAITurn(1); });
+    this.time.delayedCall(900, function () { self.doAITurn(1); });
   } else {
     this.gameState = GAME_STATE.PLAYER_TURN;
     SoundManager.playerTurn();
@@ -1143,7 +1143,7 @@ GameScene.prototype.handleAIPass = function (aiIndex, aiName) {
       var lastAiName = this.lastPlayPlayer === 'ai1' ? '\u738B\u603C\u603C' : '\u82CF\u751C\u751C';
       this.setStatusText('\u4E24\u5BB6\u90FD\u8FC7\uFF0C\u8F6E\u5230' + lastAiName);
       var selfB1b = this;
-      this.time.delayedCall(500, function () { selfB1b.doAITurn(lastAiIdx); });
+      this.time.delayedCall(800, function () { selfB1b.doAITurn(lastAiIdx); });
     }
     return;
   }
@@ -1151,7 +1151,7 @@ GameScene.prototype.handleAIPass = function (aiIndex, aiName) {
     // AI1 passed, now AI2's turn
     var self = this;
     this.setStatusText(aiName + ' \u4E0D\u51FA\uFF0C\u8F6E\u5230\u82CF\u751C\u751C');
-    this.time.delayedCall(600, function () { self.doAITurn(1); });
+    this.time.delayedCall(900, function () { self.doAITurn(1); });
   } else {
     this.gameState = GAME_STATE.PLAYER_TURN;
     this.setStatusText('\u8F6E\u5230\u4F60\u51FA\u724C');
@@ -1200,7 +1200,7 @@ GameScene.prototype.localAIPlay = function (aiIndex, aiName) {
   if (aiIndex === 0) {
     // AI1 played (local), now AI2's turn
     var self = this;
-    this.time.delayedCall(600, function () { self.doAITurn(1); });
+    this.time.delayedCall(900, function () { self.doAITurn(1); });
   } else {
     this.gameState = GAME_STATE.PLAYER_TURN;
     SoundManager.playerTurn();
@@ -1271,6 +1271,8 @@ GameScene.prototype.doAction = function () {
 GameScene.prototype._showTypeSelection = function (aiId, aiName) {
   var self = this;
   self.chaosTypeSelection = true;
+  // B34: 显示题型选择时隐藏主标题，避免重叠
+  if (self.chaosTitle) self.chaosTitle.setVisible(false);
 
   var types = [
     { id: 'vocabulary', label: '四六级单词', icon: '📚', desc: '看释义选单词，AI给你出牌' },
@@ -1337,6 +1339,8 @@ GameScene.prototype._showTypeSelection = function (aiId, aiName) {
       card.on('pointerdown', function () {
         if (self.chaosTypeSelection) {
           self.chaosTypeSelection = false;
+          // B34: 选完题型恢复主标题显示
+          if (self.chaosTitle) self.chaosTitle.setVisible(true);
           // 销毁类型选择UI（保留基础元素：遮罩、卡片背景、标题栏、分数、关闭按钮）
           for (var di = self.chaosElements.length - 1; di >= 5; di--) {
             if (self.chaosElements[di]) self.chaosElements[di].destroy();
@@ -1441,11 +1445,11 @@ GameScene.prototype._renderQuestion = function (q, aiId) {
   self._clearQuestionArea();
 
   var typeLabel = q.questionType || q.type || '知识题';
-  var typeIcon = 'U0001F9E0';
-  if (typeLabel.indexOf('voc') >= 0 || typeLabel.indexOf('word') >= 0) typeIcon = 'U0001F4DA';
-  if (typeLabel.indexOf('expr') >= 0) typeIcon = 'U0001F4AC';
-  if (typeLabel.indexOf('trivia') >= 0) typeIcon = 'U0001F4A1';
-  if (typeLabel.indexOf('life') >= 0) typeIcon = 'U0001F3E0';
+  var typeIcon = '🧠';
+  if (typeLabel.indexOf('voc') >= 0 || typeLabel.indexOf('word') >= 0) typeIcon = '📚';
+  if (typeLabel.indexOf('expr') >= 0) typeIcon = '💬';
+  if (typeLabel.indexOf('trivia') >= 0) typeIcon = '💡';
+  if (typeLabel.indexOf('life') >= 0) typeIcon = '🏠';
 
   var tag = self.add.text(220, 132, typeIcon + ' ' + typeLabel, {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
@@ -1582,7 +1586,7 @@ GameScene.prototype._handleOptionClick = function (self, optBg, optKey, aiId, q)
   var againBg = self.add.graphics();
   againBg.fillStyle(0x4ECDC4, 1);
   againBg.fillRoundedRect(220, btnY, 220, 40, 10).setDepth(305);
-  var againTxt = self.add.text(330, btnY + 20, '\U0001F504 \u518D\u6765\u4E00\u9898', {
+  var againTxt = self.add.text(330, btnY + 20, '🔄 再来一题', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '15px', color: '#FFFFFF', fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(306);
@@ -1606,6 +1610,68 @@ GameScene.prototype._handleOptionClick = function (self, optBg, optKey, aiId, q)
   closeBg.setInteractive(new Phaser.Geom.Rectangle(510, btnY, 220, 40), Phaser.Geom.Rectangle.Contains);
   closeBg.on('pointerup', function () { self._destroyChaos(); });
   self.chaosElements.push(closeBg, closeTxt);
+
+  // B37: 换牌事件检测 — 答题后调API检查是否触发换牌
+  if (self.isAPIMode && typeof ApiClient !== 'undefined' && ApiClient.checkChaosTrigger) {
+    ApiClient.checkChaosTrigger({
+      round: self.chaosScore || 0,
+      result: isCorrect ? 'correct' : 'wrong'
+    })
+      .then(function (res) {
+        if (res.triggered && res.event && res.event.type === 'cardSwap') {
+          self._showCardSwapAnimation(res.event, aiId);
+        }
+      })
+      .catch(function () {});
+  }
+};
+
+// ================================================================
+// B37: 搞事情 - 换牌动画（AI从你手牌换走一张）
+// ================================================================
+GameScene.prototype._showCardSwapAnimation = function (event, aiId) {
+  var self = this;
+  if (!self.playerHand || self.playerHand.length === 0) return;
+
+  // 随机选一张玩家手牌
+  var idx = Math.floor(Math.random() * self.playerHand.length);
+  var swappedCard = self.playerHand[idx];
+  self.playerHand.splice(idx, 1);
+
+  // 加入AI手牌
+  var aiHand = aiId === 'duidui' ? self.ai1Hand : self.ai2Hand;
+  aiHand.push(swappedCard);
+  aiHand.sort(function (a, b) { return a.rank !== b.rank ? b.rank - a.rank : a.suit - b.suit; });
+
+  var aiName = aiId === 'duidui' ? '王怼怼' : '苏甜甜';
+
+  // 换牌提示文字动画
+  var swapText = self.add.text(480, 250, '🔄 ' + aiName + ' 换走了你的牌！', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '20px', color: '#FF6B35', fontStyle: 'bold',
+    stroke: '#000000', strokeThickness: 3
+  }).setOrigin(0.5).setDepth(310);
+
+  // 显示已被换走的牌
+  var rankStr = Doudizhu.RANK_NAMES ? Doudizhu.RANK_NAMES[swappedCard.rank] : (swappedCard.rank || '');
+  var suitStr = Doudizhu.SUIT_NAMES ? Doudizhu.SUIT_NAMES[swappedCard.suit] : (swappedCard.suit || '');
+  var cardText = self.add.text(480, 285, '[' + suitStr + rankStr + ']', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '16px', color: '#FFFFFF',
+    stroke: '#000000', strokeThickness: 2
+  }).setOrigin(0.5).setDepth(310);
+
+  self.chaosElements.push(swapText, cardText);
+
+  // 更新玩家手牌显示
+  self.renderHandCards();
+  self.updateAICount(aiId === 'duidui' ? 0 : 1);
+
+  // 2.5秒后自动消失
+  self.time.delayedCall(2500, function () {
+    if (swapText) swapText.destroy();
+    if (cardText) cardText.destroy();
+  });
 };
 
 // ================================================================
@@ -1653,12 +1719,13 @@ GameScene.prototype._showPlayBubble = function (aiId, event, context) {
   }
   self.playBubbleElements = [];
 
-  // 气泡显示在桌面中央 (Y=160)
-  var y = 160;
+  // B36: AI1在上、AI2在下，错开位置
+  var y = aiId === 'duidui' ? 130 : 160;
 
   var renderBubble = function (line) {
     var aiDisplayName = aiId === 'duidui' ? '王怼怼' : '苏甜甜';
     var avatarColor = aiId === 'duidui' ? 0x4FC3F7 : 0xFFB74D;
+    var arrowDir = aiId === 'duidui' ? 1 : -1; // 箭头指向角色方向
 
     // AI 头像圆圈
     var avatar = self.add.graphics();
@@ -1676,11 +1743,24 @@ GameScene.prototype._showPlayBubble = function (aiId, event, context) {
     }).setDepth(21);
     self.playBubbleElements.push(nameTxt);
 
-    // 台词气泡背景
+    // 台词气泡背景（圆角矩形）
     var bubble = self.add.graphics();
     bubble.fillStyle(0x000000, 0.4);
     bubble.fillRoundedRect(230, y + 10, 500, 28, 6).setDepth(20);
     self.playBubbleElements.push(bubble);
+
+    // B36: 对话气泡三角箭头
+    var arrow = self.add.graphics();
+    arrow.fillStyle(0x000000, 0.4);
+    // 指向左侧（说话者方向），箭头在气泡左边
+    var arrowX = 230;
+    var arrowYmid = y + 10 + 14;
+    arrow.fillTriangle(
+      arrowX, arrowYmid,
+      arrowX - 10, arrowYmid - 5,
+      arrowX - 10, arrowYmid + 5
+    ).setDepth(20);
+    self.playBubbleElements.push(arrow);
 
     // 台词文本
     var bubbleTxt = self.add.text(240, y + 24, line, {
