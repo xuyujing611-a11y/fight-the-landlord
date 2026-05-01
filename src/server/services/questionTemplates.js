@@ -305,28 +305,14 @@ async function generateBatch(type, difficulty, count) {
     results.push(questionCache[cacheKey].shift());
   }
 
-  // 不足则生成
+  // 不足则逐个生成（真正串行化，避免 rate limit）
   const remaining = maxGen - results.length;
-  if (remaining > 0) {
-    // 并行生成，但限制并发避免429
-    const promises = [];
-    for (let i = 0; i < remaining; i++) {
-      promises.push(
-        generateQuestion(type, difficulty).catch(e => {
-          console.error(`Batch gen failed for ${type}#${i}:`, e.message);
-          return null;
-        })
-      );
-      // 串行化避免 rate limit
-      if (promises.length >= 2) {
-        const batch = await Promise.all(promises);
-        batch.forEach(q => { if (q) results.push(q); });
-        promises.length = 0;
-      }
-    }
-    if (promises.length > 0) {
-      const batch = await Promise.all(promises);
-      batch.forEach(q => { if (q) results.push(q); });
+  for (let i = 0; i < remaining; i++) {
+    try {
+      const q = await generateQuestion(type, difficulty);
+      if (q) results.push(q);
+    } catch (e) {
+      console.error(`Batch gen failed for ${type}#${i}:`, e.message);
     }
   }
 
