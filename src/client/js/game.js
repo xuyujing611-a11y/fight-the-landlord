@@ -32,17 +32,14 @@ var game = new Phaser.Game(GameConfig);
 // ================================================================
 // 工具函数
 // ================================================================
-function makeAvatarEmoji(scene, emoji, x, y, bgColor) {
+function makeAvatarImage(scene, key, x, y, bgColor, name) {
   var g = scene.add.graphics();
   g.fillStyle(bgColor, 1);
-  g.fillRoundedRect(x - 24, y - 24, 48, 48, 12);
+  g.fillRoundedRect(x - 28, y - 28, 56, 56, 14);
   g.lineStyle(2, 0xFFFFFF, 0.8);
-  g.strokeRoundedRect(x - 24, y - 24, 48, 48, 12);
-  var t = scene.add.text(x, y, emoji, {
-    fontFamily: '"Noto Color Emoji","Apple Color Emoji","Segoe UI Emoji",sans-serif',
-    fontSize: '28px'
-  }).setOrigin(0.5).setDepth(12);
-  return t;
+  g.strokeRoundedRect(x - 28, y - 28, 56, 56, 14);
+  var img = scene.add.image(x, y, key).setDisplaySize(50, 50).setDepth(12);
+  return img;
 }
 
 // ================================================================
@@ -88,7 +85,10 @@ GameScene.prototype.init = function () {
   this.isLandlord = false;
 };
 
-GameScene.prototype.preload = function () {};
+GameScene.prototype.preload = function () {
+  this.load.image('avatar_wang', 'assets/avatars/wang_duidui.png');
+  this.load.image('avatar_su', 'assets/avatars/su_tiantian.png');
+};
 
 GameScene.prototype.create = function () {
   var self = this;
@@ -176,24 +176,24 @@ function createTopBar(scene) {
 // AI 区域
 // ================================================================
 function createAIArea(scene) {
-  // AI1: Wang Duidui with sunglass emoji
-  makeAvatarEmoji(scene, '\ud83d\ude0e', 48, 74, 0xFF6B35);
-  scene.add.text(78, 62, '\u738B\u603C\u603C', {
+  // AI1: Wang Duidui - 酷拽墨镜男
+  makeAvatarImage(scene, 'avatar_wang', 48, 74, 0xFF6B35, '\u738B\u603C\u603C');
+  scene.add.text(80, 60, '\u738B\u603C\u603C', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '13px', color: '#FFFFFF', fontStyle: 'bold'
   }).setDepth(11);
-  scene.ai1Count = scene.add.text(78, 80, '\u5269\u4F59 17 \u5F20', {
+  scene.ai1Count = scene.add.text(80, 78, '\u5269\u4F59 17 \u5F20', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '11px', color: '#A5D6A7'
   }).setDepth(11);
 
-  // AI2: Su Tiantian with smiling emoji
-  makeAvatarEmoji(scene, '\ud83d\ude0a', 325, 74, 0x7C4DFF);
-  scene.add.text(248, 62, '\u82CF\u751C\u751C', {
+  // AI2: Su Tiantian - 甜美可爱少女
+  makeAvatarImage(scene, 'avatar_su', 325, 74, 0x7C4DFF, '\u82CF\u751C\u751C');
+  scene.add.text(244, 60, '\u82CF\u751C\u751C', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '13px', color: '#FFFFFF', fontStyle: 'bold'
   }).setOrigin(1, 0).setDepth(11);
-  scene.ai2Count = scene.add.text(248, 80, '\u5269\u4F59 17 \u5F20', {
+  scene.ai2Count = scene.add.text(244, 78, '\u5269\u4F59 17 \u5F20', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '11px', color: '#A5D6A7'
   }).setOrigin(1, 0).setDepth(11);
