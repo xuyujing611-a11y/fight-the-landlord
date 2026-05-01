@@ -152,7 +152,7 @@ router.post('/start', (req, res) => {
         ? '请叫分（叫地主1/2/3分，或不叫）'
         : 'AI思考中...',
       handStrength: turn === 0 ? evaluateHandStrength(
-        hands[0].map(c => c.rank || c)
+        hands[0].map(c => c.rank !== undefined && c.rank !== null ? c.rank : c)
       ) : null
     });
 
