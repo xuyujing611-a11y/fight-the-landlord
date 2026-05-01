@@ -19,8 +19,8 @@ var GAME_STATE = {
 
 var GameConfig = {
   type: Phaser.AUTO,
-  width: 600,
-  height: 960,
+  width: 960,
+  height: 600,
   parent: 'game-container',
   backgroundColor: '#1B5E20',
   dom: { createContainer: true },
