@@ -58,6 +58,7 @@ app.use('/api/quiz', quizRouter);
 app.use('/api/verify', verifyRouter);
 app.use('/api/wrong-book', wrongbookRouter);
 app.use('/api/chaos', chaosRouter);
+app.use('/api/bidding', biddingRouter);
 
 // 健康检查
 app.get('/api/health', (req, res) => {

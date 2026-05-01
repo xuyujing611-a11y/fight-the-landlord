@@ -9,6 +9,7 @@
 // ================================================================
 var GAME_STATE = {
   INIT: 'INIT',
+  BIDDING: 'BIDDING',
   PLAYER_TURN: 'PLAYER_TURN',
   VALIDATING: 'VALIDATING',
   WAITING_AI: 'WAITING_AI',
@@ -31,17 +32,17 @@ var game = new Phaser.Game(GameConfig);
 // ================================================================
 // 工具函数
 // ================================================================
-function createCircleTexture(scene, key, radius, color, strokeColor, strokeWidth) {
-  strokeWidth = strokeWidth || 0;
-  var g = scene.make.graphics({ add: false });
-  if (strokeWidth > 0) {
-    g.fillStyle(strokeColor || 0xFFFFFF, 1);
-    g.fillCircle(radius + strokeWidth, radius + strokeWidth, radius + strokeWidth);
-  }
-  g.fillStyle(color, 1);
-  g.fillCircle(radius, radius, radius);
-  g.generateTexture(key, radius * 2, radius * 2);
-  g.destroy();
+function makeAvatarEmoji(scene, emoji, x, y, bgColor) {
+  var g = scene.add.graphics();
+  g.fillStyle(bgColor, 1);
+  g.fillRoundedRect(x - 24, y - 24, 48, 48, 12);
+  g.lineStyle(2, 0xFFFFFF, 0.8);
+  g.strokeRoundedRect(x - 24, y - 24, 48, 48, 12);
+  var t = scene.add.text(x, y, emoji, {
+    fontFamily: '"Noto Color Emoji","Apple Color Emoji","Segoe UI Emoji",sans-serif',
+    fontSize: '28px'
+  }).setOrigin(0.5).setDepth(12);
+  return t;
 }
 
 // ================================================================
@@ -76,11 +77,15 @@ GameScene.prototype.init = function () {
   this.ai2Hand = dealResult.hands[2];
   this.remainingCards = dealResult.remaining;
   this.selectedCards = [];
-  this.gameState = GAME_STATE.PLAYER_TURN;
+  this.gameState = GAME_STATE.BIDDING;
   this.lastPlay = null;
   this.lastPlayInfo = null;
   this.lastPlayPlayer = null;
   this.passCount = 0;
+  this.biddingState = null;
+  this.biddingUI = [];
+  this.landlordIndex = -1;
+  this.isLandlord = false;
 };
 
 GameScene.prototype.preload = function () {};
@@ -100,6 +105,11 @@ GameScene.prototype.create = function () {
 
   this.time.delayedCall(500, function () {
     self.checkAPIConnection();
+  });
+
+  // 叫分阶段
+  this.time.delayedCall(800, function () {
+    self.startBiddingPhase();
   });
 };
 
@@ -124,6 +134,21 @@ function drawTableBackground(scene) {
   var cx = W / 2, cy = H / 2 - 40;
   diamond.strokeRect(cx - 50, cy - 70, 100, 140);
   diamond.strokeRect(cx - 30, cy - 50, 60, 100);
+
+  // Decorative table corners
+  var cPos = [[22, 72], [W-22, 72], [22, H-48], [W-22, H-48]];
+  for (var ci = 0; ci < cPos.length; ci++) {
+    var dx = cPos[ci][0], dy = cPos[ci][1];
+    diamond.lineStyle(1, 0x4CAF50, 0.18);
+    diamond.strokeCircle(dx, dy, 10);
+    diamond.strokeCircle(dx, dy, 6);
+    diamond.strokeCircle(dx, dy, 3);
+  }
+
+  // Center decorative circles
+  diamond.lineStyle(1, 0x66BB6A, 0.08);
+  diamond.strokeCircle(cx, cy - 10, 42);
+  diamond.strokeCircle(cx, cy - 10, 58);
 }
 
 // ================================================================
@@ -151,11 +176,8 @@ function createTopBar(scene) {
 // AI 区域
 // ================================================================
 function createAIArea(scene) {
-  createCircleTexture(scene, 'ai1_avatar', 24, 0xFF6B35, 0xFFFFFF, 2);
-  var ai1Shadow = scene.add.graphics();
-  ai1Shadow.fillStyle(0x000000, 0.2);
-  ai1Shadow.fillCircle(50, 77, 26).setDepth(10);
-  scene.add.image(48, 74, 'ai1_avatar').setDepth(11);
+  // AI1: Wang Duidui with sunglass emoji
+  makeAvatarEmoji(scene, '\ud83d\ude0e', 48, 74, 0xFF6B35);
   scene.add.text(78, 62, '\u738B\u603C\u603C', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '13px', color: '#FFFFFF', fontStyle: 'bold'
@@ -165,11 +187,8 @@ function createAIArea(scene) {
     fontSize: '11px', color: '#A5D6A7'
   }).setDepth(11);
 
-  createCircleTexture(scene, 'ai2_avatar', 24, 0x7C4DFF, 0xFFFFFF, 2);
-  var ai2Shadow = scene.add.graphics();
-  ai2Shadow.fillStyle(0x000000, 0.2);
-  ai2Shadow.fillCircle(327, 77, 26).setDepth(10);
-  scene.add.image(325, 74, 'ai2_avatar').setDepth(11);
+  // AI2: Su Tiantian with smiling emoji
+  makeAvatarEmoji(scene, '\ud83d\ude0a', 325, 74, 0x7C4DFF);
   scene.add.text(248, 62, '\u82CF\u751C\u751C', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '13px', color: '#FFFFFF', fontStyle: 'bold'
@@ -202,23 +221,23 @@ function createPlayArea(scene) {
     fontSize: '12px', color: '#66BB6A', alpha: 0.4
   }).setOrigin(0.5).setDepth(11);
 
-  scene.ai1PlayLabel = scene.add.text(50, 130, 'AI1:', {
+  scene.ai1PlayLabel = scene.add.text(50, 130, '\u738B\u603C\u603C\uFF1A', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '10px', color: '#A5D6A7'
   }).setDepth(11);
-  scene.ai1PlayCards = scene.add.dom(50, 150).setOrigin(0, 0).setDepth(11);
+  scene.ai1PlayCardsGraphics = scene.add.graphics().setDepth(11);
 
-  scene.ai2PlayLabel = scene.add.text(280, 130, 'AI2:', {
+  scene.ai2PlayLabel = scene.add.text(280, 130, '\u82CF\u751C\u751C\uFF1A', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '10px', color: '#A5D6A7'
   }).setDepth(11);
-  scene.ai2PlayCards = scene.add.dom(280, 150).setOrigin(0, 0).setDepth(11);
+  scene.ai2PlayCardsGraphics = scene.add.graphics().setDepth(11);
 
-  scene.myPlayLabel = scene.add.text(cx, 310, '\u4F60\u7684\u51FA\u724C', {
+  scene.myPlayLabel = scene.add.text(cx, 310, '\u4F60\u51FA\uFF1A', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '10px', color: '#A5D6A7'
   }).setOrigin(0.5).setDepth(11);
-  scene.myPlayCards = scene.add.dom(cx, 335).setOrigin(0.5, 0).setDepth(11);
+  scene.myPlayCardsGraphics = scene.add.graphics().setDepth(11);
 
   scene.add.text(10, 355, '\u5E95\u724C: ? ? ?', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
@@ -355,6 +374,360 @@ GameScene.prototype._highlightCard = function (el) {
   el.setY(el.y - 20);
   var cardNode = el.node && el.node.firstElementChild;
   if (cardNode) cardNode.classList.add('ddz-card-selected');
+};
+
+// ================================================================
+// 叫分阶段
+// ================================================================
+
+GameScene.prototype.startBiddingPhase = function () {
+  var self = this;
+  this.gameState = GAME_STATE.BIDDING;
+  this.setStatusText('\u53EB\u5206\u9636\u6BB5...');
+
+  // 构建3人手牌的简短JSON用于API
+  var handsForAPI = [
+    this.playerHand.map(function (c) { return { suit: c.suit, rank: c.rank }; }),
+    this.ai1Hand.map(function (c) { return { suit: c.suit, rank: c.rank }; }),
+    this.ai2Hand.map(function (c) { return { suit: c.suit, rank: c.rank }; })
+  ];
+  var remainingForAPI = this.remainingCards.map(function (c) {
+    return { suit: c.suit, rank: c.rank };
+  });
+
+  // 隐藏功能按钮
+  this.hideActionButtons();
+
+  if (this.isAPIMode && typeof ApiClient !== 'undefined') {
+    ApiClient.startBidding(handsForAPI, remainingForAPI)
+      .then(function (res) {
+        self.onBiddingStarted(res);
+      })
+      .catch(function () {
+        // API 不可用，本地模式：随机定地主
+        self.localAssignLandlord();
+      });
+  } else {
+    self.localAssignLandlord();
+  }
+};
+
+GameScene.prototype.onBiddingStarted = function (res) {
+  this.biddingState = res;
+  this.biddingId = res.biddingId;
+
+  this.setStatusText('\u53EB\u5206\u9636\u6BB5');
+
+  if (res.turn === 0) {
+    // 轮到玩家叫分
+    this.showBiddingUI();
+  } else if (res.turn === 1) {
+    // 轮到王怼怼
+    this.setStatusText('\u738B\u603C\u603C\u601D\u8003\u4E2D...');
+    var self = this;
+    this.time.delayedCall(1000, function () {
+      self.doAIBidding(1);
+    });
+  } else {
+    // 轮到苏甜甜
+    this.setStatusText('\u82CF\u751C\u751C\u601D\u8003\u4E2D...');
+    var self2 = this;
+    this.time.delayedCall(1000, function () {
+      self2.doAIBidding(2);
+    });
+  }
+};
+
+GameScene.prototype.showBiddingUI = function () {
+  var self = this;
+  this.hideBiddingUI();
+
+  var cx = 187;
+  var uiY = 560;
+  var bids = [
+    { label: '\u4E0D\u53EB', value: 0, color: 0xFF6B6B },
+    { label: '1\u5206', value: 1, color: 0x4ECDC4 },
+    { label: '2\u5206', value: 2, color: 0xFFD93D },
+    { label: '3\u5206', value: 3, color: 0xFF6B35 }
+  ];
+
+  // 提示文字
+  var promptText = this.add.text(cx, 510, '\u8BF7\u53EB\u5206', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '18px', color: '#FFFFFF', fontStyle: 'bold'
+  }).setOrigin(0.5).setDepth(200);
+  this.biddingUI.push(promptText);
+
+  var bw = 72, bh = 44, gap = 10;
+  var totalW = bw * 4 + gap * 3;
+  var startX = (375 - totalW) / 2;
+
+  for (var i = 0; i < bids.length; i++) {
+    var b = bids[i];
+    var bx = startX + i * (bw + gap);
+
+    var bg = this.add.graphics().setDepth(200);
+    bg.fillStyle(b.color, 1);
+    bg.fillRoundedRect(bx, uiY, bw, bh, 10);
+    bg.setInteractive(new Phaser.Geom.Rectangle(bx, uiY, bw, bh), Phaser.Geom.Rectangle.Contains);
+
+    var txt = this.add.text(bx + bw / 2, uiY + bh / 2, b.label, {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '16px', color: '#FFFFFF', fontStyle: 'bold'
+    }).setOrigin(0.5).setDepth(201);
+
+    (function (val, buttonEl) {
+      bg.on('pointerup', function () {
+        self.handlePlayerBid(val);
+      });
+    })(b.value, bg);
+
+    this.biddingUI.push(bg);
+    this.biddingUI.push(txt);
+  }
+
+  // 手牌强度提示
+  var state = this.biddingState;
+  if (state && state.handStrength !== undefined) {
+    var strength = state.handStrength;
+    var label = strength >= 20 ? '\u624B\u724C\u5F88\u5F3A' : (strength >= 14 ? '\u624B\u724C\u4E0D\u9519' : (strength >= 9 ? '\u624B\u724C\u4E00\u822C' : '\u624B\u724C\u8F83\u5F31'));
+    var infoText = this.add.text(cx, 620, '\u2605 ' + label + ' (\u5F3A\u5EA6\u5206: ' + strength + ')', {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '12px', color: '#A5D6A7'
+    }).setOrigin(0.5).setDepth(200);
+    this.biddingUI.push(infoText);
+  }
+};
+
+GameScene.prototype.hideBiddingUI = function () {
+  for (var i = 0; i < this.biddingUI.length; i++) {
+    if (this.biddingUI[i]) this.biddingUI[i].destroy();
+  }
+  this.biddingUI = [];
+};
+
+GameScene.prototype.handlePlayerBid = function (bid) {
+  var self = this;
+  this.hideBiddingUI();
+
+  var bidLabel = bid === 0 ? '\u4E0D\u53EB' : bid + '\u5206';
+  this.setStatusText('\u4F60\u53EB\u4E86 ' + bidLabel);
+
+  if (this.isAPIMode && this.biddingId) {
+    ApiClient.placeBid(this.biddingId, 0, bid)
+      .then(function (res) {
+        self.onBiddingResult(res);
+      })
+      .catch(function () {
+        self.setStatusText('\u53EB\u5206\u670D\u52A1\u5F02\u5E38\uFF0C\u672C\u5730\u6A21\u5F0F');
+        self.localAssignLandlord();
+      });
+  } else {
+    this.localAssignLandlord();
+  }
+};
+
+GameScene.prototype.onBiddingResult = function (res) {
+  if (res.phase === 'done') {
+    // 叫分结束，确定地主
+    this.finishBidding(res);
+    return;
+  }
+
+  if (res.phase === 'redeal') {
+    this.setStatusText('\u4E09\u5BB6\u90FD\u4E0D\u53EB\uFF0C\u91CD\u65B0\u53D1\u724C');
+    showToast(this, '\u91CD\u65B0\u53D1\u724C...');
+    var self = this;
+    this.time.delayedCall(1500, function () {
+      self.restartGame();
+    });
+    return;
+  }
+
+  // 轮到下一个玩家
+  if (res.currentBidder === 'ai1') {
+    this.setStatusText('\u738B\u603C\u603C\u601D\u8003\u4E2D...');
+    var self = this;
+    this.time.delayedCall(1000, function () {
+      self.doAIBidding(1);
+    });
+  } else if (res.currentBidder === 'ai2') {
+    this.setStatusText('\u82CF\u751C\u751C\u601D\u8003\u4E2D...');
+    var self = this;
+    this.time.delayedCall(1000, function () {
+      self.doAIBidding(2);
+    });
+  } else if (res.currentBidder === 'player') {
+    // 又轮到玩家
+    this.showBiddingUI();
+  }
+};
+
+GameScene.prototype.doAIBidding = function (aiIndex) {
+  var self = this;
+  var hand = aiIndex === 1 ? this.ai1Hand : this.ai2Hand;
+  var aiName = aiIndex === 1 ? '\u738B\u603C\u603C' : '\u82CF\u751C\u751C';
+
+  var currentBid = this.biddingState ? this.biddingState.highestBid : 0;
+
+  // 本地 AI 叫分逻辑
+  var groups = {};
+  for (var i = 0; i < hand.length; i++) {
+    groups[hand[i].rank] = (groups[hand[i].rank] || 0) + 1;
+  }
+  var score = 0;
+  if (groups[14]) score += 6;
+  if (groups[13]) score += 4;
+  if (groups[12]) score += 2;
+  for (var r in groups) {
+    if (groups[r] === 4) score += 12;
+    else if (groups[r] === 3) score += 4;
+  }
+
+  var bid = 0;
+  if (score >= 20) bid = 3;
+  else if (score >= 14) bid = 2;
+  else if (score >= 9) bid = 1;
+  else bid = 0;
+
+  if (bid <= currentBid) {
+    if (score >= 20 && currentBid < 3) bid = 3;
+    else bid = 0;
+  }
+
+  var bidLabel = bid === 0 ? '\u4E0D\u53EB' : bid + '\u5206';
+  this.setStatusText(aiName + ' \u53EB\u4E86 ' + bidLabel);
+
+  if (this.isAPIMode && this.biddingId) {
+    ApiClient.placeBid(this.biddingId, aiIndex, bid)
+      .then(function (res) {
+        self.onBiddingResult(res);
+      })
+      .catch(function () {
+        self.setStatusText('\u53EB\u5206\u670D\u52A1\u5F02\u5E38');
+        self.localAssignLandlord();
+      });
+  } else {
+    this.localAssignLandlord();
+  }
+};
+
+GameScene.prototype.finishBidding = function (res) {
+  this.landlordIndex = res.highestBidder;
+  this.isLandlord = (res.highestBidder === 0);
+
+  // 显示底牌
+  this.showBottomCards(res.landlordCards);
+
+  // 如果玩家是地主，把底牌加入手牌
+  if (res.highestBidder === 0 && res.landlordHand) {
+    this.playerHand = res.landlordHand.map(function (c) {
+      return new Doudizhu.Card(c.suit, c.rank);
+    });
+    this.playerHand = Doudizhu.sortCards(this.playerHand);
+    this.renderPlayerHand();
+  }
+
+  // 如果 AI 是地主，把底牌加入 AI 手牌
+  if (res.highestBidder === 1) {
+    var bottomCards = (res.landlordCards || []).map(function (c) {
+      return new Doudizhu.Card(c.suit, c.rank);
+    });
+    for (var i = 0; i < bottomCards.length; i++) {
+      this.ai1Hand.push(bottomCards[i]);
+    }
+    this.updateAICount(1);
+  }
+  if (res.highestBidder === 2) {
+    var bottomCards2 = (res.landlordCards || []).map(function (c) {
+      return new Doudizhu.Card(c.suit, c.rank);
+    });
+    for (var i = 0; i < bottomCards2.length; i++) {
+      this.ai2Hand.push(bottomCards2[i]);
+    }
+    this.updateAICount(2);
+  }
+
+  this.setStatusText(res.winnerText + ' \u5F00\u59CB\u51FA\u724C');
+  showToast(this, res.winnerText);
+
+  var self = this;
+  this.time.delayedCall(1200, function () {
+    self.gameState = GAME_STATE.PLAYER_TURN;
+    self.setStatusText('\u8F6E\u5230\u4F60\u51FA\u724C\uFF08\u81EA\u7531\u51FA\u724C\uFF09');
+    self.showActionButtons();
+  });
+};
+
+GameScene.prototype.showBottomCards = function (cards) {
+  if (!cards || cards.length === 0) return;
+  var cx = 187;
+  // 清除旧的底牌文字
+  if (this.bottomCardsText) this.bottomCardsText.destroy();
+
+  var display = cards.map(function (c) {
+    return Doudizhu.RANK_NAME_MAP[c.rank] || '?';
+  }).join(' ');
+
+  this.bottomCardsText = this.add.text(cx, 380, '\u5E95\u724C: ' + display, {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '14px', color: '#FFD93D', fontStyle: 'bold',
+    stroke: '#000000', strokeThickness: 3
+  }).setOrigin(0.5).setDepth(20);
+};
+
+GameScene.prototype.localAssignLandlord = function () {
+  // 本地模式：随机定地主，直接开始游戏
+  this.landlordIndex = Math.floor(Math.random() * 3);
+  this.isLandlord = (this.landlordIndex === 0);
+
+  if (this.landlordIndex === 0) {
+    for (var i = 0; i < this.remainingCards.length; i++) {
+      this.playerHand.push(this.remainingCards[i]);
+    }
+    this.playerHand = Doudizhu.sortCards(this.playerHand);
+    this.renderPlayerHand();
+  } else if (this.landlordIndex === 1) {
+    for (var i = 0; i < this.remainingCards.length; i++) {
+      this.ai1Hand.push(this.remainingCards[i]);
+    }
+    this.updateAICount(1);
+  } else {
+    for (var i = 0; i < this.remainingCards.length; i++) {
+      this.ai2Hand.push(this.remainingCards[i]);
+    }
+    this.updateAICount(2);
+  }
+
+  this.showBottomCards(this.remainingCards);
+  this.setStatusText('\u5F00\u59CB\u51FA\u724C');
+
+  var self = this;
+  this.time.delayedCall(1200, function () {
+    self.gameState = GAME_STATE.PLAYER_TURN;
+    self.setStatusText('\u8F6E\u5230\u4F60\u51FA\u724C\uFF08\u81EA\u7531\u51FA\u724C\uFF09');
+    self.showActionButtons();
+  });
+};
+
+GameScene.prototype.restartGame = function () {
+  // 销毁所有 UI 元素
+  this.hideBiddingUI();
+  this.scene.restart();
+};
+
+// 隐藏功能按钮
+GameScene.prototype.hideActionButtons = function () {
+  if (!this.actionButtons) return;
+  for (var i = 0; i < this.actionButtons.length; i++) {
+    if (this.actionButtons[i]) this.actionButtons[i].destroy();
+  }
+  this.actionButtons = [];
+};
+
+GameScene.prototype.showActionButtons = function () {
+  this.hideActionButtons();
+  createActionButtons(this);
 };
 
 // ================================================================
@@ -684,23 +1057,45 @@ GameScene.prototype.updateAICount = function (aiIndex) {
 };
 
 GameScene.prototype.displayPlay = function (cards, player) {
-  var labelEl;
-  if (player === 'player') labelEl = this.myPlayCards;
-  else if (player === 'ai1') labelEl = this.ai1PlayCards;
-  else labelEl = this.ai2PlayCards;
-  if (!labelEl || !labelEl.node) return;
-  var html = '<div style="display:flex;gap:3px;align-items:center">';
-  for (var i = 0; i < cards.length; i++) {
+  var gfx;
+  var baseX, baseY;
+  if (player === 'player') {
+    gfx = this.myPlayCardsGraphics;
+    baseX = 187; baseY = 335;
+  } else if (player === 'ai1') {
+    gfx = this.ai1PlayCardsGraphics;
+    baseX = 50; baseY = 150;
+  } else {
+    gfx = this.ai2PlayCardsGraphics;
+    baseX = 280; baseY = 150;
+  }
+  if (!gfx) return;
+  gfx.clear();
+  var cardW = 26, cardH = 36, gap = 3;
+  var n = cards.length;
+  var totalW = n * (cardW + gap) - gap;
+  var startX = Math.round(baseX - totalW / 2);
+  for (var i = 0; i < n; i++) {
     var c = cards[i];
+    var cx = startX + i * (cardW + gap);
+    var cy = Math.round(baseY - cardH / 2);
+    // Card face
+    gfx.fillStyle(0xFFFFFF, 1);
+    gfx.fillRoundedRect(cx, cy, cardW, cardH, 3);
+    gfx.lineStyle(1, 0x90A4AE, 0.8);
+    gfx.strokeRoundedRect(cx, cy, cardW, cardH, 3);
     var isRed = c.isRed ? c.isRed() : (c.suit === 'heart' || c.suit === 'diamond');
-    var colorClass = isRed ? 'ddz-card-red' : 'ddz-card-black';
+    var color = isRed ? 0xE53935 : 0x212121;
     var display = c.displayName ? c.displayName() : Doudizhu.RANK_NAME_MAP[c.rank];
     var symbol = c.suitSymbol ? c.suitSymbol() : Doudizhu.SUIT_SYMBOLS[c.suit];
-    html += '<span class="ddz-card-compact ' + colorClass + '">' + symbol + display + '</span>';
+    // Draw tiny rank+symbol on card
+    gfx.fillStyle(color, 1);
+    gfx.fillRect(cx + 3, cy + 2, 6, 8);
+    gfx.fillStyle(0xFFFFFF, 1);
+    gfx.fillRect(cx + 2, cy + 1, 8, 8);
+    gfx.fillStyle(color, 1);
+    gfx.fillRect(cx + 3, cy + 2, 6, 6);
   }
-  html += '</div>';
-  labelEl.node.innerHTML = html;
-  ensureCardCSS();
 };
 
 GameScene.prototype.doAction = function () {
@@ -745,6 +1140,8 @@ function createActionButtons(scene) {
     { label: '\u641E\u4E8B\u60C5', color: 0x7C4DFF, key: 'action' }
   ];
 
+  if (!scene.actionButtons) scene.actionButtons = [];
+
   for (var i = 0; i < buttons.length; i++) {
     var b = buttons[i];
     var bx = startX + i * (bw + gap);
@@ -752,11 +1149,13 @@ function createActionButtons(scene) {
     bg.fillStyle(b.color, 1);
     bg.fillRoundedRect(bx, btnY, bw, bh, 8).setDepth(100);
     bg.setInteractive(new Phaser.Geom.Rectangle(bx, btnY, bw, bh), Phaser.Geom.Rectangle.Contains);
+    scene.actionButtons.push(bg);
 
-    scene.add.text(bx + bw / 2, btnY + bh / 2, b.label, {
+    var txt = scene.add.text(bx + bw / 2, btnY + bh / 2, b.label, {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
       fontSize: '14px', color: '#FFFFFF', fontStyle: 'bold'
     }).setOrigin(0.5).setDepth(101);
+    scene.actionButtons.push(txt);
 
     (function (key) {
       bg.on('pointerup', function () {

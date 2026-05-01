@@ -25,6 +25,27 @@ function resetBidding() {
   biddingState = null;
 }
 
+/** 规范化单张牌：确保王牌的suit正确 */
+function normalizeCard(c) {
+  if (c.rank >= 13 && c.suit !== 'joker') {
+    return { suit: 'joker', rank: c.rank };
+  }
+  if (c.rank < 13 && c.suit === 'joker') {
+    return { suit: 'spade', rank: c.rank };
+  }
+  return { suit: c.suit || 'spade', rank: c.rank };
+}
+
+/** 规范化牌组 */
+function normalizeCards(arr) {
+  return (arr || []).map(c => normalizeCard(c));
+}
+
+/** 规范化每手牌 */
+function normalizeHands(hands) {
+  return (hands || []).map(h => normalizeCards(h));
+}
+
 // ============================================================
 // 评估手牌强度（用于AI叫分）
 // ============================================================
@@ -104,8 +125,8 @@ router.post('/start', (req, res) => {
     biddingState = {
       id: `bid_${Date.now()}`,
       playerId: playerId || 'anonymous',
-      hands: hands,              // 0=玩家, 1=AI1, 2=AI2
-      remaining: remaining || [],
+      hands: normalizeHands(hands),  // 0=玩家, 1=AI1, 2=AI2
+      remaining: normalizeCards(remaining || []),
       order: order,
       firstBidder: firstBidder,
       currentTurnIndex: 0,       // order 数组的索引
@@ -287,12 +308,15 @@ function finishBidding(res, landlordIndex) {
   // 整理地主手牌
   const sortedLandlord = Doudizhu.sortCards(
     landlordHand.map(c => {
-      if (typeof c.rank !== 'number') {
-        // 已经是 Card 实例
+      const nc = normalizeCard(c);
+      if (typeof nc.rank !== 'number') return c;
+      try {
+        return new Doudizhu.Card(nc.suit, nc.rank);
+      } catch (e) {
+        console.warn('Card creation failed:', nc, e.message);
         return c;
       }
-      return new Doudizhu.Card(c.suit, c.rank);
-    })
+    }).filter(Boolean)
   );
 
   const landlordName = landlordIndex === 0 ? '你' : (landlordIndex === 1 ? '王怼怼' : '苏甜甜');

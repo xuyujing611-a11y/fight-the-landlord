@@ -139,6 +139,39 @@ var ApiClient = {
    */
   clearWrongBook: function (playerId) {
     return apiPost('/api/wrong-book/clear', { playerId: playerId || null });
+  },
+
+  // ============================================================
+  // 叫分 API
+  // ============================================================
+
+  /**
+   * POST /api/bidding/start - 开始叫分
+   * @param {Array} hands - [玩家手牌, AI1手牌, AI2手牌]
+   * @param {Array} remaining - 3张底牌
+   * @returns {Promise}
+   */
+  startBidding: function (hands, remaining) {
+    return apiPost('/api/bidding/start', {
+      playerId: 'player',
+      hands: hands,
+      remaining: remaining
+    });
+  },
+
+  /**
+   * POST /api/bidding/place - 叫分
+   * @param {string} biddingId
+   * @param {number} playerIndex - 0=玩家, 1=AI1, 2=AI2
+   * @param {number} bid - 0=不叫, 1/2/3=叫地主
+   * @returns {Promise}
+   */
+  placeBid: function (biddingId, playerIndex, bid) {
+    return apiPost('/api/bidding/place', {
+      biddingId: biddingId,
+      playerIndex: playerIndex,
+      bid: bid
+    });
   }
 };
 
