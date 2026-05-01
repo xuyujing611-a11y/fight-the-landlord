@@ -227,12 +227,25 @@ GameScene.prototype.create = function () {
     var canvas = document.querySelector('#game-container canvas');
     if (!canvas) return;
     if (document.fullscreenElement || document.webkitFullscreenElement) {
-      var containerW = window.innerWidth;
-      var scale = containerW / 960;
+      // 第一步：重置canvas到原始尺寸960×600（覆盖Phaser的FIT缩放）
+      canvas.style.width = '960px';
+      canvas.style.height = '600px';
+      // 第二步：计算填满屏幕宽度的缩放比
+      var scale = window.innerWidth / 960;
       canvas.style.transform = 'scale(' + scale + ')';
       canvas.style.transformOrigin = 'center center';
+      // 第三步：固定定位+居中
+      canvas.style.position = 'fixed';
+      canvas.style.left = ((window.innerWidth - 960) / 2) + 'px';
+      canvas.style.top = ((window.innerHeight - 600 * scale) / 2) + 'px';
     } else {
+      // 退出全屏：清空自定义样式，让Phaser重新接管FIT
+      canvas.style.width = '';
+      canvas.style.height = '';
       canvas.style.transform = '';
+      canvas.style.position = '';
+      canvas.style.left = '';
+      canvas.style.top = '';
     }
   }
 
