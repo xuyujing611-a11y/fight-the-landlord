@@ -13,7 +13,8 @@ var GAME_STATE = {
   PLAYER_TURN: 'PLAYER_TURN',
   VALIDATING: 'VALIDATING',
   WAITING_AI: 'WAITING_AI',
-  ROUND_END: 'ROUND_END'
+  ROUND_END: 'ROUND_END',
+  CHAOS_MODE: 'CHAOS_MODE'
 };
 
 var GameConfig = {
@@ -75,9 +76,16 @@ var SoundManager = {
   },
   aiThink: function () {
     // no specific sound for AI thinking
+  },
+  pauseAll: function () {
+    if (!this.scene) return;
+    this.scene.sound.pauseAll();
+  },
+  resumeAll: function () {
+    if (!this.scene) return;
+    this.scene.sound.resumeAll();
   }
 };
-
 
 // ================================================================
 // \u724C\u9762\u56FE\u7247\u5E2E\u52A9\u51FD\u6570
@@ -1234,30 +1242,438 @@ GameScene.prototype.displayPlay = function (cards, player) {
 };
 GameScene.prototype.doAction = function () {
   var self = this;
-  if (this.gameState !== GAME_STATE.PLAYER_TURN) return;
-  this.setStatusText('\u641E\u4E8B\u60C5\uFF01\u751F\u6210\u9898\u76EE\u4E2D...');
+  if (this.gameState !== GAME_STATE.PLAYER_TURN && this.gameState !== GAME_STATE.CHAOS_MODE) return;
+
+  // \u6682\u505C\u51FA\u724C\u97F3\u6548
+  SoundManager.pauseAll();
+
+  // \u8BBE\u7F6E\u87BA\u65CB\u6A21\u5F0F
+  this.gameState = GAME_STATE.CHAOS_MODE;
+  this.chaosScore = this.chaosScore || 0;
+  this.setStatusText('\u641E\u4E8B\u60C5\u4E2D...');
+
+  // \u9009\u62E9\u88AB\u641E\u7684AI\u89D2\u8272
+  var aiId = Math.random() < 0.5 ? 'duidui' : 'tiantian';
+  var aiName = aiId === 'duidui' ? '\u738B\u603C\u603C' : '\u82CF\u751C\u751C';
+
+  // \u521B\u5EFA\u906E\u7F69
+  self._createChaosOverlay(function () {
+    // \u7F29\u7565\u56DE\u8C03 - \u89E6\u53D1\u51FA\u9898
+    self._showChaosQuestion(aiId, aiName);
+  });
+};
+
+// ================================================================
+// 搞事情 - 创建遮罩
+// ================================================================
+GameScene.prototype._createChaosOverlay = function (callback) {
+  if (this.chaosOverlay) return;
+  var self = this;
+
+  // \u534A\u900F\u660E\u906E\u7F69
+  var overlay = self.add.graphics();
+  overlay.fillStyle(0x000000, 0.75);
+  overlay.fillRect(0, 0, 600, 960).setDepth(300);
+  overlay.setInteractive(new Phaser.Geom.Rectangle(0, 0, 600, 960), Phaser.Geom.Rectangle.Contains);
+  self.chaosElements = [overlay];
+  self.chaosOverlay = overlay;
+
+  // \u767D\u8272\u9898\u76EE\u5361\u7247\u80CC\u666F
+  var cardBg = self.add.graphics();
+  cardBg.fillStyle(0xFFFFFF, 1);
+  cardBg.fillRoundedRect(36, 80, 528, 440, 16);
+  // \u9634\u5F71\u6A21\u62DF
+  cardBg.fillStyle(0x000000, 0.08);
+  cardBg.fillRoundedRect(40, 84, 528, 440, 16);
+  cardBg.setDepth(301);
+  self.chaosElements.push(cardBg);
+  self.chaosCardBg = cardBg;
+
+  // \u201C\u641E\u4E8B\u60C5\u201D \u6807\u9898
+  var title = self.add.text(300, 96, '🔥 搞\u4E8B\u60C5\uFF01 答\u9898\u6311\u6218', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '22px', color: '#FF6B35', fontStyle: 'bold'
+  }).setOrigin(0.5, 0).setDepth(302);
+  self.chaosElements.push(title);
+  self.chaosTitle = title;
+
+  // \u5206\u6570\u663E\u793A
+  var scoreText = self.add.text(420, 100, '得分: ' + (self.chaosScore || 0), {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '14px', color: '#333333'
+  }).setDepth(302);
+  self.chaosElements.push(scoreText);
+  self.chaosScoreText = scoreText;
+
+  // AI \u53F0\u8BCD\u6C14\u6CE1
+  self._showAiBubble(aiId, 'easy', 120);
+
+  // \u5173\u6389\u6309\u94AE
+  var closeBtnBg = self.add.graphics();
+  closeBtnBg.fillStyle(0xE53935, 1);
+  closeBtnBg.fillRoundedRect(520, 84, 36, 36, 18).setDepth(302);
+  var closeBtnText = self.add.text(538, 102, '✖', {
+    fontFamily: '"PingFang SC",sans-serif',
+    fontSize: '18px', color: '#FFFFFF'
+  }).setOrigin(0.5).setDepth(303);
+  closeBtnBg.setInteractive(new Phaser.Geom.Rectangle(520, 84, 36, 36), Phaser.Geom.Rectangle.Contains);
+  closeBtnBg.on('pointerup', function () { self._destroyChaos(); });
+  self.chaosElements.push(closeBtnBg, closeBtnText);
+
+  if (callback) callback();
+};
+
+// ================================================================
+// 搞事情 - 显示题目（含4个选项）
+// ================================================================
+GameScene.prototype._showChaosQuestion = function (aiId, aiName) {
+  var self = this;
+  self.setStatusText(aiName + ' \u51FA\u9898\u4E2D...');
 
   if (this.isAPIMode && typeof ApiClient !== 'undefined') {
-    ApiClient.generateQuiz('all', 'normal', 1)
+    ApiClient.generateChaosQuestion('random', 'normal', 1)
       .then(function (res) {
-        if (res.success && res.questions.length > 0) {
-          var q = res.questions[0];
-          showToast(self, '\u51FA\u9898: ' + (q.question || '').slice(0, 20) + '...');
-          self.setStatusText(q.questionType + ' \u9898');
+        if (res.success && res.questions && res.questions.length > 0) {
+          self._renderQuestion(res.questions[0], aiId);
         } else {
-          showToast(self, '\u6682\u65E0\u9898\u76EE');
+          self._renderFallbackQuestion(aiId);
         }
       })
       .catch(function () {
-        showToast(self, '\u641E\u4E8B\u60C5\u5931\u8D25\uFF08\u540E\u7AEF\u672A\u542F\u52A8\uFF09');
-        self.setStatusText('\u641E\u4E8B\u60C5\u9700\u8981\u540E\u7AEFAPI');
+        self._renderFallbackQuestion(aiId);
       });
   } else {
-    showToast(this, '\u641E\u4E8B\u60C5\u6A21\u5F0F\u9700\u540E\u7AEFAPI');
-    this.setStatusText('\u641E\u4E8B\u60C5\u9700\u8981\u542F\u52A8\u540E\u7AEF');
+    self._renderFallbackQuestion(aiId);
   }
 };
 
+// ================================================================
+// 搞事情 - 渲染题目
+// ================================================================
+GameScene.prototype._renderQuestion = function (q, aiId) {
+  var self = this;
+  self._clearQuestionArea();
+
+  // \u9898\u76EE\u7C7B\u578B\u6807\u7B7E
+  var typeLabel = q.questionType || q.type || '\u77E5\u8BC6\u9898';
+  var typeIcon = '\U0001F9E0';
+  if (typeLabel.indexOf('voc') >= 0 || typeLabel.indexOf('word') >= 0) typeIcon = '\U0001F4DA';
+  if (typeLabel.indexOf('expr') >= 0) typeIcon = '\U0001F4AC';
+  if (typeLabel.indexOf('trivia') >= 0) typeIcon = '\U0001F4A1';
+  if (typeLabel.indexOf('life') >= 0) typeIcon = '\U0001F3E0';
+
+  var tag = self.add.text(52, 150, typeIcon + ' ' + typeLabel, {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '13px', color: '#FF6B35', fontStyle: 'bold'
+  }).setDepth(302);
+  self.chaosElements.push(tag);
+
+  // \u9898\u76EE\u6B63\u6587
+  var questionText = q.question || q.text || '\u6682\u65E0\u9898\u76EE';
+  var qText = self.add.text(52, 176, questionText, {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '15px', color: '#222222',
+    wordWrap: { width: 490 }, lineSpacing: 4
+  }).setDepth(302);
+  self.chaosElements.push(qText);
+
+  // 4 \u4E2A\u9009\u9879\u6309\u94AE
+  var options = q.options || {};
+  var optionKeys = ['A', 'B', 'C', 'D'];
+  var spacing = 54;
+  var optStartY = 290;
+  var optionLabels = { A: 'A', B: 'B', C: 'C', D: 'D' };
+
+  self.chaosQuestionAnswered = false;
+
+  for (var oi = 0; oi < optionKeys.length; oi++) {
+    var ok = optionKeys[oi];
+    var optText = options[ok];
+    if (!optText) continue;
+
+    var optY = optStartY + oi * spacing;
+    var optBg = self.add.graphics();
+    optBg.fillStyle(0xF5F5F5, 1);
+    optBg.fillRoundedRect(48, optY, 504, 46, 10).setDepth(302);
+    optBg.lineStyle(1.5, 0xCCCCCC, 1);
+    optBg.strokeRoundedRect(48, optY, 504, 46, 10);
+    optBg.setInteractive(new Phaser.Geom.Rectangle(48, optY, 504, 46), Phaser.Geom.Rectangle.Contains);
+
+    // \u9009\u9879\u6807\u8BB0
+    var optMarkBg = self.add.graphics();
+    optMarkBg.fillStyle(0x4ECDC4, 1);
+    optMarkBg.fillCircle(74, optY + 23, 14).setDepth(303);
+    var optMarkTxt = self.add.text(74, optY + 23, ok, {
+      fontFamily: '"PingFang SC",sans-serif',
+      fontSize: '14px', color: '#FFFFFF', fontStyle: 'bold'
+    }).setOrigin(0.5).setDepth(304);
+
+    // \u9009\u9879\u6587\u672C
+    // \u622A\u65AD\u592A\u957F\u7684\u6587\u672C
+    var displayOpt = optText.length > 28 ? optText.substring(0, 28) + '...' : optText;
+    var optTxt = self.add.text(96, optY + 23, displayOpt, {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '14px', color: '#333333'
+    }).setOrigin(0, 0.5).setDepth(303);
+
+    // \u4FDD\u5B58\u9009\u9879\u6570\u636E
+    optBg.setData('optKey', ok);
+    optBg.setData('optBg', optBg);
+    optBg.setData('optTxt', optTxt);
+    optBg.setData('optMarkBg', optMarkBg);
+    optBg.setData('optMarkTxt', optMarkTxt);
+    optBg.setData('answer', q.answer);
+
+    // \u7ED1\u5B9A\u70B9\u51FB\u4E8B\u4EF6
+    (function (optBg, ok, optY) {
+      optBg.on('pointerdown', function () {
+        if (self.chaosQuestionAnswered) return;
+        self.chaosQuestionAnswered = true;
+        self._handleOptionClick(self, optBg, ok, aiId, q);
+      });
+    })(optBg, ok, optY);
+
+    self.chaosElements.push(optBg, optMarkBg, optMarkTxt, optTxt);
+  }
+};
+
+// ================================================================
+// 搞事情 - 处理选项点击
+// ================================================================
+GameScene.prototype._handleOptionClick = function (self, optBg, optKey, aiId, q) {
+  // \u9AD8\u4EAE\u9009\u4E2D\u9009\u9879
+  var bg = optBg.getData('optBg');
+  var txt = optBg.getData('optTxt');
+  var markBg = optBg.getData('optMarkBg');
+  var markTxt = optBg.getData('optMarkTxt');
+  var answer = optBg.getData('answer');
+
+  // \u9AD8\u4EAE\u6548\u679C
+  if (markBg) {
+    markBg.clear();
+    markBg.fillStyle(0xFF6B35, 1);
+    markBg.fillCircle(markBg.x + 74 - 48 - 26, optBg.y + 23, 14).setDepth(303);
+  }
+
+  // \u5C01\u952E\u5176\u4ED6\u9009\u9879
+  for (var ci = 0; ci < self.chaosElements.length; ci++) {
+    var el = self.chaosElements[ci];
+    if (el && el.getData && el.getData('optKey') && el.getData('optKey') !== optKey) {
+      el.alpha = 0.3;
+    }
+  }
+
+  // \u5224\u65AD\u5BF9\u9519
+  var isCorrect = (optKey === answer);
+  if (isCorrect) {
+    self.chaosScore = (self.chaosScore || 0) + 1;
+    if (self.chaosScoreText) self.chaosScoreText.setText('得分: ' + self.chaosScore);
+  }
+
+  // \u663E\u793A\u53CD\u9988
+  var feedbackScene = isCorrect ? 'correct' : 'wrong';
+  var resultIcon = isCorrect ? '\u2705' : '\u274C';
+  var resultText = isCorrect ? '\u7B54\u5BF9\u4E86\uFF01' : '\u7B54\u9519\u4E86\uFF01';
+  var resultColor = isCorrect ? '#4CAF50' : '#E53935';
+
+  // \u53CD\u9988\u6807\u5FD7
+  var fbIcon = self.add.text(300, 420, resultIcon + ' ' + resultText, {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '20px', color: resultColor, fontStyle: 'bold'
+  }).setOrigin(0.5).setDepth(305);
+  self.chaosElements.push(fbIcon);
+
+  // \u663E\u793A\u6B63\u786E\u7B54\u6848\u548C\u89E3\u6790
+  if (!isCorrect && q.answer) {
+    var correctAns = self.add.text(52, 450, '正确答案: ' + q.answer + '. ' + (q.options[q.answer] || ''), {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '12px', color: '#4CAF50',
+      wordWrap: { width: 490 }
+    }).setDepth(305);
+    self.chaosElements.push(correctAns);
+  }
+
+  if (q.explanation) {
+    var expl = self.add.text(52, 474, q.explanation, {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '12px', color: '#666666',
+      wordWrap: { width: 490 }
+    }).setDepth(305);
+    self.chaosElements.push(expl);
+  }
+
+  // AI \u53F0\u8BCD
+  self._showAiBubble(aiId, feedbackScene, 460);
+
+  // \u663E\u793A\u6309\u94AE - \u7EE7\u7EED\u641E\u4E8B\u60C5 / \u5173\u6389
+  var btnY = 500;
+  // \u201C\u7EE7\u7EED\u201D \u6309\u94AE
+  var againBg = self.add.graphics();
+  againBg.fillStyle(0x4ECDC4, 1);
+  againBg.fillRoundedRect(60, btnY, 200, 40, 10).setDepth(305);
+  var againTxt = self.add.text(160, btnY + 20, '🔄 \u518D\u6765\u4E00\u9898', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '15px', color: '#FFFFFF', fontStyle: 'bold'
+  }).setOrigin(0.5).setDepth(306);
+  againBg.setInteractive(new Phaser.Geom.Rectangle(60, btnY, 200, 40), Phaser.Geom.Rectangle.Contains);
+  againBg.on('pointerup', function () {
+    // \u518D\u6765\u4E00\u9898
+    self.chaosQuestionAnswered = false;
+    self._clearQuestionArea();
+    var aiId2 = Math.random() < 0.5 ? 'duidui' : 'tiantian';
+    self._showChaosQuestion(aiId2, aiId2 === 'duidui' ? '\u738B\u603C\u603C' : '\u82CF\u751C\u751C');
+  });
+  self.chaosElements.push(againBg, againTxt);
+
+  // \u201C\u5173\u6389\u201D \u6309\u94AE
+  var closeBg = self.add.graphics();
+  closeBg.fillStyle(0xFF6B6B, 1);
+  closeBg.fillRoundedRect(340, btnY, 200, 40, 10).setDepth(305);
+  var closeTxt = self.add.text(440, btnY + 20, '✖ \u5173掉\u56DE\u724C', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '15px', color: '#FFFFFF', fontStyle: 'bold'
+  }).setOrigin(0.5).setDepth(306);
+  closeBg.setInteractive(new Phaser.Geom.Rectangle(340, btnY, 200, 40), Phaser.Geom.Rectangle.Contains);
+  closeBg.on('pointerup', function () { self._destroyChaos(); });
+  self.chaosElements.push(closeBg, closeTxt);
+
+  // \u64AD\u653E\u97F3\u6548
+  if (isCorrect) {
+    SoundManager.win();
+  } else {
+    SoundManager.lose();
+  }
+};
+
+// ================================================================
+// 搞事情 - 回退题目（后端不可用时）
+// ================================================================
+GameScene.prototype._renderFallbackQuestion = function (aiId) {
+  var self = this;
+  var fallbackQuestions = [
+    {
+      question: 'The word "abandon" means:',
+      options: { A: '\u653E\u5F03', B: '\u63A5\u53D7', C: '\u5EFA\u7ACB', D: '\u53D1\u73B0' },
+      answer: 'A', explanation: 'abandon \u610F\u4E3A"\u653E\u5F03"\uFF0C\u662F\u56DB\u7EA7\u5FC3\u8BCD\u6C47\u3002'
+    },
+    {
+      question: '\u201CI\'m feeling under the weather\u201D \u610F\u601D\u662F:',
+      options: { A: '\u5728\u5929\u6C14\u4E0B\u9762', B: '\u751F\u75C5\u4E86', C: '\u559C\u6B22\u4E0D\u540C\u5929\u6C14', D: '\u50BB\u50BB\u7B28\u7B28' },
+      answer: 'B', explanation: '"Under the weather"\u662F\u5730\u9053\u53E3\u8BEd\uFF0C\u610F\u4E3A"\u751F\u75C5\u4E0D\u8212\u670D"\u3002'
+    },
+    {
+      question: '\u54EA\u4E2A\u52A8\u7269\u51E0\u4E4E\u4E0D\u751F\u764C\u75C7\uFF1F',
+      options: { A: '\u9CA8\u9C7C', B: '\u5927\u8C61', C: '\u88F8\u9F20\u9F20', D: '\u4E4C\u9F9F' },
+      answer: 'C', explanation: '\U0001F9EC \u88F8\u9F20\u9F20\u51E0\u4E4E\u4ECE\u4E0D\u60A3\u764C\u75C7\uFF01\u5B83\u4EEC\u4F53\u5185\u6709\u7279\u6B8A\u7684\u900F\u660E\u8D28\u9178\u80FD\u963B\u6B62\u764C\u7EC6\u80DE\u5206\u88C2\u3002'
+    },
+    {
+      question: '\u54EA\u79CD\u65B9\u6CD5\u80FD\u8BA9\u5207\u6D0B\u8471\u4E0D\u6D41\u6CEA\uFF1F',
+      options: { A: '\u51B7\u51BB30\u5206\u949F', B: '\u542B\u4E00\u53E3\u6C34', C: '\u6234\u6CF3\u955C', D: '\u5FAE\u6CE2\u52A010\u79D2' },
+      answer: 'C', explanation: '\U0001F576\uFE0F \u6234\u6CF3\u955C\u662F\u6700\u76F4\u63A5\u7684\u7269\u7406\u65B9\u6CD5——\u963B\u6B62\u50AC\u6CEA\u6C14\u4F53\u63A5\u89E6\u773C\u775B\u3002\u51B7\u51BB\u4E5F\u6709\u6548\u4F46\u6548\u679C\u6709\u9650\u3002'
+    }
+  ];
+  var q = fallbackQuestions[Math.floor(Math.random() * fallbackQuestions.length)];
+  q.questionType = '\u672C\u5730\u9898\u5E93';
+  self._renderQuestion(q, aiId);
+};
+
+// ================================================================
+// 搞事情 - AI \u6C14\u6CE1
+// ================================================================
+GameScene.prototype._showAiBubble = function (aiId, sceneKey, y) {
+  var self = this;
+  // \u6E05\u9664\u65E7\u6C14\u6CE1
+  if (self.chaosBubbleElements) {
+    for (var bi = 0; bi < self.chaosBubbleElements.length; bi++) {
+      self.chaosBubbleElements[bi].destroy();
+    }
+  }
+  self.chaosBubbleElements = [];
+
+  var line = pickAiLine(aiId, sceneKey);
+  var aiDisplayName = aiId === 'duidui' ? '\u738B\u603C\u603C' : '\u82CF\u751C\u751C';
+  var aiEmoji = aiId === 'duidui' ? '\U0001F60E' : '\U0001F60A';
+
+  // AI \u5934\u50CF\u5706\u5708
+  var avatar = self.add.graphics();
+  avatar.fillStyle(aiId === 'duidui' ? 0x4FC3F7 : 0xFFB74D, 1);
+  avatar.fillCircle(80, y + 14, 18).setDepth(302);
+  var avatarTxt = self.add.text(80, y + 14, aiId === 'duidui' ? '\U0001F60E' : '\U0001F60A', {
+    fontFamily: 'sans-serif',
+    fontSize: '18px'
+  }).setOrigin(0.5).setDepth(303);
+  self.chaosBubbleElements.push(avatar, avatarTxt);
+
+  // AI \u540D\u5B57
+  var nameTxt = self.add.text(105, y - 2, aiDisplayName, {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '12px', color: '#999999'
+  }).setDepth(302);
+  self.chaosBubbleElements.push(nameTxt);
+
+  // \u53F0\u8BCD\u6C14\u6CE1
+  var bubble = self.add.graphics();
+  bubble.fillStyle(0x000000, 0.08);
+  bubble.fillRoundedRect(100, y + 10, 440, 32, 8).setDepth(302);
+  self.chaosBubbleElements.push(bubble);
+
+  var bubbleTxt = self.add.text(112, y + 26, line, {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '13px', color: '#444444'
+  }).setDepth(303);
+  self.chaosBubbleElements.push(bubbleTxt);
+};
+
+// ================================================================
+// 搞事情 - 清除题目区域
+// ================================================================
+GameScene.prototype._clearQuestionArea = function () {
+  var self = this;
+  if (!self.chaosElements) return;
+  // \u4FDD\u7559\u524D3\u4E2A\u5143\u7D20\uFF08\u906E\u7F69\u3001\u5361\u724C\u80CC\u666F\u3001\u6807\u9898\u3001\u5206\u6570\u3001\u5173\u6389\u6309\u94AE\uFF09
+  var toKeep = self.chaosElements.slice(0, 5); // overlay, cardBg, title, scoreText, AI bubble area elements
+  for (var di = 5; di < self.chaosElements.length; di++) {
+    if (self.chaosElements[di]) self.chaosElements[di].destroy();
+  }
+  self.chaosElements = toKeep;
+  // \u4E5F\u6E05\u9664\u6C14\u6CE1
+  if (self.chaosBubbleElements) {
+    for (var ei = 0; ei < self.chaosBubbleElements.length; ei++) {
+      if (self.chaosBubbleElements[ei]) self.chaosBubbleElements[ei].destroy();
+    }
+    self.chaosBubbleElements = [];
+  }
+};
+
+// ================================================================
+// 搞事情 - 销毁搞事情UI，恢复出牌
+// ================================================================
+GameScene.prototype._destroyChaos = function () {
+  if (this.chaosElements) {
+    for (var i = 0; i < this.chaosElements.length; i++) {
+      if (this.chaosElements[i]) this.chaosElements[i].destroy();
+    }
+  }
+  if (this.chaosBubbleElements) {
+    for (var j = 0; j < this.chaosBubbleElements.length; j++) {
+      if (this.chaosBubbleElements[j]) this.chaosBubbleElements[j].destroy();
+    }
+  }
+  this.chaosElements = null;
+  this.chaosBubbleElements = null;
+  this.chaosOverlay = null;
+  this.chaosQText = null;
+  this.chaosScoreText = null;
+  this.chaosTitle = null;
+  this.chaosCardBg = null;
+
+  // \u6062\u590D\u51FA\u724C\u97F3\u6548
+  SoundManager.resumeAll();
+
+  // \u6062\u590D\u6E38\u620F\u72B6\u6001
+  this.gameState = GAME_STATE.PLAYER_TURN;
+  this.setStatusText('\u641E\u4E8B\u60C5\u7ED3\u675F\uFF0C\u7EE7\u7EED\u51FA\u724C');
+};
 // ================================================================
 // 功能按钮
 // ================================================================
@@ -1375,4 +1791,94 @@ GameScene.prototype.renderPlayHistory = function () {
   }
   this.playHistoryText.setText(lines.join('\n'));
 };
+// ================================================================
+// AI 台词池 - 搞事情模式
+// ================================================================
+var AI_LINES = {
+  duidui: {
+    easy: [
+      '送分题，给人类的惬悭。',
+      '这题你要是都答不上来……喎。',
+      '热身而已，别紧张到冒汗。',
+      '我幼儿园数据集里就有这道题。',
+    ],
+    hard: [
+      '这道题，我调参调了 0.0001 秒出的。',
+      '人类的 CPU 该升级了。',
+      '瞪大眼睛，别眨眼，反正你也答不对。',
+      '终于到了有趣的部分——看你吃凿。',
+    ],
+    bomb: [
+      'U0001F680 炸弹！不是，这题你能答对我倒立洗头。',
+      '核弹级题目，建议你直接过牌。',
+      '这道题的正确答案，在我的隐藏层里。',
+      '人类训练集里没有这道题，放弃吧。',
+    ],
+    correct: [
+      '哼，蒙对的吧？',
+      '这次算你走运。',
+      '不错嘛，人类有时候也能猜对。',
+      '意外意外，我以为你会选错的。',
+    ],
+    wrong: [
+      '哈哈哈哈哈！果然不出所料！',
+      '这种题都会选错？你是来斗地主还是来斗笨的？',
+      '我的数据库显示，你答错率 100%。',
+      '答错的方式处处相同，答对的人各有各的契机。开玩笑的，没人答对。',
+    ],
+    close: [
+      '行吧，回来打牌。',
+      '搞事情结束，继续被我输组。',
+      '好了好了，不耍你了，继续出牌吧。',
+    ]
+  },
+  tiantian: {
+    easy: [
+      '这道题送你啦！不客气！',
+      '简单得我都不好意思出！但我还是出了嘿嘿',
+      '热身题！把你的小脑瓜转起来～',
+      '这题是幼儿园水平，你肯定……应该……大概会吧？',
+    ],
+    hard: [
+      '这一题！我熬了三个通宵准备的！',
+      '✨ 超超超难题闪亮登场！希望人没事 U0001F64F',
+      '这题你答对了我就……请你吃虚拟冰淇淋！',
+      '难度拉满！我的CPU在燃烧！💥',
+    ],
+    bomb: [
+      'U0001F4A3 BOMBSHELL！全场的目光集中到我身上！',
+      '这道题核能级！建议你场外求助——但你没有场外求助哈哈',
+      '我要放！大！招！了！观众朋友们小板凳端好！',
+      '这一题，我赌你哭 U0001F602',
+    ],
+    correct: [
+      '咧哇₼！你真的会！！！',
+      '太棒啦！你是我见过最聪明的人类！',
+      '正确！我准备好了下一题继续难你！',
+      '花式鼓掌👏👏👏',
+    ],
+    wrong: [
+      '啊啊啊错了！我……裂……开……了……U0001F62D',
+      '不是吧！这简直……好玩！哈哈哈哈哈！',
+      '我没想到你会选这个！好呆蒙啊😆',
+      '错了错了！来来来看看答案是什么……我也看看！',
+    ],
+    close: [
+      '回来打牌啦！哈哈哈！',
+      '搞完了搞完了，继续斗地主～',
+      '开心吗？我很开心！继续玩！',
+    ]
+  }
+};
 
+function getRandomLine(pool) {
+  if (!pool || pool.length === 0) return '...';
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+function pickAiLine(aiId, sceneKey) {
+  var ai = AI_LINES[aiId];
+  if (!ai) return '...';
+  var pool = ai[sceneKey];
+  return getRandomLine(pool);
+}

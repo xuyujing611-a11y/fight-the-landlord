@@ -101,6 +101,38 @@ var ApiClient = {
   },
 
   // ============================================================
+  // 搞事情系统 API
+  // ============================================================
+
+  /**
+   * POST /api/chaos/generate-question - 生成搞事情题目
+   * @param {string} type - 'random'|'vocabulary'|'expression'|'trivia'|'life_hack'
+   * @param {string} difficulty - 'easy'|'normal'|'hard'|'extreme'
+   * @param {number} count - 题目数量 (1-5)
+   * @returns {Promise}
+   */
+  generateChaosQuestion: function (type, difficulty, count) {
+    return apiPost('/api/chaos/generate-question', {
+      type: type || 'random',
+      difficulty: difficulty || 'normal',
+      count: count || 1
+    });
+  },
+
+  /**
+   * POST /api/chaos/check-trigger - 验证答案&触发效果
+   * @param {object} question - 原题目对象
+   * @param {string} selected - 玩家选的选项 (A/B/C/D)
+   * @returns {Promise<{correct,effect,scoreChange}>}
+   */
+  checkChaosTrigger: function (question, selected) {
+    return apiPost('/api/chaos/check-trigger', {
+      question: question,
+      selected: selected
+    });
+  },
+
+  // ============================================================
   // 错题本 API
   // ============================================================
 
