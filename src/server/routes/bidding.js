@@ -309,14 +309,20 @@ router.post('/place', (req, res) => {
  * @param {object} bs - Bidding state object
  * @param {number} landlordIndex - 地主索引
  */
+/** 紧凑数字 → 牌对象：正确处理 Joker 花色 */
+function numberToCard(n) {
+  if (n >= 13) return { suit: 'joker', rank: n };
+  return { suit: 'spade', rank: n };
+}
+
 function finishBidding(res, bs, landlordIndex) {
   const remaining = bs.remaining || [];
   const landlordHand = [
     ...bs.hands[landlordIndex].map(c =>
-      typeof c === 'number' ? { suit: 'spade', rank: c } : c
+      typeof c === 'number' ? numberToCard(c) : c
     ),
     ...remaining.map(c =>
-      typeof c === 'number' ? { suit: 'spade', rank: c } : c
+      typeof c === 'number' ? numberToCard(c) : c
     )
   ];
 
@@ -350,7 +356,7 @@ function finishBidding(res, bs, landlordIndex) {
     landlordIndex,
     landlordName,
     landlordCards: bs.remaining.map(c =>
-      typeof c === 'object' && c.suit ? c : { suit: 'spade', rank: c }
+      typeof c === 'object' && c.suit ? c : numberToCard(c)
     ),
     landlordHand: sortedLandlord.map(c => ({
       suit: c.suit,
