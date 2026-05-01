@@ -369,11 +369,11 @@ GameScene.prototype.renderPlayerHand = function () {
   this.cardDomElements = [];
   this.handCards = [];
 
-  var n = hand.length, cw = 48, ch = 68;
-  var overlap = n > 6 ? Math.min(28, (680 - cw) / (n - 1)) : 28;
+  var n = hand.length, cw = 62, ch = 88;
+  var overlap = n > 6 ? Math.min(36, (680 - cw) / (n - 1)) : 36;
   var totalWidth = cw + (n - 1) * overlap;
   var startX = 200 + (680 - totalWidth) / 2;
-  var baseY = 432;
+  var baseY = 420;
 
   for (var ii = 0; ii < n; ii++) {
     var card = hand[ii];
@@ -729,26 +729,17 @@ GameScene.prototype.showBottomCards = function (cards) {
   }
   this.bottomCardImgs = [];
 
+  if (this.bottomCardText) this.bottomCardText.destroy();
+
   if (!cards || cards.length === 0) {
     // \u6CA1\u6709\u5E95\u724C\u65F6\u663E\u793A\u95EE\u53F7
-    if (this.bottomCardText) this.bottomCardText.destroy();
     this.bottomCardText = this.add.text(480, 98, '\u5E95\u724C: ? ? ?', {
       fontFamily: '\u201CPingFang SC\u201D,\u201CMicrosoft YaHei\u201D,sans-serif',
       fontSize: '9px', color: '#66BB6A', alpha: 0.4
     }).setOrigin(0.5).setDepth(20);
     return;
   }
-
-  if (this.bottomCardText) this.bottomCardText.destroy();
-
-  // \u663E\u793A3\u5F20\u724C\u80CC\u56FE\u7247
-  var startX = 480 - 80;
-  var arr = [];
-  for (var bj = 0; bj < Math.min(cards.length, 3); bj++) {
-    var bImg = this.add.image(startX + bj * 60, 451, 'cardBack').setDisplaySize(50, 70).setDepth(20);
-    arr.push(bImg);
-  }
-  this.bottomCardImgs = arr;
+  // B38: \u53D6\u6D88\u663E\u793A\u5E95\u724C\u724C\u80CC\u56FE\u7247\uFF0C\u5E95\u724C\u76F4\u63A5\u878D\u5165\u5730\u4E3B\u624B\u724C
 };
 
 // ================================================================
@@ -1228,9 +1219,9 @@ GameScene.prototype.displayPlay = function (cards, player) {
 
   // \u786E\u5B9A\u4F4D\u7F6E
   var positions = {
-    player: { x: 360, y: 230, w: 40, h: 60, origin: 0.5 },
-    ai1:    { x: 240, y: 180, w: 30, h: 45, origin: 0.5 },
-    ai2:    { x: 700, y: 180, w: 30, h: 45, origin: 0.5 }
+    player: { x: 360, y: 250, w: 52, h: 75, origin: 0.5 },
+    ai1:    { x: 280, y: 180, w: 42, h: 60, origin: 0.5 },
+    ai2:    { x: 680, y: 180, w: 42, h: 60, origin: 0.5 }
   };
   var pos = positions[player] || positions.player;
   var n = cards.length;
