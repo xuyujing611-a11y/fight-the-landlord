@@ -103,10 +103,10 @@ function getCardImageKey(card) {
 function makeAvatarImage(scene, key, x, y, bgColor, name) {
   var g = scene.add.graphics();
   g.fillStyle(bgColor, 1);
-  g.fillRoundedRect(x - 28, y - 28, 56, 56, 14);
+  g.fillRoundedRect(x - 20, y - 20, 40, 40, 10);
   g.lineStyle(2, 0xFFFFFF, 0.8);
   g.strokeRoundedRect(x - 28, y - 28, 56, 56, 14);
-  var img = scene.add.image(x, y, key).setDisplaySize(50, 50).setDepth(12);
+  var img = scene.add.image(x, y, key).setDisplaySize(34, 34).setDepth(12);
   return img;
 }
 
@@ -250,79 +250,79 @@ function drawTableBackground(scene) {
 // 顶部状态栏
 // ================================================================
 function createTopBar(scene) {
-  scene.roundText = scene.add.text(26, 14, '\u7B2C 1/10 \u56DE\u5408', {
+  var tb = scene.add.graphics();
+  tb.fillStyle(0x000000, 0.3);
+  tb.fillRect(0, 0, 960, 56).setDepth(10);
+
+  scene.roundText = scene.add.text(12, 16, '\u7B2C 1/10 \u56DE\u5408', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '14px', color: '#E8F5E9', fontStyle: 'bold'
-  }).setDepth(10);
+  }).setDepth(11);
 
-  // status text (center)
-  scene.statusText = scene.add.text(299, 31, '', {
+  // AI1 (left)
+  var wAvatar = makeAvatarImage(scene, 'avatar_wang', 176, 28, 0x4FC3F7, '\u738B\u603C\u603C');
+  wAvatar.setDisplaySize(36, 36).setDepth(11);
+  scene.add.text(200, 12, '\u738B\u603C\u603C', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '11px', color: '#A5D6A7'
-  }).setOrigin(0.5).setDepth(10);
+    fontSize: '12px', color: '#E8F5E9', fontStyle: 'bold'
+  }).setDepth(11);
+  scene.ai1Count = scene.add.text(200, 30, '\u5269\u4F59 17 \u5F20', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '10px', color: '#A5D6A7'
+  }).setDepth(11);
 
-  var line = scene.add.graphics();
-  line.lineStyle(1, 0x66BB6A, 0.2);
-  line.lineBetween(0, 52, 600, 52);
-  line.setDepth(10);
+  // AI2 (right)
+  var sAvatar = makeAvatarImage(scene, 'avatar_su', 788, 28, 0xFFB74D, '\u82CF\u751C\u751C');
+  sAvatar.setDisplaySize(36, 36).setDepth(11);
+  scene.add.text(720, 12, '\u82CF\u751C\u751C', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '12px', color: '#E8F5E9', fontStyle: 'bold'
+  }).setDepth(11);
+  scene.ai2Count = scene.add.text(720, 30, '\u5269\u4F59 17 \u5F20', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '10px', color: '#A5D6A7'
+  }).setDepth(11);
+
+  // center status text
+  scene.statusText = scene.add.text(480, 14, '', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '12px', color: '#A5D6A7', fontStyle: 'bold'
+  }).setOrigin(0.5, 0).setDepth(11);
+
+  var sep = scene.add.graphics();
+  sep.lineStyle(1, 0x66BB6A, 0.2);
+  sep.lineBetween(0, 56, 960, 56);
+  sep.setDepth(11);
 }
 
 // ================================================================
 // AI 区域
 // ================================================================
 function createAIArea(scene) {
-  // AI1: Wang Duidui - 酷拽墨镜男
-  makeAvatarImage(scene, 'avatar_wang', 77, 87, 0xFF6B35, '\u738B\u603C\u603C');
-  scene.add.text(128, 71, '\u738B\u603C\u603C', {
-    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '15px', color: '#FFFFFF', fontStyle: 'bold'
-  }).setDepth(11);
-  scene.ai1Count = scene.add.text(128, 92, '\u5269\u4F59 17 \u5F20', {
-    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '11px', color: '#A5D6A7'
-  }).setDepth(11);
-
-  // AI2: Su Tiantian - 甜美可爱少女
-  makeAvatarImage(scene, 'avatar_su', 520, 87, 0x7C4DFF, '\u82CF\u751C\u751C');
-  scene.add.text(390, 71, '\u82CF\u751C\u751C', {
-    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '15px', color: '#FFFFFF', fontStyle: 'bold'
-  }).setOrigin(1, 0).setDepth(11);
-  scene.ai2Count = scene.add.text(390, 92, '\u5269\u4F59 17 \u5F20', {
-    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '11px', color: '#A5D6A7'
-  }).setOrigin(1, 0).setDepth(11);
-
-  scene.add.text(299, 85, 'VS', {
-    fontFamily: '"Arial",sans-serif', fontSize: '11px', color: '#66BB6A', fontStyle: 'bold'
-  }).setOrigin(0.5).setDepth(11);
-
-  var divider = scene.add.graphics();
-  divider.lineStyle(1, 0x66BB6A, 0.1);
-  divider.lineBetween(0, 130, 600, 130).setDepth(10);
+  // AI moved to top bar
 }
 
 // ================================================================
 // 中央出牌区
 // ================================================================
 function createPlayArea(scene) {
-  var cx = 300;
+  var cx = 480;
   var playBg = scene.add.graphics();
   playBg.fillStyle(0x000000, 0.1);
-  playBg.fillRoundedRect(32, 142, 536, 307, 14).setDepth(10);
+  playBg.fillRoundedRect(160, 80, 640, 280, 14).setDepth(10);
 
   scene.add.text(cx, 296, '\u51FA\u724C\u533A', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '12px', color: '#66BB6A', alpha: 0.4
   }).setOrigin(0.5).setDepth(11);
 
-  scene.ai1PlayLabel = scene.add.text(80, 154, '\u738B\u603C\u603C\uFF1A', {
+  scene.ai1PlayLabel = scene.add.text(182, 88, '\u738B\u603C\u603C\uFF1A', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '10px', color: '#A5D6A7'
   }).setDepth(11);
   scene.ai1PlayCardsGraphics = scene.add.graphics().setDepth(11);
 
-  scene.ai2PlayLabel = scene.add.text(448, 154, '\u82CF\u751C\u751C\uFF1A', {
+  scene.ai2PlayLabel = scene.add.text(690, 88, '\u82CF\u751C\u751C\uFF1A', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '10px', color: '#A5D6A7'
   }).setDepth(11);
@@ -334,7 +334,7 @@ function createPlayArea(scene) {
   }).setOrigin(0.5).setDepth(11);
   scene.myPlayCardsGraphics = scene.add.graphics().setDepth(11);
 
-  scene.add.text(16, 420, '\u5E95\u724C: ? ? ?', {
+  scene.add.text(460, 82, '\u5E95\u724C: ? ? ?', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '9px', color: '#66BB6A', alpha: 0.4
   }).setDepth(11);
@@ -346,8 +346,8 @@ function createPlayArea(scene) {
 function createHandArea(scene) {
   var handBg = scene.add.graphics();
   handBg.fillStyle(0x000000, 0.15);
-  handBg.fillRoundedRect(6, 603, 587, 189, 14).setDepth(10);
-  scene.add.text(26, 608, '\u4F60\u7684\u624B\u724C', {
+  handBg.fillRoundedRect(20, 388, 920, 96, 10).setDepth(10);
+  scene.add.text(68, 414, '\u4F60\u7684\u624B\u724C', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '11px', color: '#A5D6A7'
   }).setDepth(11);
@@ -369,11 +369,11 @@ GameScene.prototype.renderPlayerHand = function () {
   this.cardDomElements = [];
   this.handCards = [];
 
-  var n = hand.length, cw = 56, ch = 84;
-  var overlap = n > 6 ? Math.min(28, (520 - cw) / (n - 1)) : 28;
+  var n = hand.length, cw = 48, ch = 68;
+  var overlap = n > 6 ? Math.min(28, (680 - cw) / (n - 1)) : 28;
   var totalWidth = cw + (n - 1) * overlap;
-  var startX = (600 - totalWidth) / 2;
-  var baseY = 700;
+  var startX = 200 + (680 - totalWidth) / 2;
+  var baseY = 432;
 
   for (var ii = 0; ii < n; ii++) {
     var card = hand[ii];
@@ -399,13 +399,13 @@ GameScene.prototype.renderPlayerHand = function () {
       var idx2 = this.getData('cardIdx');
       var s = this.getData('selected');
       if (s) {
-        this.y += 28;
+        this.y += 16;
         this.setData('selected', false);
         var pos = self.selectedCards.indexOf(idx2);
         if (pos >= 0) self.selectedCards.splice(pos, 1);
         SoundManager.deselectCard();
       } else {
-        this.y -= 28;
+        this.y -= 16;
         this.setData('selected', true);
         self.selectedCards.push(idx2);
         SoundManager.selectCard();
@@ -434,7 +434,7 @@ GameScene.prototype._highlightCard = function (el) {
   if (!el) return;
   el.setData('selected', true);
   var origY = el.getData('origY');
-  if (origY !== undefined) el.y = origY - 28;
+  if (origY !== undefined) el.y = origY - 16;
 };
 
 // ================================================================
@@ -503,8 +503,8 @@ GameScene.prototype.showBiddingUI = function () {
   var self = this;
   this.hideBiddingUI();
 
-  var cx = 300;
-  var uiY = 662;
+  var cx = 480;
+  var uiY = 280;
   var bids = [
     { label: '\u4E0D\u53EB', value: 0, color: 0xFF6B6B },
     { label: '1\u5206', value: 1, color: 0x4ECDC4 },
@@ -513,15 +513,15 @@ GameScene.prototype.showBiddingUI = function () {
   ];
 
   // 提示文字
-  var promptText = this.add.text(cx, 603, '\u8BF7\u53EB\u5206', {
+  var promptText = this.add.text(cx, 230, '\u8BF7\u53EB\u5206', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '18px', color: '#FFFFFF', fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(200);
   this.biddingUI.push(promptText);
 
   var bw = 96, bh = 52, gap = 12;
-  var totalW = bw * 4 + gap * 3;
-  var startX = (600 - totalW) / 2;
+  var totalW = bw * 5 + gap * 4;
+  var startX = (960 - totalW) / 2;
 
   for (var i = 0; i < bids.length; i++) {
     var b = bids[i];
@@ -733,7 +733,7 @@ GameScene.prototype.showBottomCards = function (cards) {
   if (!cards || cards.length === 0) {
     // \u6CA1\u6709\u5E95\u724C\u65F6\u663E\u793A\u95EE\u53F7
     if (this.bottomCardText) this.bottomCardText.destroy();
-    this.bottomCardText = this.add.text(300, 451, '\u5E95\u724C: ? ? ?', {
+    this.bottomCardText = this.add.text(480, 98, '\u5E95\u724C: ? ? ?', {
       fontFamily: '\u201CPingFang SC\u201D,\u201CMicrosoft YaHei\u201D,sans-serif',
       fontSize: '9px', color: '#66BB6A', alpha: 0.4
     }).setOrigin(0.5).setDepth(20);
@@ -743,7 +743,7 @@ GameScene.prototype.showBottomCards = function (cards) {
   if (this.bottomCardText) this.bottomCardText.destroy();
 
   // \u663E\u793A3\u5F20\u724C\u80CC\u56FE\u7247
-  var startX = 300 - 80;
+  var startX = 480 - 80;
   var arr = [];
   for (var bj = 0; bj < Math.min(cards.length, 3); bj++) {
     var bImg = this.add.image(startX + bj * 60, 451, 'cardBack').setDisplaySize(50, 70).setDepth(20);
@@ -1222,9 +1222,9 @@ GameScene.prototype.displayPlay = function (cards, player) {
 
   // \u786E\u5B9A\u4F4D\u7F6E
   var positions = {
-    player: { x: 300, y: 396, w: 45, h: 68, origin: 0.5 },
-    ai1:    { x: 160, y: 175, w: 35, h: 53, origin: 0.5 },
-    ai2:    { x: 420, y: 175, w: 35, h: 53, origin: 0.5 }
+    player: { x: 360, y: 230, w: 40, h: 60, origin: 0.5 },
+    ai1:    { x: 240, y: 180, w: 30, h: 45, origin: 0.5 },
+    ai2:    { x: 700, y: 180, w: 30, h: 45, origin: 0.5 }
   };
   var pos = positions[player] || positions.player;
   var n = cards.length;
@@ -1273,7 +1273,7 @@ GameScene.prototype._createChaosOverlay = function (callback) {
   // \u534A\u900F\u660E\u906E\u7F69
   var overlay = self.add.graphics();
   overlay.fillStyle(0x000000, 0.75);
-  overlay.fillRect(0, 0, 600, 960).setDepth(300);
+  overlay.fillRect(0, 0, 960, 600).setDepth(300);
   overlay.setInteractive(new Phaser.Geom.Rectangle(0, 0, 600, 960), Phaser.Geom.Rectangle.Contains);
   self.chaosElements = [overlay];
   self.chaosOverlay = overlay;
@@ -1681,7 +1681,7 @@ function createActionButtons(scene) {
   var bw = 96, bh = 48, gap = 10;
   var totalW = bw * 4 + gap * 3;
   var startX = (600 - totalW) / 2;
-  var btnY = 828;
+  var btnY = 504;
 
   var buttons = [
     { label: '\u51FA\u724C', color: 0x4ECDC4, key: 'play' },
@@ -1727,8 +1727,8 @@ function showToast(scene, message) {
   var cx = 300;
   var toastBg = scene.add.graphics();
   toastBg.fillStyle(0x000000, 0.7);
-  toastBg.fillRoundedRect(cx - 100, 461, 200, 38, 10).setDepth(200);
-  var toastText = scene.add.text(cx, 480, message, {
+  toastBg.fillRoundedRect(cx - 100, 280, 200, 38, 10).setDepth(200);
+  var toastText = scene.add.text(cx, 299, message, {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '15px', color: '#FFFFFF'
   }).setOrigin(0.5).setDepth(201);
@@ -1744,18 +1744,18 @@ function showToast(scene, message) {
 function createPlayHistoryArea(scene) {
   var bg = scene.add.graphics();
   bg.fillStyle(0x000000, 0.25);
-  bg.fillRoundedRect(12, 876, 576, 78, 8).setDepth(200);
+  bg.fillRoundedRect(12, 540, 936, 52, 6).setDepth(200);
 
-  scene.add.text(24, 880, '最近出牌', {
+  scene.add.text(20, 543, '最近出牌', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '9px', color: '#81C784'
   }).setDepth(201);
 
-  scene.playHistoryText = scene.add.text(24, 892, '', {
+  scene.playHistoryText = scene.add.text(20, 554, '', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '10px', color: '#C8E6C9',
     lineSpacing: 2,
-    wordWrap: { width: 560 }
+    wordWrap: { width: 920 }
   }).setDepth(201);
 }
 
