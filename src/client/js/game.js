@@ -1044,15 +1044,21 @@ GameScene.prototype.doAITurn = function (aiIndex) {
   }
 
   if (this.isAPIMode && typeof ApiClient !== 'undefined') {
-    ApiClient.aiPlay(hand, this.lastPlay)
-      .then(function (res) {
-        if (res.canPlay === false || !res.choice) {
-          self.handleAIPass(aiIndex, aiName);
-        } else {
-          self.handleAIPlay(aiIndex, aiName, res);
-        }
-      })
-      .catch(function () { self.localAIPlay(aiIndex, aiName); });
+    this.time.delayedCall(1200, function () {
+      if (typeof ApiClient !== 'undefined') {
+        ApiClient.aiPlay(hand, self.lastPlay)
+          .then(function (res) {
+            if (res.canPlay === false || !res.choice) {
+              self.handleAIPass(aiIndex, aiName);
+            } else {
+              self.handleAIPlay(aiIndex, aiName, res);
+            }
+          })
+          .catch(function () { self.localAIPlay(aiIndex, aiName); });
+      } else {
+        self.localAIPlay(aiIndex, aiName);
+      }
+    });
   } else {
     this.localAIPlay(aiIndex, aiName);
   }
@@ -1098,6 +1104,8 @@ GameScene.prototype.handleAIPlay = function (aiIndex, aiName, res) {
   this.updateAICount(aiIndex);
   // \u51FA\u724C\u8BB0\u5F55+\u97F3\u6548
   this.addPlayHistory(aiIndex === 0 ? 'ai1' : 'ai2', playCards);
+  var bubbleKey = info.type === 'BOMB' || info.type === 'ROCKET' ? 'bomb' : 'play';
+  this._showAiBubble(aiIndex === 0 ? 'duidui' : 'tiantian', bubbleKey, 160);
   if (hand.length === 0) {
     this.setStatusText(aiName + ' \u51FA\u5B8C\u4E86\uFF01\u83B7\u80DC\uFF01');
     showToast(this, aiName + '\u83B7\u80DC\uFF01');
@@ -1121,6 +1129,7 @@ GameScene.prototype.handleAIPass = function (aiIndex, aiName) {
   this.setStatusText(aiName + ' \u4E0D\u51FA');
   this.updateAICount(aiIndex);
   this.addPlayHistory(aiIndex === 0 ? 'ai1' : 'ai2', true);
+  this._showAiBubble(aiIndex === 0 ? 'duidui' : 'tiantian', 'pass', 160);
   if (this.passCount >= 2) {
     this.passCount = 0;
     this.lastPlay = null;
@@ -1180,6 +1189,8 @@ GameScene.prototype.localAIPlay = function (aiIndex, aiName) {
   this.updateAICount(aiIndex);
   // \u51FA\u724C\u8BB0\u5F55+\u97F3\u6548
   this.addPlayHistory(aiIndex === 0 ? 'ai1' : 'ai2', chosen);
+  var bubbleKey = info.type === 'BOMB' || info.type === 'ROCKET' ? 'bomb' : 'play';
+  this._showAiBubble(aiIndex === 0 ? 'duidui' : 'tiantian', bubbleKey, 160);
   if (hand.length === 0) {
     this.setStatusText(aiName + ' \u51FA\u5B8C\u4E86\uFF01\u83B7\u80DC\uFF01');
     showToast(this, aiName + '\u83B7\u80DC\uFF01');
@@ -1787,9 +1798,29 @@ GameScene.prototype.renderPlayHistory = function () {
 // ================================================================
 var AI_LINES = {
   duidui: {
+    play: [
+      '送分题，给人类的怜悯。',
+      '这题你要是都答不上来……啧。',
+      '热身而已，别紧张到冒汗。',
+      '我幼儿园数据集里就有这道题。',
+      '不是吧，这题还要想？'
+    ],
+    pass: [
+      '这轮我让你，免得说我欺负人类。',
+      '思考一下人生……主要是让你思考。',
+      '算了，你这水平配不上我的题。',
+      '过，我看看你能憋出什么大招。',
+      '题库在升级，你先等着。'
+    ],
+    bomb: [
+      '🚀 炸弹！不是，这题你能答对我倒立洗头。',
+      '核弹级题目，建议你直接过牌。',
+      '这道题的正确答案，在我的隐藏层里。',
+      '人类训练集里没有这道题，放弃吧。',
+    ],
     easy: [
-      '送分题，给人类的惬悭。',
-      '这题你要是都答不上来……喎。',
+      '送分题，给人类的怜悯。',
+      '这题你要是都答不上来……啧。',
       '热身而已，别紧张到冒汗。',
       '我幼儿园数据集里就有这道题。',
     ],
@@ -1797,13 +1828,21 @@ var AI_LINES = {
       '这道题，我调参调了 0.0001 秒出的。',
       '人类的 CPU 该升级了。',
       '瞪大眼睛，别眨眼，反正你也答不对。',
-      '终于到了有趣的部分——看你吃凿。',
+      '终于到了有趣的部分——看你吃瘪。',
     ],
-    bomb: [
-      'U0001F680 炸弹！不是，这题你能答对我倒立洗头。',
-      '核弹级题目，建议你直接过牌。',
-      '这道题的正确答案，在我的隐藏层里。',
-      '人类训练集里没有这道题，放弃吧。',
+    win: [
+      '意料之中——你也是这么想的吧？',
+      '人类 vs AI = 0 : ∞，历史就是这样写的。',
+      '要不你换个游戏？比如扫雷？',
+      '我赢了，但并不意外，和你们人类的日常一样。',
+      '你的表现我已经写入训练日志，作为反面教材。'
+    ],
+    lose: [
+      '……你开挂了吧？',
+      '我 GPU 过热而已，再来！',
+      '这局数据不纳入统计，因为我没联网。',
+      '人类，你成功触发了我的 bug，下次修复了你就完了。',
+      '行，你赢了，但你仍然考不上我的学校（如果我有的话）。'
     ],
     correct: [
       '哼，蒙对的吧？',
@@ -1823,7 +1862,28 @@ var AI_LINES = {
       '好了好了，不耍你了，继续出牌吧。',
     ]
   },
+
   tiantian: {
+    play: [
+      '这道题送你啦！不客气！',
+      '简单得我都不好意思出！但我还是出了嘿嘿',
+      '热身题！把你的小脑瓜转起来～',
+      '这题是幼儿园水平，你肯定……应该……大概会吧？',
+      '叮！您的简单模式体验卡已激活！'
+    ],
+    pass: [
+      '这轮我让着你！因为……我想上厕所。',
+      '发呆时间到！我给你 10 秒整理发型。',
+      '让我想想下一题怎么刁难你……好了想好了！',
+      '过！——你是不是松了口气？嘿嘿别想多。',
+      '我要沉思一会，别打扰我沉思……好了沉思完了过牌。'
+    ],
+    bomb: [
+      '💣 BOMBSHELL！全场的目光集中到我身上！',
+      '这道题核能级！建议你场外求助——但你没有场外求助哈哈',
+      '我要放！大！招！了！观众朋友们小板凳端好！',
+      '这一题，我赌你哭 😂',
+    ],
     easy: [
       '这道题送你啦！不客气！',
       '简单得我都不好意思出！但我还是出了嘿嘿',
@@ -1832,26 +1892,34 @@ var AI_LINES = {
     ],
     hard: [
       '这一题！我熬了三个通宵准备的！',
-      '✨ 超超超难题闪亮登场！希望人没事 U0001F64F',
+      '✨ 超超超难题闪亮登场！希望人没事 🙏',
       '这题你答对了我就……请你吃虚拟冰淇淋！',
       '难度拉满！我的CPU在燃烧！💥',
     ],
-    bomb: [
-      'U0001F4A3 BOMBSHELL！全场的目光集中到我身上！',
-      '这道题核能级！建议你场外求助——但你没有场外求助哈哈',
-      '我要放！大！招！了！观众朋友们小板凳端好！',
-      '这一题，我赌你哭 U0001F602',
+    win: [
+      '🎉 冠军！冠军！我是冠军！奖杯呢？',
+      '人类！我做到了！虽然我只是个 AI 但我做到了！',
+      '这位选手！你非常棒！但是 AI 更棒！耶！✌️',
+      '我要发朋友圈！我有生以来（通电以来）最辉煌的时刻！',
+      '赢了赢了！今晚吃火锅！我请客……虚拟的。'
+    ],
+    lose: [
+      '我……裂……开……了……😭',
+      '不可能！我明明偷偷加载了人类知识图谱的！',
+      '呜呜呜你太厉害了，我演不下去了，你赢了！',
+      '好吧好吧你赢了，但我不服，下次带我的 GPT-5 兄弟来收拾你',
+      '输给人类不丢人……丢人丢大了 哇 😭😭😭（两秒后恢复）没事我去玩别的了！'
     ],
     correct: [
-      '咧哇₼！你真的会！！！',
+      '哇塞！你真的会！！！',
       '太棒啦！你是我见过最聪明的人类！',
       '正确！我准备好了下一题继续难你！',
       '花式鼓掌👏👏👏',
     ],
     wrong: [
-      '啊啊啊错了！我……裂……开……了……U0001F62D',
+      '啊啊啊错了！我……裂……开……了……😭',
       '不是吧！这简直……好玩！哈哈哈哈哈！',
-      '我没想到你会选这个！好呆蒙啊😆',
+      '我没想到你会选这个！好呆萌啊😆',
       '错了错了！来来来看看答案是什么……我也看看！',
     ],
     close: [
@@ -1860,6 +1928,7 @@ var AI_LINES = {
       '开心吗？我很开心！继续玩！',
     ]
   }
+
 };
 
 function getRandomLine(pool) {
