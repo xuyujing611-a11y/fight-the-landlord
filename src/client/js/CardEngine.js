@@ -1,441 +1,1087 @@
 /**
- * 斗地主卡牌引擎
- * CardEngine.js - 纯JS，无依赖
- * 
- * 牌值大小顺序: 3 4 5 6 7 8 9 10 J Q K A 2 小王 大王
- * 花色: ♠(黑桃) ♥(红桃) ♣(梅花) ♦(方块)
+ * card-engine.js - 斗地主牌引擎
+ * 纯 JavaScript，无依赖，浏览器 / Node.js 通用
+ *
+ * API:
+ *   Card(suit, rank)          - 牌对象
+ *   Deck()                    - 54张牌、洗牌、发牌
+ *   identifyType(cards)       - 牌型识别
+ *   canBeat(current, last)    - 出牌校验
+ *   findValidPlays(hand, lastPlay) - 合法出牌枚举
+ *   sortCards(cards)          - 排序
+ *   renderHTML(cards [, opts]) - HTML渲染
  */
 
-const SUITS = ['♠', '♥', '♣', '♦'];
-const SUIT_NAMES = { '♠': 'spade', '♥': 'heart', '♣': 'club', '♦': 'diamond' };
-const RANK_MAP = {
-  '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9,
-  '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14, '2': 15, '小王': 16, '大王': 17
-};
-const RANK_NAMES = ['','','','3','4','5','6','7','8','9','10','J','Q','K','A','2','小王','大王'];
-
-/** 牌对象 */
-class Card {
-  constructor(suit, rank) {
-    this.suit = suit;          // '♠'|'♥'|'♣'|'♦' 或 ''(王)
-    this.rank = rank;          // '3'~'2'|'小王'|'大王'
-    this.value = RANK_MAP[rank]; // 数值 3~17
-    this.id = suit + rank;     // 唯一ID
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) {
+    module.exports = factory();
+  } else {
+    root.Doudizhu = factory();
   }
-  get isJoker() { return this.rank === '小王' || this.rank === '大王'; }
-  get isRed() { return this.suit === '♥' || this.suit === '♦'; }
-  get displayName() { return this.suit + this.rank; }
-}
+}(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
 
-/** 54张牌 */
-class Deck {
-  constructor() {
+  // ================================================================
+  // 常量
+  // ================================================================
+
+  var SUITS = ['spade', 'heart', 'club', 'diamond', 'joker'];
+
+  var SUIT_SYMBOLS = {
+    spade: '\u2660',
+    heart: '\u2665',
+    club: '\u2663',
+    diamond: '\u2666',
+    joker: '\uD83C\uDCCF'
+  };
+
+  var RANK_NAMES = [
+    '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A', '2'
+  ];
+
+  var RANK_NAME_MAP = {
+    0: '3', 1: '4', 2: '5', 3: '6', 4: '7', 5: '8', 6: '9', 7: '10',
+    8: 'J', 9: 'Q', 10: 'K', 11: 'A', 12: '2',
+    13: '\u5C0F\u738B', 14: '\u5927\u738B'
+  };
+
+  // 顺子 / 连对 / 飞机可用的最大rank（不包括2和小王大王）
+  var STRAIGHT_MAX_RANK = 11; // A
+
+  var HAND_TYPES = {
+    SINGLE: 'SINGLE',
+    PAIR: 'PAIR',
+    TRIPLE: 'TRIPLE',
+    TRIPLE_PLUS_ONE: 'TRIPLE_PLUS_ONE',
+    TRIPLE_PLUS_TWO: 'TRIPLE_PLUS_TWO',
+    STRAIGHT: 'STRAIGHT',
+    CONSECUTIVE_PAIRS: 'CONSECUTIVE_PAIRS',
+    AIRPLANE: 'AIRPLANE',
+    AIRPLANE_PLUS_SINGLES: 'AIRPLANE_PLUS_SINGLES',
+    AIRPLANE_PLUS_PAIRS: 'AIRPLANE_PLUS_PAIRS',
+    BOMB: 'BOMB',
+    ROCKET: 'ROCKET',
+    FOUR_PLUS_TWO: 'FOUR_PLUS_TWO',
+    FOUR_PLUS_TWO_PAIRS: 'FOUR_PLUS_TWO_PAIRS',
+    INVALID: 'INVALID'
+  };
+
+  var HAND_TYPE_NAMES = {};
+  HAND_TYPE_NAMES[HAND_TYPES.SINGLE] = '\u5355\u5F20';
+  HAND_TYPE_NAMES[HAND_TYPES.PAIR] = '\u5BF9\u5B50';
+  HAND_TYPE_NAMES[HAND_TYPES.TRIPLE] = '\u4E09\u5F20';
+  HAND_TYPE_NAMES[HAND_TYPES.TRIPLE_PLUS_ONE] = '\u4E09\u5E26\u4E00';
+  HAND_TYPE_NAMES[HAND_TYPES.TRIPLE_PLUS_TWO] = '\u4E09\u5E26\u4E8C';
+  HAND_TYPE_NAMES[HAND_TYPES.STRAIGHT] = '\u987A\u5B50';
+  HAND_TYPE_NAMES[HAND_TYPES.CONSECUTIVE_PAIRS] = '\u8FDE\u5BF9';
+  HAND_TYPE_NAMES[HAND_TYPES.AIRPLANE] = '\u98DE\u673A';
+  HAND_TYPE_NAMES[HAND_TYPES.AIRPLANE_PLUS_SINGLES] = '\u98DE\u673A\u5E26\u5355';
+  HAND_TYPE_NAMES[HAND_TYPES.AIRPLANE_PLUS_PAIRS] = '\u98DE\u673A\u5E26\u5BF9';
+  HAND_TYPE_NAMES[HAND_TYPES.BOMB] = '\u70B8\u5F39';
+  HAND_TYPE_NAMES[HAND_TYPES.ROCKET] = '\u706B\u7BAD';
+  HAND_TYPE_NAMES[HAND_TYPES.FOUR_PLUS_TWO] = '\u56DB\u5E26\u4E8C';
+  HAND_TYPE_NAMES[HAND_TYPES.FOUR_PLUS_TWO_PAIRS] = '\u56DB\u5E26\u4E24\u5BF9';
+
+  // ================================================================
+  // Card 类
+  // ================================================================
+
+  function Card(suit, rank) {
+    if (typeof rank !== 'number' || rank < 0 || rank > 14) {
+      throw new Error('Invalid card rank: ' + rank);
+    }
+    if (suit !== 'spade' && suit !== 'heart' && suit !== 'club' && suit !== 'diamond' && suit !== 'joker') {
+      throw new Error('Invalid card suit: ' + suit);
+    }
+    if (rank < 13 && suit === 'joker') {
+      throw new Error('Non-joker rank cannot have joker suit');
+    }
+    if (rank >= 13 && suit !== 'joker') {
+      throw new Error('Joker rank must have joker suit');
+    }
+    this.suit = suit;
+    this.rank = rank;
+  }
+
+  Card.prototype.displayName = function () {
+    return RANK_NAME_MAP[this.rank] || '?';
+  };
+
+  Card.prototype.shortName = function () {
+    if (this.rank === 13) return 'SJ';
+    if (this.rank === 14) return 'BJ';
+    return RANK_NAMES[this.rank];
+  };
+
+  Card.prototype.suitSymbol = function () {
+    return SUIT_SYMBOLS[this.suit];
+  };
+
+  Card.prototype.isJoker = function () {
+    return this.rank >= 13;
+  };
+
+  Card.prototype.isRed = function () {
+    return this.suit === 'heart' || this.suit === 'diamond' || this.rank === 14;
+  };
+
+  Card.prototype.toString = function () {
+    if (this.rank === 13) return '\uD83C\uDCCF SJ';
+    if (this.rank === 14) return '\uD83C\uDCCF BJ';
+    return this.suitSymbol() + this.shortName();
+  };
+
+  Card.prototype.clone = function () {
+    return new Card(this.suit, this.rank);
+  };
+
+  // 从字符串创建（方便测试）
+  // 格式: "♠3" "♥K" "🃏SJ" "🃏BJ"
+  Card.fromString = function (str) {
+        // 正确处理代理对（如 ），确保 charAt 正确拆分 Unicode 字符
+    var codePoints = [];
+    for (var ci = 0; ci < str.length; ci++) {
+      var code = str.charCodeAt(ci);
+      if (code >= 0xD800 && code <= 0xDBFF && ci + 1 < str.length) {
+        codePoints.push(str.slice(ci, ci + 2));
+        ci++;
+      } else {
+        codePoints.push(str.charAt(ci));
+      }
+    }
+    var suitChar = codePoints[0];
+    var suitMap = { '\u2660': 'spade', '\u2665': 'heart', '\u2663': 'club', '\u2666': 'diamond', '\uD83C\uDCCF': 'joker' };
+    var suit = suitMap[suitChar];
+    if (!suit) throw new Error('Unknown suit: ' + suitChar);
+
+    if (suit === 'joker') {
+      var jokerType = codePoints.slice(1).join('').trim();
+      if (jokerType === 'SJ' || jokerType === '\u5C0F\u738B') return new Card('joker', 13);
+      if (jokerType === 'BJ' || jokerType === '\u5927\u738B') return new Card('joker', 14);
+      throw new Error('Invalid joker: ' + str);
+    }
+
+    var rankStr = codePoints.slice(1).join('').trim();
+    var rankMap = {
+      '3': 0, '4': 1, '5': 2, '6': 3, '7': 4, '8': 5, '9': 6, '10': 7,
+      'J': 8, 'Q': 9, 'K': 10, 'A': 11, '2': 12
+    };
+    var rank = rankMap[rankStr];
+    if (rank === undefined) throw new Error('Unknown rank: ' + rankStr);
+    return new Card(suit, rank);
+  };
+
+  // ================================================================
+  // Deck 类
+  // ================================================================
+
+  function Deck() {
     this.cards = [];
     this.reset();
   }
-  reset() {
+
+  Deck.prototype.reset = function () {
     this.cards = [];
-    const ranks = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'];
-    for (const suit of SUITS) {
-      for (const rank of ranks) {
-        this.cards.push(new Card(suit, rank));
+    var suitOrder = ['spade', 'heart', 'club', 'diamond'];
+    for (var r = 0; r < RANK_NAMES.length; r++) {
+      for (var s = 0; s < suitOrder.length; s++) {
+        this.cards.push(new Card(suitOrder[s], r));
       }
     }
-    this.cards.push(new Card('', '小王'));
-    this.cards.push(new Card('', '大王'));
-  }
-  shuffle() {
-    for (let i = this.cards.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [this.cards[i], this.cards[j]] = [this.cards[j], this.cards[i]];
+    // 2张王
+    this.cards.push(new Card('joker', 13));
+    this.cards.push(new Card('joker', 14));
+    return this;
+  };
+
+  // Fisher-Yates shuffle
+  Deck.prototype.shuffle = function () {
+    for (var i = this.cards.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = this.cards[i];
+      this.cards[i] = this.cards[j];
+      this.cards[j] = tmp;
     }
-  }
-  deal() {
-    this.shuffle();
+    return this;
+  };
+
+  // deal(nPlayers, cardsPerPlayer)
+  // 标准斗地主：3人，每人17张，3张底牌
+  Deck.prototype.deal = function (nPlayers, cardsPerPlayer) {
+    nPlayers = nPlayers || 3;
+    cardsPerPlayer = cardsPerPlayer || 17;
+    if (this.cards.length !== 54) this.reset();
+
+    var hands = [];
+    for (var i = 0; i < nPlayers; i++) {
+      hands.push([]);
+    }
+
+    var dealt = 0;
+    for (var p = 0; p < nPlayers; p++) {
+      for (var c = 0; c < cardsPerPlayer; c++) {
+        hands[p].push(this.cards[dealt++]);
+      }
+    }
+
+    // 底牌
+    var remaining = this.cards.slice(dealt);
+
     return {
-      player1: this.cards.slice(0, 17),
-      player2: this.cards.slice(17, 34),
-      player3: this.cards.slice(34, 51),
-      bottom: this.cards.slice(51, 54)
+      hands: hands,
+      remaining: remaining
     };
-  }
-}
+  };
 
-/** 牌型识别 */
-function identifyType(cards) {
-  if (!cards || cards.length === 0) return { type: 'pass', name: '不出' };
-  
-  const n = cards.length;
-  // 按value排序
-  const sorted = [...cards].sort((a, b) => a.value - b.value);
-  const values = sorted.map(c => c.value);
-  const vCount = {};
-  for (const v of values) vCount[v] = (vCount[v] || 0) + 1;
-  const counts = Object.values(vCount).sort((a, b) => b - a);
-  const uniqueV = Object.keys(vCount).map(Number).sort((a, b) => a - b);
+  // ================================================================
+  // 工具函数
+  // ================================================================
 
-  // 王炸
-  if (n === 2 && values[0] === 16 && values[1] === 17) {
-    return { type: 'rocket', name: '王炸', rank: 17, length: 2 };
-  }
-  // 炸弹
-  if (n === 4 && counts.length === 1 && counts[0] === 4) {
-    return { type: 'bomb', name: '炸弹', rank: values[0], length: 4 };
-  }
-  // 单张
-  if (n === 1) return { type: 'single', name: '单张', rank: values[0], length: 1 };
-  // 对子
-  if (n === 2 && counts[0] === 2) return { type: 'pair', name: '对子', rank: values[0], length: 2 };
-  // 三张
-  if (n === 3 && counts[0] === 3) return { type: 'triple', name: '三条', rank: values[0], length: 3 };
-  
-  // 三带一
-  if (n === 4 && counts[0] === 3 && counts[1] === 1) {
-    const mainVal = Number(Object.keys(vCount).find(k => vCount[k] === 3));
-    return { type: 'triple_one', name: '三带一', rank: mainVal, length: 4 };
-  }
-  // 三带二
-  if (n === 5 && counts[0] === 3 && counts[1] === 2) {
-    const mainVal = Number(Object.keys(vCount).find(k => vCount[k] === 3));
-    return { type: 'triple_two', name: '三带二', rank: mainVal, length: 5 };
-  }
-  // 顺子(5+张)
-  if (n >= 5 && uniqueV.length === n && uniqueV[n-1] - uniqueV[0] === n - 1 && uniqueV[n-1] < 15) {
-    return { type: 'straight', name: `顺子[${n}张]`, rank: uniqueV[n-1], length: n };
-  }
-  // 连对(3对+)
-  if (n >= 6 && n % 2 === 0) {
-    const pairs = [];
-    for (const [val, cnt] of Object.entries(vCount)) {
-      if (cnt === 2) pairs.push(Number(val));
+  // 按rank分组
+  function groupByRank(cards) {
+    var groups = {};
+    for (var i = 0; i < cards.length; i++) {
+      var r = cards[i].rank;
+      if (!groups[r]) groups[r] = [];
+      groups[r].push(cards[i]);
     }
-    if (pairs.length === n / 2 && pairs.length >= 3) {
-      pairs.sort((a, b) => a - b);
-      if (pairs[pairs.length-1] - pairs[0] === pairs.length - 1 && pairs[pairs.length-1] < 15) {
-        return { type: 'consecutive_pairs', name: `连对[${pairs.length}对]`, rank: pairs[pairs.length-1], length: n };
+    return groups;
+  }
+
+  // 生成组合 C(n,k)
+  function* combinations(arr, k) {
+    if (k === 0) { yield []; return; }
+    if (arr.length < k) return;
+    for (var i = 0; i <= arr.length - k; i++) {
+      var first = arr[i];
+      for (var rest of combinations(arr.slice(i + 1), k - 1)) {
+        yield [first].concat(rest);
       }
     }
   }
-  // 飞机不带
-  if (n >= 6 && n % 3 === 0) {
-    const triples = Object.entries(vCount).filter(([_,c]) => c >= 3).map(([v]) => Number(v)).sort((a,b)=>a-b);
-    if (triples.length === n / 3 && triples.length >= 2) {
-      if (triples[triples.length-1] - triples[0] === triples.length - 1 && triples[triples.length-1] < 15) {
-        return { type: 'plane', name: `飞机[${triples.length}连]`, rank: triples[triples.length-1], length: n };
+
+  // 获取同一rank的所有single kick候选
+  function getAllSinglesPool(groups, excludeRanks) {
+    var pool = [];
+    var excludeSet = {};
+    if (excludeRanks) {
+      for (var i = 0; i < excludeRanks.length; i++) excludeSet[excludeRanks[i]] = true;
+    }
+    var sortedRanks = Object.keys(groups).map(Number).sort(function (a, b) { return a - b; });
+    for (var j = 0; j < sortedRanks.length; j++) {
+      var r = sortedRanks[j];
+      if (excludeSet[r]) continue;
+      for (var k = 0; k < groups[r].length; k++) {
+        pool.push(groups[r][k]);
       }
     }
+    return pool;
   }
-  // 飞机带单
-  if (n >= 8) {
-    const triples = Object.entries(vCount).filter(([_,c]) => c >= 3).map(([v]) => Number(v)).sort((a,b)=>a-b);
-    const tripleCnt = n / 4;
-    if (triples.length === tripleCnt && tripleCnt >= 2) {
-      if (triples[tripleCnt-1] - triples[0] === tripleCnt - 1 && triples[tripleCnt-1] < 15) {
-        return { type: 'plane_single', name: `飞机带单[${tripleCnt}连]`, rank: triples[tripleCnt-1], length: n };
+
+  // 获取同一rank的所有pair候选
+  function getAllPairsPool(groups, excludeRanks) {
+    var pool = [];
+    var excludeSet = {};
+    if (excludeRanks) {
+      for (var i = 0; i < excludeRanks.length; i++) excludeSet[excludeRanks[i]] = true;
+    }
+    var sortedRanks = Object.keys(groups).map(Number).sort(function (a, b) { return a - b; });
+    for (var j = 0; j < sortedRanks.length; j++) {
+      var r = sortedRanks[j];
+      if (excludeSet[r]) continue;
+      if (groups[r].length >= 2) {
+        pool.push(groups[r].slice(0, 2));
       }
     }
-  }
-  // 四带二
-  if ((n === 6) && counts[0] === 4) {
-    const mainVal = Number(Object.keys(vCount).find(k => vCount[k] === 4));
-    return { type: 'four_two', name: '四带二', rank: mainVal, length: 6 };
+    return pool;
   }
 
-  return null; // 不合法牌型
-}
-
-/** 判断能否压过上家 */
-function canBeat(currentPlay, lastPlay) {
-  if (!lastPlay || lastPlay.type === 'pass') return true;
-  if (!currentPlay || currentPlay.type === 'pass') return false;
-  // 王炸最大
-  if (currentPlay.type === 'rocket') return true;
-  if (lastPlay.type === 'rocket') return false;
-  // 炸弹可以压非炸弹
-  if (currentPlay.type === 'bomb' && lastPlay.type !== 'bomb') return true;
-  if (lastPlay.type === 'bomb' && currentPlay.type !== 'bomb') return false;
-  // 同类型比rank，且长度相同
-  if (currentPlay.type === lastPlay.type && currentPlay.length === lastPlay.length) {
-    return currentPlay.rank > lastPlay.rank;
+  // 去重key（基于ranks序列，不关心花色）
+  function playKey(cards) {
+    return cards.map(function (c) { return c.rank; }).sort(function (a, b) { return a - b; }).join(',');
   }
-  // 炸弹比炸弹
-  if (currentPlay.type === 'bomb' && lastPlay.type === 'bomb') {
-    return currentPlay.rank > lastPlay.rank;
-  }
-  return false;
-}
 
-/** 查找所有合法出牌 */
-function findValidPlays(hand, lastPlay) {
-  const results = [];
-  
-  // 枚举所有子集
-  function enumerate(index, current) {
-    if (index === hand.length) {
-      if (current.length === 0) return;
-      const play = identifyType(current);
-      if (play && play.type !== 'pass' && play.type !== null) {
-        if (!lastPlay || lastPlay.type === 'pass' || canBeat(play, lastPlay)) {
-          results.push({ cards: [...current], play });
+  function deduplicate(plays) {
+    var seen = {};
+    var result = [];
+    for (var i = 0; i < plays.length; i++) {
+      var key = playKey(plays[i]);
+      if (!seen[key]) {
+        seen[key] = true;
+        result.push(plays[i]);
+      }
+    }
+    return result;
+  }
+
+  function arraysEqual(a, b) {
+    if (a.length !== b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] !== b[i]) return false;
+    }
+    return true;
+  }
+
+  // ================================================================
+  // identifyType - 牌型识别
+  // ================================================================
+
+  function identifyType(cards) {
+    if (!cards || !Array.isArray(cards) || cards.length === 0) {
+      return { type: HAND_TYPES.INVALID, rank: -1, length: 0 };
+    }
+
+    var n = cards.length;
+    var sorted = cards.slice().sort(function (a, b) { return a.rank - b.rank; });
+    var groups = groupByRank(sorted);
+    var ranks = Object.keys(groups).map(Number).sort(function (a, b) { return a - b; });
+    var counts = ranks.map(function (r) { return groups[r].length; });
+
+    // ---- 火箭 ----
+    if (n === 2 && ranks.length === 2 && ranks[0] === 13 && ranks[1] === 14) {
+      return { type: HAND_TYPES.ROCKET, rank: 14, length: 2 };
+    }
+
+    // ---- 炸弹 ----
+    if (n === 4 && ranks.length === 1 && counts[0] === 4) {
+      return { type: HAND_TYPES.BOMB, rank: ranks[0], length: 4 };
+    }
+
+    // ---- 单张 ----
+    if (n === 1) {
+      return { type: HAND_TYPES.SINGLE, rank: sorted[0].rank, length: 1 };
+    }
+
+    // ---- 对子 ----
+    if (n === 2 && ranks.length === 1 && counts[0] === 2) {
+      return { type: HAND_TYPES.PAIR, rank: ranks[0], length: 2 };
+    }
+
+    // ---- 三张 ----
+    if (n === 3 && ranks.length === 1 && counts[0] === 3) {
+      return { type: HAND_TYPES.TRIPLE, rank: ranks[0], length: 3 };
+    }
+
+    // ---- 三带一 ----
+    if (n === 4 && ranks.length === 2) {
+      var tripleRank = -1, singleRank = -1;
+      for (var i = 0; i < ranks.length; i++) {
+        if (counts[i] === 3) tripleRank = ranks[i];
+        else if (counts[i] === 1) singleRank = ranks[i];
+      }
+      if (tripleRank >= 0 && singleRank >= 0) {
+        return { type: HAND_TYPES.TRIPLE_PLUS_ONE, rank: tripleRank, length: 4, kickRank: singleRank };
+      }
+    }
+
+    // ---- 三带二 ----
+    if (n === 5 && ranks.length === 2) {
+      var tripleRank2 = -1, pairRank = -1;
+      for (var i2 = 0; i2 < ranks.length; i2++) {
+        if (counts[i2] === 3) tripleRank2 = ranks[i2];
+        else if (counts[i2] === 2) pairRank = ranks[i2];
+      }
+      if (tripleRank2 >= 0 && pairRank >= 0) {
+        return { type: HAND_TYPES.TRIPLE_PLUS_TWO, rank: tripleRank2, length: 5, kickRank: pairRank };
+      }
+    }
+
+    // ---- 顺子 (5+张连续，3~A，无2/王) ----
+    if (n >= 5 && isConsecutiveSequence(ranks, STRAIGHT_MAX_RANK) && allCountsOne(counts)) {
+      // 检查所有rank <= A
+      if (ranks[ranks.length - 1] <= STRAIGHT_MAX_RANK) {
+        return { type: HAND_TYPES.STRAIGHT, rank: ranks[ranks.length - 1], length: n };
+      }
+    }
+
+    // ---- 连对 (3+对连续，3~A: 每张恰好2张，n === ranks.length * 2) ----
+    if (n >= 6 && n % 2 === 0 && n === ranks.length * 2) {
+      var pairCount = n / 2;
+      if (pairCount >= 3 && isConsecutiveSequence(ranks, STRAIGHT_MAX_RANK) && allCountsAtLeast(counts, 2)) {
+        if (ranks[ranks.length - 1] <= STRAIGHT_MAX_RANK) {
+          return { type: HAND_TYPES.CONSECUTIVE_PAIRS, rank: ranks[ranks.length - 1], length: pairCount };
         }
       }
-      return;
     }
-    // 不选这张
-    enumerate(index + 1, current);
-    // 选这张
-    current.push(hand[index]);
-    enumerate(index + 1, current);
-    current.pop();
-  }
 
-  if (hand.length <= 10) {
-    // 手牌少时全枚举
-    enumerate(0, []);
-  } else {
-    // 手牌多时用优化策略枚举常见牌型
-    findValidPlaysOptimized(hand, lastPlay, results);
-  }
-
-  // 加入"不出"选项
-  if (lastPlay && lastPlay.type !== 'pass') {
-    results.push({ cards: [], play: { type: 'pass', name: '不出', rank: 0, length: 0 } });
-  }
-
-  return results;
-}
-
-/** 优化版枚举（手牌多时用） */
-function findValidPlaysOptimized(hand, lastPlay, results) {
-  const sorted = [...hand].sort((a, b) => a.value - b.value);
-  const values = sorted.map(c => c.value);
-  const vCount = {};
-  for (const c of sorted) vCount[c.value] = (vCount[c.value] || 0) + 1;
-  const uniqueV = Object.keys(vCount).map(Number).sort((a, b) => a - b);
-
-  // 单张
-  for (const v of uniqueV) {
-    const card = sorted.find(c => c.value === v);
-    const play = identifyType([card]);
-    if (!lastPlay || canBeat(play, lastPlay)) {
-      results.push({ cards: [card], play });
-    }
-  }
-  // 对子
-  for (const v of uniqueV) {
-    if (vCount[v] >= 2) {
-      const pair = sorted.filter(c => c.value === v).slice(0, 2);
-      const play = identifyType(pair);
-      if (!lastPlay || canBeat(play, lastPlay)) results.push({ cards: pair, play });
-    }
-  }
-  // 三条
-  for (const v of uniqueV) {
-    if (vCount[v] >= 3) {
-      const triple = sorted.filter(c => c.value === v).slice(0, 3);
-      const play = identifyType(triple);
-      if (!lastPlay || canBeat(play, lastPlay)) results.push({ cards: triple, play });
-    }
-  }
-  // 炸弹
-  for (const v of uniqueV) {
-    if (vCount[v] === 4) {
-      const bomb = sorted.filter(c => c.value === v);
-      const play = identifyType(bomb);
-      if (!lastPlay || canBeat(play, lastPlay)) results.push({ cards: bomb, play });
-    }
-  }
-  // 王炸
-  const smallJoker = sorted.find(c => c.value === 16);
-  const bigJoker = sorted.find(c => c.value === 17);
-  if (smallJoker && bigJoker) {
-    const play = identifyType([smallJoker, bigJoker]);
-    if (!lastPlay || canBeat(play, lastPlay)) results.push({ cards: [smallJoker, bigJoker], play });
-  }
-  // 顺子
-  for (let i = 0; i < uniqueV.length; i++) {
-    const start = uniqueV[i];
-    if (start > 14) break;
-    for (let len = 5; len <= 12; len++) {
-      const end = start + len - 1;
-      if (end > 14) break;
-      const straightVals = [];
-      for (let v = start; v <= end; v++) {
-        if (vCount[v] >= 1) straightVals.push(v);
-        else break;
-      }
-      if (straightVals.length === len) {
-        const straightCards = straightVals.map(v => sorted.find(c => c.value === v));
-        const play = identifyType(straightCards);
-        if (!lastPlay || canBeat(play, lastPlay)) results.push({ cards: straightCards, play });
-      }
-    }
-  }
-  // 连对
-  for (let i = 0; i < uniqueV.length; i++) {
-    const start = uniqueV[i];
-    if (start > 14) break;
-    for (let len = 3; len <= 10; len++) {
-      const end = start + len - 1;
-      if (end > 14) break;
-      let ok = true;
-      for (let v = start; v <= end; v++) {
-        if (!vCount[v] || vCount[v] < 2) { ok = false; break; }
-      }
-      if (ok) {
-        const pairCards = [];
-        for (let v = start; v <= end; v++) {
-          pairCards.push(...sorted.filter(c => c.value === v).slice(0, 2));
+    // ---- 飞机 (2+个三张连续, 3~A) ----
+    if (n >= 6) {
+      var tripleRanks = [];
+      var leftoverCounts = [];
+      for (var it = 0; it < ranks.length; it++) {
+        if (counts[it] >= 3) {
+          tripleRanks.push(ranks[it]);
         }
-        const play = identifyType(pairCards);
-        if (!lastPlay || canBeat(play, lastPlay)) results.push({ cards: pairCards, play });
       }
-    }
-  }
-  // 飞机
-  for (let i = 0; i < uniqueV.length; i++) {
-    const start = uniqueV[i];
-    if (start > 14) break;
-    for (let len = 2; len <= 6; len++) {
-      const end = start + len - 1;
-      if (end > 14) break;
-      let ok = true;
-      for (let v = start; v <= end; v++) {
-        if (!vCount[v] || vCount[v] < 3) { ok = false; break; }
-      }
-      if (ok) {
-        const planeCards = [];
-        for (let v = start; v <= end; v++) {
-          planeCards.push(...sorted.filter(c => c.value === v).slice(0, 3));
+      // 找连续的三张
+      if (tripleRanks.length >= 2) {
+        var tripleRun = findConsecutiveRuns(tripleRanks);
+        for (var tr = 0; tr < tripleRun.length; tr++) {
+          var run = tripleRun[tr];
+          var runLen = run.length;
+          var tripleCards = runLen * 3;
+
+          // 纯飞机
+          if (tripleCards === n) {
+            if (run[runLen - 1] <= STRAIGHT_MAX_RANK) {
+              return { type: HAND_TYPES.AIRPLANE, rank: run[runLen - 1], length: runLen };
+            }
+          }
+
+          // 飞机带单: n = tripleCards + runLen
+          if (n === tripleCards + runLen) {
+            if (run[runLen - 1] <= STRAIGHT_MAX_RANK) {
+              return { type: HAND_TYPES.AIRPLANE_PLUS_SINGLES, rank: run[runLen - 1], length: runLen };
+            }
+          }
+
+          // 飞机带对: n = tripleCards + runLen * 2
+          if (n === tripleCards + runLen * 2) {
+            if (run[runLen - 1] <= STRAIGHT_MAX_RANK) {
+              return { type: HAND_TYPES.AIRPLANE_PLUS_PAIRS, rank: run[runLen - 1], length: runLen };
+            }
+          }
         }
-        const play = identifyType(planeCards);
-        if (!lastPlay || canBeat(play, lastPlay)) results.push({ cards: planeCards, play });
       }
     }
-  }
-}
 
-/** 排序手牌 */
-function sortHand(hand) {
-  return [...hand].sort((a, b) => {
-    if (a.value !== b.value) return a.value - b.value;
-    return SUITS.indexOf(a.suit) - SUITS.indexOf(b.suit);
-  });
-}
-
-/** 手牌转字符串（调试用） */
-function handToString(hand) {
-  return sortHand(hand).map(c => c.displayName).join(' ').replace(/♠/g, '♠').replace(/♥/g, '♥').replace(/♣/g, '♣').replace(/♦/g, '♦');
-}
-
-/** 渲染牌面HTML */
-function renderCardHTML(card, index, selected = false) {
-  const suit = card.suit || '';
-  const rank = card.rank;
-  const color = card.isJoker ? (card.rank === '大王' ? '#D32F2F' : '#1976D2') : (card.isRed ? '#D32F2F' : '#212121');
-  const bg = selected ? '#FFF9C4' : '#FFFFFF';
-  const border = selected ? '3px solid #FFD600' : '1px solid #BDBDBD';
-  const bottomOffset = selected ? '-20px' : '0px';
-  
-  return `<div class="card" data-index="${index}" style="
-    display:inline-block; width:48px; height:72px; background:${bg}; border:${border};
-    border-radius:6px; text-align:center; padding:4px 2px; cursor:pointer;
-    position:relative; margin:2px -10px; transition:all 0.2s; bottom:${bottomOffset};
-    box-shadow: 0 2px 4px rgba(0,0,0,0.15); user-select:none;
-  ">
-    <div style="color:${color}; font-size:12px; font-weight:bold; line-height:1">${suit}</div>
-    <div style="color:${color}; font-size:16px; font-weight:bold; line-height:1.4; margin-top:4px">${rank}</div>
-    <div style="color:${color}; font-size:10px; line-height:1; margin-top:2px">${suit === '♥' ? '♥' : suit === '♦' ? '♦' : suit === '♠' ? '♠' : suit === '♣' ? '♣' : ''}</div>
-  </div>`;
-}
-
-/** 测试 */
-function runTests() {
-  const tests = [];
-  let passed = 0, failed = 0;
-
-  function assert(condition, name) {
-    if (condition) { passed++; } 
-    else { failed++; console.error(`❌ FAIL: ${name}`); }
-  }
-
-  // Test 1: 创建54张牌
-  const deck = new Deck();
-  assert(deck.cards.length === 54, '54张牌');
-
-  // Test 2: 发牌
-  const dealt = deck.deal();
-  assert(dealt.player1.length === 17, '玩家1得17张');
-  assert(dealt.player2.length === 17, '玩家2得17张');
-  assert(dealt.player3.length === 17, '玩家3得17张');
-  assert(dealt.bottom.length === 3, '底牌3张');
-
-  // Test 3: 牌型识别 - 单张
-  const c3 = new Card('♠', '3');
-  const c5 = new Card('♥', '5');
-  const cA = new Card('♣', 'A');
-  assert(identifyType([c3]).type === 'single', '识别单张');
-  assert(identifyType([c3, c3, c3]).type === 'triple', '识别三条');
-
-  // Test 4: 顺子  
-  const straight = [3,4,5,6,7].map(v => new Card(SUITS[v % 4], RANK_NAMES[v]));
-  assert(identifyType(straight).type === 'straight', '识别顺子5张');
-  const straight6 = [3,4,5,6,7,8].map(v => new Card(SUITS[v % 4], RANK_NAMES[v]));
-  assert(identifyType(straight6).type === 'straight', '识别顺子6张');
-
-  // Test 5: 连对
-  const pairCards = [3,3,4,4,5,5].map(v => new Card(SUITS[v % 4], RANK_NAMES[v]));
-  assert(identifyType(pairCards).type === 'consecutive_pairs', '识别连对');
-
-  // Test 6: 炸弹
-  const bomb = [new Card('♠','5'), new Card('♥','5'), new Card('♣','5'), new Card('♦','5')];
-  assert(identifyType(bomb).type === 'bomb', '识别炸弹');
-
-  // Test 7: 王炸
-  const rocket = [new Card('','小王'), new Card('','大王')];
-  assert(identifyType(rocket).type === 'rocket', '识别王炸');
-
-  // Test 8: canBeat
-  const play3 = identifyType([c3]);
-  const play5 = identifyType([c5]);
-  assert(canBeat(play5, play3), '5能压3');
-  assert(!canBeat(play3, play5), '3不能压5');
-  const playBomb = identifyType(bomb);
-  assert(canBeat(playBomb, play5), '炸弹能压单张');
-  assert(!canBeat(play5, playBomb), '单张不能压炸弹');
-
-  // Test 9: 飞机
-  const plane = [];
-  for (let v = 3; v <= 5; v++) {
-    for (let s = 0; s < 3; s++) {
-      plane.push(new Card(SUITS[s], RANK_NAMES[v]));
+    // ---- 四带二 ----
+    if (n === 6) {
+      for (var i4 = 0; i4 < ranks.length; i4++) {
+        if (counts[i4] === 4) {
+          // 剩余2张是单张
+          var others = [];
+          for (var io = 0; io < ranks.length; io++) {
+            if (io !== i4) {
+              for (var c = 0; c < counts[io]; c++) others.push(ranks[io]);
+            }
+          }
+          if (others.length === 2) {
+            return { type: HAND_TYPES.FOUR_PLUS_TWO, rank: ranks[i4], length: 6 };
+          }
+        }
+      }
     }
+
+    // ---- 四带两对 ----
+    if (n === 8) {
+      for (var i8 = 0; i8 < ranks.length; i8++) {
+        if (counts[i8] === 4) {
+          var pairCount2 = 0;
+          var valid2 = true;
+          for (var io2 = 0; io2 < ranks.length; io2++) {
+            if (io2 !== i8) {
+              if (counts[io2] === 2) pairCount2++;
+              else { valid2 = false; break; }
+            }
+          }
+          if (valid2 && pairCount2 === 2) {
+            return { type: HAND_TYPES.FOUR_PLUS_TWO_PAIRS, rank: ranks[i8], length: 8 };
+          }
+        }
+      }
+    }
+
+    return { type: HAND_TYPES.INVALID, rank: -1, length: 0 };
   }
-  assert(identifyType(plane).type === 'plane', '识别飞机');
 
-  // Test 10: 三带一
-  const tripleOne = [new Card('♠','K'), new Card('♥','K'), new Card('♣','K'), new Card('♦','3')];
-  assert(identifyType(tripleOne).type === 'triple_one', '识别三带一');
+  function isConsecutiveSequence(ranks, maxRank) {
+    if (ranks.length < 2) return false;
+    for (var i = 1; i < ranks.length; i++) {
+      if (ranks[i] !== ranks[i - 1] + 1) return false;
+    }
+    return ranks[ranks.length - 1] <= maxRank;
+  }
 
-  // Test 11: 三带二
-  const tripleTwo = [new Card('♠','A'), new Card('♥','A'), new Card('♣','A'), new Card('♦','3'), new Card('♠','3')];
-  assert(identifyType(tripleTwo).type === 'triple_two', '识别三带二');
+  function allCountsOne(counts) {
+    for (var i = 0; i < counts.length; i++) {
+      if (counts[i] !== 1) return false;
+    }
+    return true;
+  }
 
-  // Test 12: 牌排序
-  const unsorted = [new Card('♠','A'), new Card('♣','3'), new Card('♥','K')];
-  const sorted = sortHand(unsorted);
-  assert(sorted[0].rank === '3', '排序后第一张是3');
-  assert(sorted[2].rank === 'A', '排序后最后是A');
+  function allCountsAtLeast(counts, min) {
+    for (var i = 0; i < counts.length; i++) {
+      if (counts[i] < min) return false;
+    }
+    return true;
+  }
 
-  // Test 13: 合法出牌枚举
-  const validPlays = findValidPlays([c3, c5, cA]);
-  assert(validPlays.length >= 1, '至少有一个合法出牌');
+  function findConsecutiveRuns(ranks) {
+    if (ranks.length === 0) return [];
+    var runs = [];
+    var currentRun = [ranks[0]];
+    for (var i = 1; i < ranks.length; i++) {
+      if (ranks[i] === ranks[i - 1] + 1) {
+        currentRun.push(ranks[i]);
+      } else {
+        if (currentRun.length >= 2) runs.push(currentRun);
+        currentRun = [ranks[i]];
+      }
+    }
+    if (currentRun.length >= 2) runs.push(currentRun);
+    return runs;
+  }
 
-  console.log(`\n✅ 测试完成: ${passed} passed, ${failed} failed (共${passed+failed}项)`);
-  return { passed, failed, total: passed + failed };
-}
+  // ================================================================
+  // canBeat - 出牌校验
+  // ================================================================
 
-// 导出
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { Card, Deck, identifyType, canBeat, findValidPlays, sortHand, handToString, renderCardHTML, runTests, RANK_MAP, RANK_NAMES, SUITS };
-}
+  function canBeat(current, last) {
+    if (!current || !last || current.length === 0 || last.length === 0) return false;
+
+    var curInfo = identifyType(current);
+    var lastInfo = identifyType(last);
+
+    if (curInfo.type === HAND_TYPES.INVALID) return false;
+    if (lastInfo.type === HAND_TYPES.INVALID) return false;
+
+    // 火箭 > 一切
+    if (curInfo.type === HAND_TYPES.ROCKET) return true;
+    if (lastInfo.type === HAND_TYPES.ROCKET) return false;
+
+    // 炸弹 > 非炸弹（且非火箭）
+    if (curInfo.type === HAND_TYPES.BOMB && lastInfo.type !== HAND_TYPES.BOMB) return true;
+    if (lastInfo.type === HAND_TYPES.BOMB && curInfo.type !== HAND_TYPES.BOMB) return false;
+
+    // 同类比较
+    if (curInfo.type === lastInfo.type) {
+      // 对于有长度的牌型（顺子、连对、飞机等），长度必须相同
+      if (curInfo.type === HAND_TYPES.STRAIGHT ||
+          curInfo.type === HAND_TYPES.CONSECUTIVE_PAIRS ||
+          curInfo.type === HAND_TYPES.AIRPLANE ||
+          curInfo.type === HAND_TYPES.AIRPLANE_PLUS_SINGLES ||
+          curInfo.type === HAND_TYPES.AIRPLANE_PLUS_PAIRS) {
+        if (curInfo.length !== lastInfo.length) return false;
+      }
+      // 炸弹比rank
+      if (curInfo.type === HAND_TYPES.BOMB) {
+        return curInfo.rank > lastInfo.rank;
+      }
+      // 同型比较主rank
+      return curInfo.rank > lastInfo.rank;
+    }
+
+    return false;
+  }
+
+  // ================================================================
+  // 出牌枚举器（findValidPlays 的辅助函数）
+  // ================================================================
+
+  // ---------- 所有单张 ----------
+  function findAllSingles(groups) {
+    var result = [];
+    var sortedRanks = Object.keys(groups).map(Number).sort(function (a, b) { return a - b; });
+    for (var i = 0; i < sortedRanks.length; i++) {
+      var r = sortedRanks[i];
+      for (var j = 0; j < groups[r].length; j++) {
+        result.push([groups[r][j]]);
+      }
+    }
+    return result;
+  }
+
+  // ---------- 所有对子 ----------
+  function findAllPairs(groups) {
+    var result = [];
+    var sortedRanks = Object.keys(groups).map(Number).sort(function (a, b) { return a - b; });
+    for (var i = 0; i < sortedRanks.length; i++) {
+      var r = sortedRanks[i];
+      if (groups[r].length >= 2) {
+        result.push([groups[r][0], groups[r][1]]);
+      }
+    }
+    return result;
+  }
+
+  // ---------- 所有三张 ----------
+  function findAllTriples(groups) {
+    var result = [];
+    var sortedRanks = Object.keys(groups).map(Number).sort(function (a, b) { return a - b; });
+    for (var i = 0; i < sortedRanks.length; i++) {
+      var r = sortedRanks[i];
+      if (groups[r].length >= 3) {
+        result.push(groups[r].slice(0, 3));
+      }
+    }
+    return result;
+  }
+
+  // ---------- 所有炸弹 ----------
+  function findAllBombs(groups) {
+    var result = [];
+    var sortedRanks = Object.keys(groups).map(Number).sort(function (a, b) { return a - b; });
+    for (var i = 0; i < sortedRanks.length; i++) {
+      var r = sortedRanks[i];
+      if (groups[r].length === 4) {
+        result.push(groups[r].slice(0, 4));
+      }
+    }
+    return result;
+  }
+
+  // ---------- 火箭 ----------
+  function findRocket(groups) {
+    if (groups[13] && groups[14]) {
+      return [[groups[13][0], groups[14][0]]];
+    }
+    return [];
+  }
+
+  // ---------- 三带一 ----------
+  function findAllTriplePlusOne(groups) {
+    var result = [];
+    var sortedRanks = Object.keys(groups).map(Number).sort(function (a, b) { return a - b; });
+    for (var i = 0; i < sortedRanks.length; i++) {
+      var tripleRank = sortedRanks[i];
+      if (groups[tripleRank].length >= 3) {
+        var tripleCards = groups[tripleRank].slice(0, 3);
+        var kickPool = getAllSinglesPool(groups, [tripleRank]);
+        for (var k = 0; k < kickPool.length; k++) {
+          result.push(tripleCards.concat([kickPool[k]]));
+        }
+      }
+    }
+    return result;
+  }
+
+  // ---------- 三带二 ----------
+  function findAllTriplePlusTwo(groups) {
+    var result = [];
+    var sortedRanks = Object.keys(groups).map(Number).sort(function (a, b) { return a - b; });
+    for (var i = 0; i < sortedRanks.length; i++) {
+      var tripleRank = sortedRanks[i];
+      if (groups[tripleRank].length >= 3) {
+        var tripleCards = groups[tripleRank].slice(0, 3);
+        var pairPool = getAllPairsPool(groups, [tripleRank]);
+        for (var k = 0; k < pairPool.length; k++) {
+          result.push(tripleCards.concat(pairPool[k]));
+        }
+      }
+    }
+    return result;
+  }
+
+  // ---------- 顺子 ----------
+  function findAllStraights(groups) {
+    var result = [];
+    // 只考虑3~A (rank 0~11)
+    var available = [];
+    for (var r = 0; r <= STRAIGHT_MAX_RANK; r++) {
+      available.push(groups[r] && groups[r].length >= 1);
+    }
+
+    var start = 0;
+    while (start <= STRAIGHT_MAX_RANK - 4) {
+      if (!available[start]) { start++; continue; }
+      var end = start;
+      while (end <= STRAIGHT_MAX_RANK && available[end]) end++;
+      var runLen = end - start;
+      if (runLen >= 5) {
+        // 这个run里所有长度>=5的顺子
+        for (var len = 5; len <= runLen; len++) {
+          for (var s = start; s + len <= end; s++) {
+            var cards = [];
+            for (var rr = s; rr < s + len; rr++) {
+              cards.push(groups[rr][0]); // 取第一个
+            }
+            result.push(cards);
+          }
+        }
+      }
+      start = end;
+    }
+
+    return result;
+  }
+
+  // ---------- 连对 ----------
+  function findAllConsecutivePairs(groups) {
+    var result = [];
+    var available = [];
+    for (var r = 0; r <= STRAIGHT_MAX_RANK; r++) {
+      available.push(groups[r] && groups[r].length >= 2);
+    }
+
+    var start = 0;
+    while (start <= STRAIGHT_MAX_RANK - 2) {
+      if (!available[start]) { start++; continue; }
+      var end = start;
+      while (end <= STRAIGHT_MAX_RANK && available[end]) end++;
+      var runLen = end - start;
+      if (runLen >= 3) {
+        for (var len = 3; len <= runLen; len++) {
+          for (var s = start; s + len <= end; s++) {
+            var cards = [];
+            for (var rr = s; rr < s + len; rr++) {
+              cards.push(groups[rr][0], groups[rr][1]);
+            }
+            result.push(cards);
+          }
+        }
+      }
+      start = end;
+    }
+
+    return result;
+  }
+
+  // ---------- 飞机 (含带牌) ----------
+  function findAllAirplanes(groups) {
+    var result = [];
+
+    // 找rank 0~11范围内至少有3张的rank
+    var tripleAvailable = [];
+    for (var r = 0; r <= STRAIGHT_MAX_RANK; r++) {
+      tripleAvailable.push(groups[r] && groups[r].length >= 3);
+    }
+
+    var start = 0;
+    while (start <= STRAIGHT_MAX_RANK - 1) {
+      if (!tripleAvailable[start]) { start++; continue; }
+      var end = start;
+      while (end <= STRAIGHT_MAX_RANK && tripleAvailable[end]) end++;
+      var runLen = end - start;
+      if (runLen >= 2) {
+        // 所有长度的连续三张
+        for (var len = 2; len <= runLen; len++) {
+          for (var s = start; s + len <= end; s++) {
+            var airRanks = [];
+            var airCards = [];
+            for (var rr = s; rr < s + len; rr++) {
+              airRanks.push(rr);
+              airCards.push(groups[rr][0], groups[rr][1], groups[rr][2]);
+            }
+
+            // 纯飞机
+            result.push({ type: HAND_TYPES.AIRPLANE, cards: airCards.slice() });
+
+            // 计算剩余牌（模拟移除飞机主体）
+            var remainingGroups = {};
+            for (var rg in groups) {
+              if (groups.hasOwnProperty(rg)) {
+                var rgNum = Number(rg);
+                if (airRanks.indexOf(rgNum) >= 0) {
+                  if (groups[rg].length > 3) {
+                    remainingGroups[rg] = groups[rg].slice(3);
+                  }
+                } else {
+                  remainingGroups[rg] = groups[rg].slice();
+                }
+              }
+            }
+
+            // 飞机带单: 需要 len 张单张
+            var singlePool = getAllSinglesPool(remainingGroups);
+            if (singlePool.length >= len) {
+              for (var kickCombo of combinations(singlePool, len)) {
+                result.push({ type: HAND_TYPES.AIRPLANE_PLUS_SINGLES, cards: airCards.concat(kickCombo) });
+              }
+            }
+
+            // 飞机带对: 需要 len 对
+            var pairPool = getAllPairsPool(remainingGroups);
+            if (pairPool.length >= len) {
+              for (var pairCombo of combinations(pairPool, len)) {
+                var pairCards = [];
+                for (var pc = 0; pc < pairCombo.length; pc++) {
+                  pairCards.push(pairCombo[pc][0], pairCombo[pc][1]);
+                }
+                result.push({ type: HAND_TYPES.AIRPLANE_PLUS_PAIRS, cards: airCards.concat(pairCards) });
+              }
+            }
+          }
+        }
+      }
+      start = end;
+    }
+
+    return result;
+  }
+
+  // ---------- 四带二 ----------
+  function findAllFourPlusTwo(groups) {
+    var result = [];
+    var sortedRanks = Object.keys(groups).map(Number).sort(function (a, b) { return a - b; });
+    for (var i = 0; i < sortedRanks.length; i++) {
+      var bombRank = sortedRanks[i];
+      if (groups[bombRank].length === 4) {
+        var bombCards = groups[bombRank].slice(0, 4);
+
+        // 四带二单
+        var remaining = {};
+        for (var rg in groups) {
+          if (groups.hasOwnProperty(rg)) {
+            var r = Number(rg);
+            if (r !== bombRank) {
+              remaining[r] = groups[r].slice();
+            }
+          }
+        }
+        var singlePool = getAllSinglesPool(remaining);
+        if (singlePool.length >= 2) {
+          for (var kickCombo of combinations(singlePool, 2)) {
+            result.push({ type: HAND_TYPES.FOUR_PLUS_TWO, cards: bombCards.concat(kickCombo) });
+          }
+        }
+
+        // 四带两对
+        var pairPool = getAllPairsPool(remaining);
+        if (pairPool.length >= 2) {
+          for (var pairCombo of combinations(pairPool, 2)) {
+            var pairCards = [];
+            for (var pc = 0; pc < pairCombo.length; pc++) {
+              pairCards.push(pairCombo[pc][0], pairCombo[pc][1]);
+            }
+            result.push({ type: HAND_TYPES.FOUR_PLUS_TWO_PAIRS, cards: bombCards.concat(pairCards) });
+          }
+        }
+      }
+    }
+    return result;
+  }
+
+  // ================================================================
+  // findValidPlays - 合法出牌枚举（含去重）
+  // ================================================================
+
+  function findValidPlays(hand, lastPlay) {
+    if (!hand || hand.length === 0) return [];
+
+    var groups = groupByRank(hand);
+
+    // 收集所有可能的牌型
+    var allPlays = [];
+
+    // 基础类型
+    var singles = findAllSingles(groups);
+    for (var i = 0; i < singles.length; i++) allPlays.push(singles[i]);
+
+    var pairs = findAllPairs(groups);
+    for (var j = 0; j < pairs.length; j++) allPlays.push(pairs[j]);
+
+    var triples = findAllTriples(groups);
+    for (var k = 0; k < triples.length; k++) allPlays.push(triples[k]);
+
+    // 复合类型
+    var tp1 = findAllTriplePlusOne(groups);
+    for (var m = 0; m < tp1.length; m++) allPlays.push(tp1[m]);
+
+    var tp2 = findAllTriplePlusTwo(groups);
+    for (var n = 0; n < tp2.length; n++) allPlays.push(tp2[n]);
+
+    var straights = findAllStraights(groups);
+    for (var p = 0; p < straights.length; p++) allPlays.push(straights[p]);
+
+    var consecutivePairs = findAllConsecutivePairs(groups);
+    for (var q = 0; q < consecutivePairs.length; q++) allPlays.push(consecutivePairs[q]);
+
+    var airplanes = findAllAirplanes(groups);
+    for (var r = 0; r < airplanes.length; r++) allPlays.push(airplanes[r].cards);
+
+    var bombs = findAllBombs(groups);
+    for (var s = 0; s < bombs.length; s++) allPlays.push(bombs[s]);
+
+    var rocket = findRocket(groups);
+    for (var t = 0; t < rocket.length; t++) allPlays.push(rocket[t]);
+
+    var fourPlusTwo = findAllFourPlusTwo(groups);
+    for (var u = 0; u < fourPlusTwo.length; u++) allPlays.push(fourPlusTwo[u].cards);
+
+    // 去重
+    allPlays = deduplicate(allPlays);
+
+    // 按类型 & 强度排序（方便AI使用）
+    allPlays.sort(function (a, b) {
+      var ai = identifyType(a);
+      var bi = identifyType(b);
+      var orderA = typeSortOrder(ai.type);
+      var orderB = typeSortOrder(bi.type);
+      if (orderA !== orderB) return orderA - orderB;
+      if (ai.rank !== bi.rank) return ai.rank - bi.rank;
+      if (ai.length !== bi.length) return ai.length - bi.length;
+      return a.length - b.length;
+    });
+
+    // 如果没有lastPlay，返回全部
+    if (!lastPlay || lastPlay.length === 0) {
+      return allPlays;
+    }
+
+    // 过滤出能压上的
+    var lastInfo = identifyType(lastPlay);
+    if (!lastInfo || lastInfo.type === HAND_TYPES.INVALID) return [];
+    if (lastInfo.type === HAND_TYPES.ROCKET) return [];
+
+    var result = [];
+    for (var v = 0; v < allPlays.length; v++) {
+      if (canBeat(allPlays[v], lastPlay)) {
+        result.push(allPlays[v]);
+      }
+    }
+    return result;
+  }
+
+  function typeSortOrder(type) {
+    var order = {
+      SINGLE: 0,
+      PAIR: 1,
+      TRIPLE: 2,
+      TRIPLE_PLUS_ONE: 3,
+      TRIPLE_PLUS_TWO: 4,
+      STRAIGHT: 5,
+      CONSECUTIVE_PAIRS: 6,
+      AIRPLANE: 7,
+      AIRPLANE_PLUS_SINGLES: 8,
+      AIRPLANE_PLUS_PAIRS: 9,
+      FOUR_PLUS_TWO: 10,
+      FOUR_PLUS_TWO_PAIRS: 11,
+      BOMB: 12,
+      ROCKET: 13
+    };
+    return order[type] !== undefined ? order[type] : 99;
+  }
+
+  // ================================================================
+  // sortCards - 排序器
+  // ================================================================
+
+  // 按 rank 升序（3最小，大王最大），同rank按 suit
+  function sortCards(cards) {
+    return cards.slice().sort(function (a, b) {
+      if (a.rank !== b.rank) return a.rank - b.rank;
+      // suit: spade > heart > club > diamond > joker
+      var suitOrder = { spade: 0, heart: 1, club: 2, diamond: 3, joker: 4 };
+      return (suitOrder[a.suit] || 99) - (suitOrder[b.suit] || 99);
+    });
+  }
+
+  // 降序排列（大王最大，3最小）
+  function sortCardsDesc(cards) {
+    return cards.slice().sort(function (a, b) {
+      if (a.rank !== b.rank) return b.rank - a.rank;
+      var suitOrder = { spade: 0, heart: 1, club: 2, diamond: 3, joker: 4 };
+      return (suitOrder[a.suit] || 99) - (suitOrder[b.suit] || 99);
+    });
+  }
+
+  // ================================================================
+  // renderHTML - HTML渲染模板
+  // ================================================================
+
+  function renderHTML(cards, opts) {
+    opts = opts || {};
+    var title = opts.title || '\u624B\u724C';
+    var showType = opts.showType !== false;
+    var compact = opts.compact || false;
+
+    var sorted = sortCards(cards);
+    var info = showType ? identifyType(sorted) : null;
+
+    var html = '<div class="ddz-hand">';
+    if (title) {
+      html += '<div class="ddz-hand-title">' + escapeHtml(title);
+      if (info && info.type !== HAND_TYPES.INVALID) {
+        html += ' <span class="ddz-hand-type">[' + (HAND_TYPE_NAMES[info.type] || info.type) + ']</span>';
+      }
+      html += '</div>';
+    }
+    html += '<div class="ddz-cards">';
+    for (var i = 0; i < sorted.length; i++) {
+      html += renderCardHTML(sorted[i], compact);
+    }
+    html += '</div></div>';
+    return html;
+  }
+
+  function renderCardHTML(card, compact) {
+    var colorClass = card.isRed() ? 'ddz-card-red' : 'ddz-card-black';
+    var display = card.displayName();
+    var symbol = card.suitSymbol();
+
+    if (compact) {
+      return '<span class="ddz-card ' + colorClass + '">' +
+        symbol + display + '</span>';
+    }
+
+    return '<div class="ddz-card ' + colorClass + '">' +
+      '<div class="ddz-card-corner-top">' + display + '</div>' +
+      '<div class="ddz-card-center">' + symbol + '</div>' +
+      '<div class="ddz-card-corner-bottom">' + display + '</div>' +
+      '</div>';
+  }
+
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // 渲染完整HTML页面（含CSS）
+  function renderFullPage(cardsArray, opts) {
+    opts = opts || {};
+    var title = opts.title || '\u6597\u5730\u4E3B - \u724C\u5F62\u5C55\u793A';
+
+    var html = '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">' +
+      '<meta name="viewport" content="width=device-width, initial-scale=1.0">' +
+      '<title>' + escapeHtml(title) + '</title>' +
+      '<style>' + getCSS() + '</style></head><body>' +
+      '<div class="ddz-container">';
+
+    if (Array.isArray(cardsArray) && !Array.isArray(cardsArray[0])) {
+      html += renderHTML(cardsArray, opts);
+    } else if (Array.isArray(cardsArray)) {
+      for (var i = 0; i < cardsArray.length; i++) {
+        html += renderHTML(cardsArray[i], { title: '\u73A9\u5BB6' + (i + 1) });
+      }
+    }
+
+    html += '</div></body></html>';
+    return html;
+  }
+
+  function getCSS() {
+    return [
+      'body{background:#1a1a2e;font-family:"Microsoft YaHei","PingFang SC",sans-serif;margin:0;padding:20px}',
+      '.ddz-container{max-width:900px;margin:0 auto}',
+      '.ddz-hand{background:linear-gradient(135deg,#16213e,#0f3460);border-radius:12px;padding:16px;margin-bottom:16px;box-shadow:0 4px 20px rgba(0,0,0,0.3)}',
+      '.ddz-hand-title{color:#e0e0e0;font-size:16px;margin-bottom:10px;font-weight:bold}',
+      '.ddz-hand-type{color:#f0c040;font-size:14px;font-weight:normal}',
+      '.ddz-cards{display:flex;flex-wrap:wrap;gap:6px}',
+      '.ddz-card-red{color:#e74c3c}',
+      '.ddz-card-black{color:#ecf0f1}',
+      '.ddz-card{display:inline-flex;flex-direction:column;align-items:center;justify-content:center;min-width:36px;height:52px;padding:4px;background:linear-gradient(135deg,#2c3e50,#34495e);border:1px solid #4a6278;border-radius:6px;font-size:16px;font-weight:bold;cursor:default;transition:transform 0.2s,box-shadow 0.2s}',
+      '.ddz-card:hover{transform:translateY(-4px);box-shadow:0 4px 12px rgba(240,192,64,0.3);border-color:#f0c040}',
+      '.ddz-card-center{font-size:20px;line-height:1}',
+      '.ddz-card-corner-top,.ddz-card-corner-bottom{font-size:11px;line-height:1}',
+      '.ddz-card-corner-bottom{transform:rotate(180deg);margin-top:2px}',
+    ].join('');
+  }
+
+  // ================================================================
+  // 导出
+  // ================================================================
+
+  return {
+    Card: Card,
+    Deck: Deck,
+    HAND_TYPES: HAND_TYPES,
+    HAND_TYPE_NAMES: HAND_TYPE_NAMES,
+    identifyType: identifyType,
+    canBeat: canBeat,
+    findValidPlays: findValidPlays,
+    sortCards: sortCards,
+    sortCardsDesc: sortCardsDesc,
+    renderHTML: renderHTML,
+    renderFullPage: renderFullPage,
+    groupByRank: groupByRank,
+    combinations: combinations,
+    // 常量
+    SUITS: SUITS,
+    RANK_NAMES: RANK_NAMES,
+    RANK_NAME_MAP: RANK_NAME_MAP
+  };
+}));
