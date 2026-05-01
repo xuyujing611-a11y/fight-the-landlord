@@ -334,34 +334,27 @@ GameScene.prototype.renderPlayerHand = function () {
 // ================================================================
 
 GameScene.prototype._clearCardSelection = function () {
+  var n = this.playerHand.length;
+  var cardWidth = 44;
+  var baseY = 590;
   for (var i = 0; i < this.cardDomElements.length; i++) {
     var el = this.cardDomElements[i];
-    if (el.getData('selected')) {
-      var bg = el.getData('bg');
-      if (bg) {
-        var cw = 40, ch = 58;
-        bg.clear();
-        bg.fillStyle(0xFFFFFF, 1);
-        bg.fillRoundedRect(el.x - cw/2, el.y - ch/2, cw, ch, 4);
-        bg.lineStyle(1, 0x90A4AE, 1);
-        bg.strokeRoundedRect(el.x - cw/2, el.y - ch/2, cw, ch, 4);
-      }
-      el.setData('selected', false);
+    var cardNode = el.node && el.node.firstElementChild;
+    if (cardNode) cardNode.classList.remove('ddz-card-selected');
+    el.setData('selected', false);
+    if (n > 0) {
+      var overlap = n > 6 ? Math.min(16, (315 - cardWidth) / (n - 1)) : 30;
+      var arcOffset = Math.pow((i / Math.max(1, n - 1)) - 0.5, 2) * 32;
+      el.setY(baseY - arcOffset);
     }
   }
 };
 
 GameScene.prototype._highlightCard = function (el) {
   el.setData('selected', true);
-  var bg = el.getData('bg');
-  if (bg) {
-    var cw = 40, ch = 58;
-    bg.clear();
-    bg.fillStyle(0xFFFFFF, 1);
-    bg.fillRoundedRect(el.x - cw/2, el.y - ch/2, cw, ch, 4);
-    bg.lineStyle(2, 0x4ECDC4, 1);
-    bg.strokeRoundedRect(el.x - cw/2, el.y - ch/2, cw, ch, 4);
-  }
+  el.setY(el.y - 20);
+  var cardNode = el.node && el.node.firstElementChild;
+  if (cardNode) cardNode.classList.add('ddz-card-selected');
 };
 
 // ================================================================
@@ -613,8 +606,15 @@ GameScene.prototype.handleAIPlay = function (aiIndex, aiName, res) {
     this.gameState = GAME_STATE.ROUND_END;
     return;
   }
-  this.gameState = GAME_STATE.PLAYER_TURN;
-  this.setStatusText('\u8F6E\u5230\u4F60\u51FA\u724C');
+  if (aiIndex === 0) {
+    // AI1 played, now AI2's turn
+    var self = this;
+    this.setStatusText(aiName + ' \u51FA\u4E86 ' + (Doudizhu.HAND_TYPE_NAMES[info.type] || info.type) + '\uFF0C\u8F6E\u5230\u82CF\u751C\u751C');
+    this.time.delayedCall(600, function () { self.doAITurn(1); });
+  } else {
+    this.gameState = GAME_STATE.PLAYER_TURN;
+    this.setStatusText('\u8F6E\u5230\u4F60\u51FA\u724C');
+  }
 };
 
 GameScene.prototype.handleAIPass = function (aiIndex, aiName) {
@@ -629,8 +629,15 @@ GameScene.prototype.handleAIPass = function (aiIndex, aiName) {
     this.setStatusText('\u4E24\u5BB6\u90FD\u8FC7\uFF0C\u8F6E\u5230\u4F60\u81EA\u7531\u51FA\u724C');
     return;
   }
-  this.gameState = GAME_STATE.PLAYER_TURN;
-  this.setStatusText('\u8F6E\u5230\u4F60\u51FA\u724C');
+  if (aiIndex === 0) {
+    // AI1 passed, now AI2's turn
+    var self = this;
+    this.setStatusText(aiName + ' \u4E0D\u51FA\uFF0C\u8F6E\u5230\u82CF\u751C\u751C');
+    this.time.delayedCall(600, function () { self.doAITurn(1); });
+  } else {
+    this.gameState = GAME_STATE.PLAYER_TURN;
+    this.setStatusText('\u8F6E\u5230\u4F60\u51FA\u724C');
+  }
 };
 
 GameScene.prototype.localAIPlay = function (aiIndex, aiName) {
@@ -659,8 +666,14 @@ GameScene.prototype.localAIPlay = function (aiIndex, aiName) {
     this.gameState = GAME_STATE.ROUND_END;
     return;
   }
-  this.gameState = GAME_STATE.PLAYER_TURN;
-  this.setStatusText('\u8F6E\u5230\u4F60\u51FA\u724C');
+  if (aiIndex === 0) {
+    // AI1 played (local), now AI2's turn
+    var self = this;
+    this.time.delayedCall(600, function () { self.doAITurn(1); });
+  } else {
+    this.gameState = GAME_STATE.PLAYER_TURN;
+    this.setStatusText('\u8F6E\u5230\u4F60\u51FA\u724C');
+  }
 };
 
 GameScene.prototype.updateAICount = function (aiIndex) {

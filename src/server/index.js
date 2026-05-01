@@ -23,6 +23,7 @@ const quizRouter = require('./routes/quiz');
 const verifyRouter = require('./routes/verify');
 const wrongbookRouter = require('./routes/wrongbook');
 const chaosRouter = require('./routes/chaos');
+const { router: biddingRouter } = require('./routes/bidding');
 
 const app = express();
 const PORT = process.env.PORT || 3100;
