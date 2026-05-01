@@ -18,11 +18,24 @@ const cardUtils = require('../utils/cardUtils');
 
 const { Doudizhu } = cardUtils;
 
-// 叫分状态（单局内存，生产环境应放 session/redis）
-var biddingState = null;
+// 叫分状态 — 用 Map 按 sessionId/playerId 存储，避免多人冲突
+const biddingStates = new Map();
 
-function resetBidding() {
-  biddingState = null;
+function getBiddingState(id) {
+  return biddingStates.get(id) || null;
+}
+
+function setBiddingState(id, state) {
+  if (biddingStates.size > 100) {
+    // 防止内存泄漏：清理旧 session
+    const oldest = biddingStates.keys().next().value;
+    biddingStates.delete(oldest);
+  }
+  biddingStates.set(id, state);
+}
+
+function resetBidding(id) {
+  if (id) biddingStates.delete(id);
 }
 
 /** 规范化单张牌：确保王牌的suit正确 */
@@ -122,8 +135,8 @@ router.post('/start', (req, res) => {
       order.push((firstBidder + i) % 3);
     }
 
-    biddingState = {
-      id: `bid_${Date.now()}`,
+    const biddingState = {
+      id: `bid_${Date.now()}_${playerId || 'anon'}`,
       playerId: playerId || 'anonymous',
       hands: normalizeHands(hands),  // 0=玩家, 1=AI1, 2=AI2
       remaining: normalizeCards(remaining || []),
@@ -137,6 +150,7 @@ router.post('/start', (req, res) => {
       phase: 'bidding',
       startedAt: Date.now()
     };
+    setBiddingState(biddingState.id, biddingState);
 
     const turn = order[0]; // 当前应该叫分的人
 
@@ -188,15 +202,12 @@ router.post('/place', (req, res) => {
   try {
     const { biddingId, bid, playerIndex } = req.body;
 
-    if (!biddingState) {
+    const bs = getBiddingState(biddingId);
+    if (!bs) {
       return res.status(400).json({ error: 'No active bidding session. Call /bidding/start first.' });
     }
 
-    if (biddingState.id !== biddingId) {
-      return res.status(400).json({ error: 'Bidding ID mismatch. Session expired.' });
-    }
-
-    if (biddingState.phase !== 'bidding') {
+    if (bs.phase !== 'bidding') {
       return res.status(400).json({ error: 'Bidding is already completed' });
     }
 
@@ -213,7 +224,7 @@ router.post('/place', (req, res) => {
     }
 
     // 验证叫分顺序
-    const expectedIdx = biddingState.order[biddingState.currentTurnIndex];
+    const expectedIdx = bs.order[bs.currentTurnIndex];
     if (idx !== expectedIdx) {
       return res.status(400).json({
         error: `Not your turn. Expected player ${expectedIdx}, got ${idx}`
@@ -221,38 +232,41 @@ router.post('/place', (req, res) => {
     }
 
     // 记录叫分
-    biddingState.bids[idx] = bid;
+    bs.bids[idx] = bid;
 
     if (bid === 0) {
-      biddingState.passCount++;
+      bs.passCount++;
     } else {
       // 有效叫分
-      if (bid > biddingState.highestBid) {
-        biddingState.highestBid = bid;
-        biddingState.highestBidder = idx;
+      if (bid > bs.highestBid) {
+        bs.highestBid = bid;
+        bs.highestBidder = idx;
       }
       // 叫3分直接地主
       if (bid === 3) {
-        return finishBidding(res, idx);
+        setBiddingState(biddingId, bs);
+        return finishBidding(res, bs, idx);
       }
     }
 
     // 检查是否所有人都叫完了
-    const nextTurnIndex = biddingState.currentTurnIndex + 1;
+    const nextTurnIndex = bs.currentTurnIndex + 1;
 
     // 如果所有人都叫完了（3人全部叫完）
     if (nextTurnIndex >= 3) {
       // 有人叫分
-      if (biddingState.highestBidder >= 0) {
-        return finishBidding(res, biddingState.highestBidder);
+      if (bs.highestBidder >= 0) {
+        setBiddingState(biddingId, bs);
+        return finishBidding(res, bs, bs.highestBidder);
       } else {
         // 全都不叫
-        biddingState.phase = 'redeal';
+        bs.phase = 'redeal';
+        setBiddingState(biddingId, bs);
         return res.json({
           phase: 'redeal',
           turn: null,
           currentBidder: null,
-          bids: biddingState.bids,
+          bids: bs.bids,
           highestBid: 0,
           highestBidder: -1,
           landlordCards: null,
@@ -264,16 +278,17 @@ router.post('/place', (req, res) => {
     }
 
     // 轮到下一个人
-    biddingState.currentTurnIndex = nextTurnIndex;
-    const nextPlayer = biddingState.order[nextTurnIndex];
+    bs.currentTurnIndex = nextTurnIndex;
+    setBiddingState(biddingId, bs);
+    const nextPlayer = bs.order[nextTurnIndex];
 
     res.json({
       phase: 'bidding',
       turn: nextPlayer,
       currentBidder: nextPlayer === 0 ? 'player' : (nextPlayer === 1 ? 'ai1' : 'ai2'),
-      bids: biddingState.bids,
-      highestBid: biddingState.highestBid,
-      highestBidder: biddingState.highestBidder,
+      bids: bs.bids,
+      highestBid: bs.highestBid,
+      highestBidder: bs.highestBidder,
       landlordCards: null,
       landlordHand: null,
       winnerText: null,
@@ -290,11 +305,14 @@ router.post('/place', (req, res) => {
 
 /**
  * 完成叫分，确定地主
+ * @param {object} res - Express response
+ * @param {object} bs - Bidding state object
+ * @param {number} landlordIndex - 地主索引
  */
-function finishBidding(res, landlordIndex) {
-  const remaining = biddingState.remaining || [];
+function finishBidding(res, bs, landlordIndex) {
+  const remaining = bs.remaining || [];
   const landlordHand = [
-    ...biddingState.hands[landlordIndex].map(c =>
+    ...bs.hands[landlordIndex].map(c =>
       typeof c === 'number' ? { suit: 'spade', rank: c } : c
     ),
     ...remaining.map(c =>
@@ -302,8 +320,8 @@ function finishBidding(res, landlordIndex) {
     )
   ];
 
-  biddingState.phase = 'done';
-  biddingState.landlordIndex = landlordIndex;
+  bs.phase = 'done';
+  bs.landlordIndex = landlordIndex;
 
   // 整理地主手牌
   const sortedLandlord = Doudizhu.sortCards(
@@ -320,18 +338,18 @@ function finishBidding(res, landlordIndex) {
   );
 
   const landlordName = landlordIndex === 0 ? '你' : (landlordIndex === 1 ? '王怼怼' : '苏甜甜');
-  const bid = biddingState.bids[landlordIndex];
+  const bid = bs.bids[landlordIndex];
 
   res.json({
     phase: 'done',
     turn: null,
     currentBidder: null,
-    bids: biddingState.bids,
-    highestBid: biddingState.highestBid,
+    bids: bs.bids,
+    highestBid: bs.highestBid,
     highestBidder: landlordIndex,
     landlordIndex,
     landlordName,
-    landlordCards: biddingState.remaining.map(c =>
+    landlordCards: bs.remaining.map(c =>
       typeof c === 'object' && c.suit ? c : { suit: 'spade', rank: c }
     ),
     landlordHand: sortedLandlord.map(c => ({
@@ -417,10 +435,13 @@ router.get('/ai', (req, res) => {
 
 // ============================================================
 // POST /api/bidding/reset - 重置叫分状态
+// Body: { biddingId?: string }  指定ID则只清除该会话，否则清除全部
 // ============================================================
 router.post('/reset', (req, res) => {
-  resetBidding();
-  res.json({ success: true, message: 'Bidding state reset' });
+  const { biddingId } = req.body || {};
+  resetBidding(biddingId);
+  const count = biddingId ? 1 : biddingStates.size;
+  res.json({ success: true, message: `Cleared ${count} bidding session(s)` });
 });
 
 module.exports = { router, resetBidding };
