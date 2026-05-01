@@ -231,6 +231,13 @@ router.post('/place', (req, res) => {
       });
     }
 
+    // 斗地主加叫规则：后叫的人必须比当前最高分高（或不叫）
+    if (bid > 0 && bid <= bs.highestBid) {
+      return res.status(400).json({
+        error: `Bid must be higher than current highest bid (${bs.highestBid}) or pass (0)`
+      });
+    }
+
     // 记录叫分
     bs.bids[idx] = bid;
 
