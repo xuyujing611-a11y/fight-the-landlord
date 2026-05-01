@@ -263,6 +263,14 @@ async function generateQuestion(type, difficulty) {
     result._difficulty = diff;
     result._generated = true;
     result._ts = Date.now();
+
+    // 补充缓存：生成的题目放入缓存供后续复用
+    const cacheKey = `${type}:${diff}`;
+    if (!questionCache[cacheKey]) questionCache[cacheKey] = [];
+    if (questionCache[cacheKey].length < 20) {
+      questionCache[cacheKey].push(result);
+    }
+
     return result;
 
   } catch (err) {
