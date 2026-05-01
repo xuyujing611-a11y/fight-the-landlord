@@ -662,20 +662,43 @@ GameScene.prototype.finishBidding = function (res) {
 GameScene.prototype.showBottomCards = function (cards) {
   if (!cards || cards.length === 0) return;
   var cx = 187;
-  // 清除旧的底牌文字
+  // 清除旧的底牌文字与图形
   if (this.bottomCardsText) this.bottomCardsText.destroy();
+  if (this.bottomCardGfx) this.bottomCardGfx.destroy();
 
   var display = cards.map(function (c) {
     return Doudizhu.RANK_NAME_MAP[c.rank] || '?';
   }).join(' ');
 
-  this.bottomCardsText = this.add.text(cx, 380, '\u5E95\u724C: ' + display, {
+  this.bottomCardsText = this.add.text(cx, 380, '底牌: ' + display, {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '14px', color: '#FFD93D', fontStyle: 'bold',
     stroke: '#000000', strokeThickness: 3
   }).setOrigin(0.5).setDepth(20);
-};
 
+  // 绘制底牌牌面图案（蓝色牌背花纹）
+  this.bottomCardGfx = this.add.graphics().setDepth(19);
+  var bw = 20, bh = 28, gap = 4;
+  var totalW = cards.length * (bw + gap) - gap;
+  var bx = Math.round(cx - totalW / 2);
+  for (var i = 0; i < cards.length; i++) {
+    var c = cards[i];
+    var cx2 = bx + i * (bw + gap);
+    // 蓝色牌背
+    this.bottomCardGfx.fillStyle(0x1565C0, 1);
+    this.bottomCardGfx.fillRoundedRect(cx2, 398, bw, bh, 2);
+    this.bottomCardGfx.lineStyle(1, 0x0D47A1, 0.5);
+    this.bottomCardGfx.strokeRoundedRect(cx2, 398, bw, bh, 2);
+    this.bottomCardGfx.fillStyle(0x1976D2, 1);
+    this.bottomCardGfx.fillRect(cx2 + 3, 398 + 4, bw - 6, bh - 8);
+    this.bottomCardGfx.fillStyle(0x42A5F5, 0.4);
+    this.bottomCardGfx.fillCircle(cx2 + bw/2, 398 + bh/2, 3);
+    // 花色颜色标记
+    var isRed = c.isRed ? c.isRed() : (c.suit === 'heart' || c.suit === 'diamond');
+    this.bottomCardGfx.fillStyle(isRed ? 0xE53935 : 0x212121, 0.7);
+    this.bottomCardGfx.fillRect(cx2 + 4, 398 + 5, 4, 3);
+  }
+};
 GameScene.prototype.localAssignLandlord = function () {
   // 本地模式：随机定地主，直接开始游戏
   this.landlordIndex = Math.floor(Math.random() * 3);
