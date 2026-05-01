@@ -680,7 +680,8 @@
       var runLen = end - start;
       if (runLen >= 5) {
         // 这个run里所有长度>=5的顺子
-        for (var len = 5; len <= runLen; len++) {
+        var maxLen = Math.min(runLen, 8); // B4: 顺子最长8张，避免组合爆炸
+        for (var len = 5; len <= maxLen; len++) {
           for (var s = start; s + len <= end; s++) {
             var cards = [];
             for (var rr = s; rr < s + len; rr++) {
@@ -711,7 +712,8 @@
       while (end <= STRAIGHT_MAX_RANK && available[end]) end++;
       var runLen = end - start;
       if (runLen >= 3) {
-        for (var len = 3; len <= runLen; len++) {
+        var maxLen = Math.min(runLen, 6); // B4: 连对最长6对，避免组合爆炸
+        for (var len = 3; len <= maxLen; len++) {
           for (var s = start; s + len <= end; s++) {
             var cards = [];
             for (var rr = s; rr < s + len; rr++) {
@@ -744,8 +746,9 @@
       while (end <= STRAIGHT_MAX_RANK && tripleAvailable[end]) end++;
       var runLen = end - start;
       if (runLen >= 2) {
+        var maxLen = Math.min(runLen, 4); // B4: 飞机最长4连，避免组合爆炸
         // 所有长度的连续三张
-        for (var len = 2; len <= runLen; len++) {
+        for (var len = 2; len <= maxLen; len++) {
           for (var s = start; s + len <= end; s++) {
             var airRanks = [];
             var airCards = [];

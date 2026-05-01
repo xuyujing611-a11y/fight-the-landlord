@@ -891,11 +891,12 @@ GameScene.prototype.confirmPlay = function (playCards, info) {
   var self = this;
   var playSet = {};
   for (var i = 0; i < playCards.length; i++) {
-    playSet[playCards[i].suit + ':' + playCards[i].rank] = true;
+    var key = playCards[i].suit + ':' + playCards[i].rank;
+    playSet[key] = (playSet[key] || 0) + 1;
   }
   for (var j = this.playerHand.length - 1; j >= 0; j--) {
     var key = this.playerHand[j].suit + ':' + this.playerHand[j].rank;
-    if (playSet[key]) this.playerHand.splice(j, 1);
+    if (playSet[key] > 0) { playSet[key]--; this.playerHand.splice(j, 1); }
   }
 
   this.lastPlay = playCards;
@@ -918,6 +919,7 @@ GameScene.prototype.confirmPlay = function (playCards, info) {
     SoundManager.win();
     return;
   }
+  this.gameState = GAME_STATE.WAITING_AI;
   this.time.delayedCall(600, function () { self.doAITurn(0); });
 };
 
@@ -942,6 +944,7 @@ GameScene.prototype.doPlayerPass = function () {
       var aiName = this.lastPlayPlayer === 'ai1' ? '\u738B\u603C\u603C' : '\u82CF\u751C\u751C';
       var selfB1 = this;
       this.setStatusText('\u4E24\u5BB6\u90FD\u8FC7\uFF0C\u8F6E\u5230' + aiName);
+      this.gameState = GAME_STATE.WAITING_AI;
       this.time.delayedCall(500, function () { selfB1.doAITurn(aiIdx); });
     } else {
       this.gameState = GAME_STATE.PLAYER_TURN;
@@ -950,6 +953,7 @@ GameScene.prototype.doPlayerPass = function () {
     return;
   }
   var self = this;
+  this.gameState = GAME_STATE.WAITING_AI;
   this.time.delayedCall(500, function () { self.doAITurn(1); });
 };
 
