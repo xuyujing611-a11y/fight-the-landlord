@@ -1106,6 +1106,12 @@ GameScene.prototype.displayPlay = function (cards, player) {
   }
   if (!gfx) return;
   gfx.clear();
+  // Destroy old card text objects for this player
+  var textKey = player + 'PlayTexts';
+  if (this[textKey]) {
+    this[textKey].forEach(function(t) { t.destroy(); });
+  }
+  this[textKey] = [];
   var cardW = 40, cardH = 54, gap = 4;
   var n = cards.length;
   var totalW = n * (cardW + gap) - gap;
@@ -1120,16 +1126,20 @@ GameScene.prototype.displayPlay = function (cards, player) {
     gfx.lineStyle(1, 0x90A4AE, 0.8);
     gfx.strokeRoundedRect(cx, cy, cardW, cardH, 3);
     var isRed = c.isRed ? c.isRed() : (c.suit === 'heart' || c.suit === 'diamond');
-    var color = isRed ? 0xE53935 : 0x212121;
     var display = c.displayName ? c.displayName() : Doudizhu.RANK_NAME_MAP[c.rank];
     var symbol = c.suitSymbol ? c.suitSymbol() : Doudizhu.SUIT_SYMBOLS[c.suit];
-    // Draw tiny rank+symbol on card
-    gfx.fillStyle(color, 1);
-    gfx.fillRect(cx + 4, cy + 3, 8, 12);
-    gfx.fillStyle(0xFFFFFF, 1);
-    gfx.fillRect(cx + 3, cy + 2, 10, 12);
-    gfx.fillStyle(color, 1);
-    gfx.fillRect(cx + 4, cy + 3, 8, 8);
+    // Build card text: rank + suit symbol
+    var cardText = display + symbol;
+    if (!symbol) cardText = display; // Joker: no suit symbol
+    // Draw rank + suit as a Phaser Text object centered on the card
+    var txt = this.add.text(cx + cardW / 2, cy + cardH / 2, cardText, {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '18px',
+      fontStyle: 'bold',
+      color: isRed ? '#E53935' : '#212121',
+      align: 'center'
+    }).setOrigin(0.5).setDepth(12);
+    this[textKey].push(txt);
   }
 };
 
