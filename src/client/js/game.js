@@ -1105,7 +1105,7 @@ GameScene.prototype.handleAIPlay = function (aiIndex, aiName, res) {
   // \u51FA\u724C\u8BB0\u5F55+\u97F3\u6548
   this.addPlayHistory(aiIndex === 0 ? 'ai1' : 'ai2', playCards);
   var bubbleKey = info.type === 'BOMB' || info.type === 'ROCKET' ? 'bomb' : 'play';
-  this._showAiBubble(aiIndex === 0 ? 'duidui' : 'tiantian', bubbleKey, 160);
+  this._showPlayBubble(aiIndex === 0 ? 'duidui' : 'tiantian', bubbleKey, info.type);
   if (hand.length === 0) {
     this.setStatusText(aiName + ' \u51FA\u5B8C\u4E86\uFF01\u83B7\u80DC\uFF01');
     showToast(this, aiName + '\u83B7\u80DC\uFF01');
@@ -1129,7 +1129,7 @@ GameScene.prototype.handleAIPass = function (aiIndex, aiName) {
   this.setStatusText(aiName + ' \u4E0D\u51FA');
   this.updateAICount(aiIndex);
   this.addPlayHistory(aiIndex === 0 ? 'ai1' : 'ai2', true);
-  this._showAiBubble(aiIndex === 0 ? 'duidui' : 'tiantian', 'pass', 160);
+  this._showPlayBubble(aiIndex === 0 ? 'duidui' : 'tiantian', 'pass', '');
   if (this.passCount >= 2) {
     this.passCount = 0;
     this.lastPlay = null;
@@ -1190,7 +1190,7 @@ GameScene.prototype.localAIPlay = function (aiIndex, aiName) {
   // \u51FA\u724C\u8BB0\u5F55+\u97F3\u6548
   this.addPlayHistory(aiIndex === 0 ? 'ai1' : 'ai2', chosen);
   var bubbleKey = info.type === 'BOMB' || info.type === 'ROCKET' ? 'bomb' : 'play';
-  this._showAiBubble(aiIndex === 0 ? 'duidui' : 'tiantian', bubbleKey, 160);
+  this._showPlayBubble(aiIndex === 0 ? 'duidui' : 'tiantian', bubbleKey, info.type);
   if (hand.length === 0) {
     this.setStatusText(aiName + ' \u51FA\u5B8C\u4E86\uFF01\u83B7\u80DC\uFF01');
     showToast(this, aiName + '\u83B7\u80DC\uFF01');
@@ -1564,17 +1564,91 @@ GameScene.prototype._renderFallbackQuestion = function (aiId) {
     {
       question: '\u54EA\u4E2A\u52A8\u7269\u51E0\u4E4E\u4E0D\u751F\u764C\u75C7\uFF1F',
       options: { A: '\u9CA8\u9C7C', B: '\u5927\u8C61', C: '\u88F8\u9F20\u9F20', D: '\u4E4C\u9F9F' },
-      answer: 'C', explanation: '\U0001F9EC \u88F8\u9F20\u9F20\u51E0\u4E4E\u4ECE\u4E0D\u60A3\u764C\u75C7\uFF01\u5B83\u4EEC\u4F53\u5185\u6709\u7279\u6B8A\u7684\u900F\u660E\u8D28\u9178\u80FD\u963B\u6B62\u764C\u7EC6\u80DE\u5206\u88C2\u3002'
+      answer: 'C', explanation: '🧬 \u88F8\u9F20\u9F20\u51E0\u4E4E\u4ECE\u4E0D\u60A3\u764C\u75C7\uFF01\u5B83\u4EEC\u4F53\u5185\u6709\u7279\u6B8A\u7684\u900F\u660E\u8D28\u9178\u80FD\u963B\u6B62\u764C\u7EC6\u80DE\u5206\u88C2\u3002'
     },
     {
       question: '\u54EA\u79CD\u65B9\u6CD5\u80FD\u8BA9\u5207\u6D0B\u8471\u4E0D\u6D41\u6CEA\uFF1F',
       options: { A: '\u51B7\u51BB30\u5206\u949F', B: '\u542B\u4E00\u53E3\u6C34', C: '\u6234\u6CF3\u955C', D: '\u5FAE\u6CE2\u52A010\u79D2' },
-      answer: 'C', explanation: '\U0001F576\uFE0F \u6234\u6CF3\u955C\u662F\u6700\u76F4\u63A5\u7684\u7269\u7406\u65B9\u6CD5——\u963B\u6B62\u50AC\u6CEA\u6C14\u4F53\u63A5\u89E6\u773C\u775B\u3002\u51B7\u51BB\u4E5F\u6709\u6548\u4F46\u6548\u679C\u6709\u9650\u3002'
+      answer: 'C', explanation: '🕶️ \u6234\u6CF3\u955C\u662F\u6700\u76F4\u63A5\u7684\u7269\u7406\u65B9\u6CD5——\u963B\u6B62\u50AC\u6CEA\u6C14\u4F53\u63A5\u89E6\u773C\u775B\u3002\u51B7\u51BB\u4E5F\u6709\u6548\u4F46\u6548\u679C\u6709\u9650\u3002'
     }
   ];
   var q = fallbackQuestions[Math.floor(Math.random() * fallbackQuestions.length)];
   q.questionType = '\u672C\u5730\u9898\u5E93';
   self._renderQuestion(q, aiId);
+};
+
+// ================================================================
+// 出牌 - AI 气泡（调API，不通则回退本地池）
+// ================================================================
+GameScene.prototype._showPlayBubble = function (aiId, event, context) {
+  var self = this;
+  // 清除旧气泡
+  if (self.playBubbleElements) {
+    for (var bi = 0; bi < self.playBubbleElements.length; bi++) {
+      if (self.playBubbleElements[bi]) self.playBubbleElements[bi].destroy();
+    }
+  }
+  self.playBubbleElements = [];
+
+  // 气泡显示在桌面中央 (Y=160)
+  var y = 160;
+
+  var renderBubble = function (line) {
+    var aiDisplayName = aiId === 'duidui' ? '王怼怼' : '苏甜甜';
+    var avatarColor = aiId === 'duidui' ? 0x4FC3F7 : 0xFFB74D;
+
+    // AI 头像圆圈
+    var avatar = self.add.graphics();
+    avatar.fillStyle(avatarColor, 1);
+    avatar.fillCircle(80, y + 14, 18).setDepth(20);
+    var avatarTxt = self.add.text(80, y + 14, aiId === 'duidui' ? '😎' : '😊', {
+      fontFamily: 'sans-serif', fontSize: '18px'
+    }).setOrigin(0.5).setDepth(21);
+    self.playBubbleElements.push(avatar, avatarTxt);
+
+    // AI 名字
+    var nameTxt = self.add.text(105, y - 2, aiDisplayName, {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '12px', color: '#E8F5E9', fontStyle: 'bold'
+    }).setDepth(21);
+    self.playBubbleElements.push(nameTxt);
+
+    // 台词气泡背景
+    var bubble = self.add.graphics();
+    bubble.fillStyle(0x000000, 0.4);
+    bubble.fillRoundedRect(230, y + 10, 500, 28, 6).setDepth(20);
+    self.playBubbleElements.push(bubble);
+
+    // 台词文本
+    var bubbleTxt = self.add.text(240, y + 24, line, {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '13px', color: '#FFFFFF'
+    }).setDepth(21);
+    self.playBubbleElements.push(bubbleTxt);
+
+    // 3秒后自动消失
+    self.time.delayedCall(3000, function () {
+      if (self.playBubbleElements) {
+        for (var i = 0; i < self.playBubbleElements.length; i++) {
+          if (self.playBubbleElements[i]) self.playBubbleElements[i].destroy();
+        }
+        self.playBubbleElements = [];
+      }
+    });
+  };
+
+  // 尝试调 API
+  if (self.isAPIMode && typeof ApiClient !== 'undefined' && ApiClient.generateDialogue) {
+    ApiClient.generateDialogue(aiId, event, context)
+      .then(function (res) {
+        renderBubble(res.line || pickAiLine(aiId, event));
+      })
+      .catch(function () {
+        renderBubble(pickAiLine(aiId, event));
+      });
+  } else {
+    renderBubble(pickAiLine(aiId, event));
+  }
 };
 
 // ================================================================
@@ -1592,13 +1666,13 @@ GameScene.prototype._showAiBubble = function (aiId, sceneKey, y) {
 
   var line = pickAiLine(aiId, sceneKey);
   var aiDisplayName = aiId === 'duidui' ? '\u738B\u603C\u603C' : '\u82CF\u751C\u751C';
-  var aiEmoji = aiId === 'duidui' ? '\U0001F60E' : '\U0001F60A';
+  var aiEmoji = aiId === 'duidui' ? '😎' : '😊';
 
   // AI \u5934\u50CF\u5706\u5708
   var avatar = self.add.graphics();
   avatar.fillStyle(aiId === 'duidui' ? 0x4FC3F7 : 0xFFB74D, 1);
   avatar.fillCircle(80, y + 14, 18).setDepth(302);
-  var avatarTxt = self.add.text(80, y + 14, aiId === 'duidui' ? '\U0001F60E' : '\U0001F60A', {
+  var avatarTxt = self.add.text(80, y + 14, aiId === 'duidui' ? '😎' : '😊', {
     fontFamily: 'sans-serif',
     fontSize: '18px'
   }).setOrigin(0.5).setDepth(303);

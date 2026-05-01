@@ -206,6 +206,25 @@ var ApiClient = {
       playerIndex: playerIndex,
       bid: bid
     });
+  },
+
+  // ============================================================
+  // AI 对话 API
+  // ============================================================
+
+  /**
+   * POST /api/ai/dialogue - 获取AI台词
+   * @param {string} aiId - 'duidui'|'tiantian'
+   * @param {string} event - 'play'|'pass'|'bomb'|'win'|'lose'
+   * @param {string} context - 上下文（可选）
+   * @returns {Promise<{line:string}>}
+   */
+  generateDialogue: function (aiId, event, context) {
+    return apiPost('/api/ai/dialogue', {
+      aiId: aiId,
+      event: event,
+      context: context || ''
+    });
   }
 };
 
