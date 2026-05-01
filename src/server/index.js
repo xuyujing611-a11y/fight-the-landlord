@@ -23,6 +23,7 @@ const quizRouter = require('./routes/quiz');
 const verifyRouter = require('./routes/verify');
 const wrongbookRouter = require('./routes/wrongbook');
 const chaosRouter = require('./routes/chaos');
+const dialogueRouter = require('./routes/dialogue');
 const { router: biddingRouter } = require('./routes/bidding');
 
 const app = express();
@@ -59,6 +60,7 @@ app.use('/api/verify', verifyRouter);
 app.use('/api/wrong-book', wrongbookRouter);
 app.use('/api/chaos', chaosRouter);
 app.use('/api/bidding', biddingRouter);
+app.use('/api/ai/dialogue', dialogueRouter);
 
 // 健康检查
 app.get('/api/health', (req, res) => {
