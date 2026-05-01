@@ -265,12 +265,11 @@ GameScene.prototype.renderPlayerHand = function () {
     var display = card.displayName ? card.displayName() : Doudizhu.RANK_NAME_MAP[card.rank];
     var symbol = card.suitSymbol ? card.suitSymbol() : Doudizhu.SUIT_SYMBOLS[card.suit];
 
-    var cardHTML = '<div class="ddz-card-dom ' + colorClass + '">' +
-      '<div class="ddz-dom-top">' + display + '</div>' +
+    var cardEl = this.add.dom(x, y).setOrigin(0.5, 0.5).setDepth(110);
+    cardEl.node.className = 'ddz-card-dom ' + colorClass;
+    cardEl.node.innerHTML = '<div class="ddz-dom-top">' + display + '</div>' +
       '<div class="ddz-dom-center">' + symbol + '</div>' +
-      '<div class="ddz-dom-bottom">' + display + '</div></div>';
-
-    var cardEl = this.add.dom(x, y, cardHTML).setOrigin(0.5, 0.5).setDepth(110);
+      '<div class="ddz-dom-bottom">' + display + '</div>';
     cardEl.setData('cardIdx', i);
     cardEl.setData('card', card);
     cardEl.setData('selected', false);
