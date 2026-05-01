@@ -24,7 +24,7 @@ var GameConfig = {
   parent: 'game-container',
   backgroundColor: '#1B5E20',
   dom: { createContainer: true },
-  scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+  scale: { mode: Phaser.Scale.ENVELOPE, autoCenter: Phaser.Scale.CENTER_BOTH },
   scene: [GameScene]
 };
 
