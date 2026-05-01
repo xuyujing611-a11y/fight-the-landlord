@@ -46,6 +46,30 @@ app.use((req, res, next) => {
 });
 
 // ============================================================
+// API 认证中间件
+// ============================================================
+const API_KEY = process.env.API_KEY;
+
+/** 如果进程配置了 API_KEY，则所有 /api/* 请求必须携带 x-api-key 头 */
+function checkAuth(req, res, next) {
+  // 健康检查跳过认证
+  if (req.path === '/health') return next();
+
+  if (API_KEY) {
+    const provided = req.headers['x-api-key'];
+    if (!provided || provided !== API_KEY) {
+      return res.status(401).json({ error: 'Unauthorized', message: 'x-api-key header is required' });
+    }
+  }
+  next();
+}
+
+if (!API_KEY) {
+  console.warn('⚠  WARNING: API_KEY not set. All API endpoints have no authentication.');
+  console.warn('   Set API_KEY in .env for production deployment.');
+}
+
+// ============================================================
 // 静态文件服务（前端页面）
 // ============================================================
 const clientPath = path.join(__dirname, '..', 'client');
@@ -54,6 +78,7 @@ app.use(express.static(clientPath));
 // ============================================================
 // 路由
 // ============================================================
+app.use('/api', checkAuth);
 app.use('/api/ai', aiRouter);
 app.use('/api/quiz', quizRouter);
 app.use('/api/verify', verifyRouter);
