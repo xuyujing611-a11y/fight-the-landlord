@@ -20,7 +20,7 @@ var GAME_STATE = {
 var GameConfig = {
   type: Phaser.AUTO,
   width: 960,
-  height: 600,
+  height: 442,
   parent: 'game-container',
   backgroundColor: '#1B5E20',
   dom: { createContainer: true },
@@ -105,7 +105,7 @@ function makeAvatarImage(scene, key, x, y, bgColor, name) {
   g.fillStyle(bgColor, 1);
   g.fillRoundedRect(x - 20, y - 20, 40, 40, 10);
   g.lineStyle(2, 0xFFFFFF, 0.8);
-  g.strokeRoundedRect(x - 28, y - 28, 56, 56, 14);
+  g.strokeRoundedRect(x - 28, y - 28, 56, 56, 10);
   var img = scene.add.image(x, y, key).setDisplaySize(34, 34).setDepth(12);
   return img;
 }
@@ -134,19 +134,7 @@ GameScene.prototype = Object.create(Phaser.Scene.prototype);
 GameScene.prototype.constructor = GameScene;
 
 GameScene.prototype.init = function () {
-  // B40: 竖屏检测 — 与 index.html 的 portrait-overlay 联动
   var self = this;
-  function checkOrientation() {
-    var overlay = document.getElementById('portrait-overlay');
-    if (!overlay) return;
-    if (window.innerWidth < window.innerHeight) {
-      overlay.style.display = 'flex';
-    } else {
-      overlay.style.display = 'none';
-    }
-  }
-  checkOrientation();
-  window.addEventListener('resize', checkOrientation);
 
   var deck = new Doudizhu.Deck();
   deck.shuffle();
@@ -218,7 +206,7 @@ GameScene.prototype.create = function () {
 
   // B40: 全屏/缩放填满按钮（右上角）
   var fsBtn = self.add.text(940, 24, '⛶', {
-    fontSize: '26px', color: '#FFFFFF',
+    fontSize: '22px', color: '#FFFFFF',
     backgroundColor: '#00000066',
     padding: { x: 8, y: 6 }
   }).setOrigin(1, 0.5).setInteractive().setDepth(200);
@@ -277,24 +265,24 @@ function drawTableBackground(scene) {
   bg.fillRect(0, 0, W, H);
   var glow = scene.add.graphics();
   glow.fillStyle(0x2E7D32, 0.15);
-  glow.fillEllipse(W / 2, H / 2 - 40, 320, 480);
+  glow.fillEllipse(W / 2, H / 2 - 40, 320, 354);
   glow.fillStyle(0x388E3C, 0.1);
   glow.fillEllipse(W / 2, H / 2 - 40, 240, 360);
   var border = scene.add.graphics();
   border.lineStyle(2, 0x4CAF50, 0.3);
-  border.strokeRoundedRect(13, 71, W - 26, H - 130, 12);
+  border.strokeRoundedRect(13, 52, W - 26, H - 130, 9);
   var diamond = scene.add.graphics();
   diamond.lineStyle(1, 0x66BB6A, 0.15);
   var cx = W / 2, cy = H / 2 - 40;
-  diamond.strokeRect(cx - 80, cy - 83, 160, 166);
+  diamond.strokeRect(cx - 80, cy - 83, 118, 166);
   diamond.strokeRect(cx - 48, cy - 59, 96, 118);
 
   // Decorative table corners
-  var cPos = [[35, 85], [W-35, 85], [35, H-57], [W-35, H-57]];
+  var cPos = [[35, 63], [W-35, 63], [35, H-57], [W-35, H-57]];
   for (var ci = 0; ci < cPos.length; ci++) {
     var dx = cPos[ci][0], dy = cPos[ci][1];
     diamond.lineStyle(1, 0x4CAF50, 0.18);
-    diamond.strokeCircle(dx, dy, 16);
+    diamond.strokeCircle(dx, dy, 9);
     diamond.strokeCircle(dx, dy, 10);
     diamond.strokeCircle(dx, dy, 5);
   }
@@ -313,39 +301,39 @@ function createTopBar(scene) {
   tb.fillStyle(0x000000, 0.3);
   tb.fillRect(0, 0, 960, 56).setDepth(10);
 
-  scene.roundText = scene.add.text(12, 16, '\u7B2C 1/10 \u56DE\u5408', {
-    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '14px', color: '#E8F5E9', fontStyle: 'bold'
-  }).setDepth(11);
-
-  // AI1 (left)
-  var wAvatar = makeAvatarImage(scene, 'avatar_wang', 176, 28, 0x4FC3F7, '\u738B\u603C\u603C');
-  wAvatar.setDisplaySize(36, 36).setDepth(11);
-  scene.add.text(200, 12, '\u738B\u603C\u603C', {
+  scene.roundText = scene.add.text(12, 9, '\u7B2C 1/10 \u56DE\u5408', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '12px', color: '#E8F5E9', fontStyle: 'bold'
   }).setDepth(11);
-  scene.ai1Count = scene.add.text(200, 30, '\u5269\u4F59 17 \u5F20', {
+
+  // AI1 (left)
+  var wAvatar = makeAvatarImage(scene, 'avatar_wang', 176, 20, 0x4FC3F7, '\u738B\u603C\u603C');
+  wAvatar.setDisplaySize(36, 36).setDepth(11);
+  scene.add.text(200, 9, '\u738B\u603C\u603C', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '10px', color: '#E8F5E9', fontStyle: 'bold'
+  }).setDepth(11);
+  scene.ai1Count = scene.add.text(200, 22, '\u5269\u4F59 17 \u5F20', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '10px', color: '#A5D6A7'
   }).setDepth(11);
 
   // AI2 (right)
-  var sAvatar = makeAvatarImage(scene, 'avatar_su', 788, 28, 0xFFB74D, '\u82CF\u751C\u751C');
+  var sAvatar = makeAvatarImage(scene, 'avatar_su', 788, 20, 0xFFB74D, '\u82CF\u751C\u751C');
   sAvatar.setDisplaySize(36, 36).setDepth(11);
-  scene.add.text(720, 12, '\u82CF\u751C\u751C', {
+  scene.add.text(720, 9, '\u82CF\u751C\u751C', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '12px', color: '#E8F5E9', fontStyle: 'bold'
+    fontSize: '10px', color: '#E8F5E9', fontStyle: 'bold'
   }).setDepth(11);
-  scene.ai2Count = scene.add.text(720, 30, '\u5269\u4F59 17 \u5F20', {
+  scene.ai2Count = scene.add.text(720, 22, '\u5269\u4F59 17 \u5F20', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '10px', color: '#A5D6A7'
   }).setDepth(11);
 
   // center status text
-  scene.statusText = scene.add.text(480, 14, '', {
+  scene.statusText = scene.add.text(480, 10, '', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '12px', color: '#A5D6A7', fontStyle: 'bold'
+    fontSize: '10px', color: '#A5D6A7', fontStyle: 'bold'
   }).setOrigin(0.5, 0).setDepth(11);
 
   var sep = scene.add.graphics();
@@ -368,34 +356,34 @@ function createPlayArea(scene) {
   var cx = 480;
   var playBg = scene.add.graphics();
   playBg.fillStyle(0x000000, 0.1);
-  playBg.fillRoundedRect(160, 80, 640, 280, 14).setDepth(10);
+  playBg.fillRoundedRect(160, 59, 640, 206, 10).setDepth(10);
 
-  scene.add.text(cx, 296, '\u51FA\u724C\u533A', {
+  scene.add.text(cx, 218, '\u51FA\u724C\u533A', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '12px', color: '#66BB6A', alpha: 0.4
+    fontSize: '10px', color: '#66BB6A', alpha: 0.4
   }).setOrigin(0.5).setDepth(11);
 
-  scene.ai1PlayLabel = scene.add.text(182, 88, '\u738B\u603C\u603C\uFF1A', {
+  scene.ai1PlayLabel = scene.add.text(182, 65, '\u738B\u603C\u603C\uFF1A', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '10px', color: '#A5D6A7'
   }).setDepth(11);
   scene.ai1PlayCardsGraphics = scene.add.graphics().setDepth(11);
 
-  scene.ai2PlayLabel = scene.add.text(690, 88, '\u82CF\u751C\u751C\uFF1A', {
+  scene.ai2PlayLabel = scene.add.text(690, 65, '\u82CF\u751C\u751C\uFF1A', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '10px', color: '#A5D6A7'
   }).setDepth(11);
   scene.ai2PlayCardsGraphics = scene.add.graphics().setDepth(11);
 
-  scene.myPlayLabel = scene.add.text(cx, 367, '\u4F60\u51FA\uFF1A', {
+  scene.myPlayLabel = scene.add.text(cx, 270, '\u4F60\u51FA\uFF1A', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '10px', color: '#A5D6A7'
   }).setOrigin(0.5).setDepth(11);
   scene.myPlayCardsGraphics = scene.add.graphics().setDepth(11);
 
-  scene.add.text(460, 82, '\u5E95\u724C: ? ? ?', {
+  scene.add.text(460, 60, '\u5E95\u724C: ? ? ?', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '9px', color: '#66BB6A', alpha: 0.4
+    fontSize: '8px', color: '#66BB6A', alpha: 0.4
   }).setDepth(11);
 }
 
@@ -405,8 +393,8 @@ function createPlayArea(scene) {
 function createHandArea(scene) {
   var handBg = scene.add.graphics();
   handBg.fillStyle(0x000000, 0.15);
-  handBg.fillRoundedRect(20, 388, 920, 96, 10).setDepth(10);
-  scene.add.text(68, 414, '\u4F60\u7684\u624B\u724C', {
+  handBg.fillRoundedRect(20, 286, 920, 96, 10).setDepth(10);
+  scene.add.text(68, 305, '\u4F60\u7684\u624B\u724C', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '11px', color: '#A5D6A7'
   }).setDepth(11);
@@ -428,11 +416,11 @@ GameScene.prototype.renderPlayerHand = function () {
   this.cardDomElements = [];
   this.handCards = [];
 
-  var n = hand.length, cw = 62, ch = 88;
-  var overlap = n > 6 ? Math.min(36, (680 - cw) / (n - 1)) : 36;
+  var n = hand.length, cw = 50, ch = 72;
+  var overlap = n > 6 ? Math.min(30, (680 - cw) / (n - 1)) : 30;
   var totalWidth = cw + (n - 1) * overlap;
   var startX = 200 + (680 - totalWidth) / 2;
-  var baseY = 420;
+  var baseY = 310;
 
   for (var ii = 0; ii < n; ii++) {
     var card = hand[ii];
@@ -572,9 +560,9 @@ GameScene.prototype.showBiddingUI = function () {
   ];
 
   // 提示文字
-  var promptText = this.add.text(cx, 230, '\u8BF7\u53EB\u5206', {
+  var promptText = this.add.text(cx, 170, '\u8BF7\u53EB\u5206', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '18px', color: '#FFFFFF', fontStyle: 'bold'
+    fontSize: '15px', color: '#FFFFFF', fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(200);
   this.biddingUI.push(promptText);
 
@@ -593,7 +581,7 @@ GameScene.prototype.showBiddingUI = function () {
 
     var txt = this.add.text(bx + bw / 2, uiY + bh / 2, b.label, {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '16px', color: '#FFFFFF', fontStyle: 'bold'
+      fontSize: '14px', color: '#FFFFFF', fontStyle: 'bold'
     }).setOrigin(0.5).setDepth(201);
 
     (function (val, buttonEl) {
@@ -613,7 +601,7 @@ GameScene.prototype.showBiddingUI = function () {
     var label = strength >= 20 ? '\u624B\u724C\u5F88\u5F3A' : (strength >= 14 ? '\u624B\u724C\u4E0D\u9519' : (strength >= 9 ? '\u624B\u724C\u4E00\u822C' : '\u624B\u724C\u8F83\u5F31'));
     var infoText = this.add.text(cx, 733, '\u2605 ' + label + ' (\u5F3A\u5EA6\u5206: ' + strength + ')', {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '12px', color: '#A5D6A7'
+      fontSize: '10px', color: '#A5D6A7'
     }).setOrigin(0.5).setDepth(200);
     this.biddingUI.push(infoText);
   }
@@ -792,9 +780,9 @@ GameScene.prototype.showBottomCards = function (cards) {
 
   if (!cards || cards.length === 0) {
     // \u6CA1\u6709\u5E95\u724C\u65F6\u663E\u793A\u95EE\u53F7
-    this.bottomCardText = this.add.text(480, 98, '\u5E95\u724C: ? ? ?', {
+    this.bottomCardText = this.add.text(480, 72, '\u5E95\u724C: ? ? ?', {
       fontFamily: '\u201CPingFang SC\u201D,\u201CMicrosoft YaHei\u201D,sans-serif',
-      fontSize: '9px', color: '#66BB6A', alpha: 0.4
+      fontSize: '8px', color: '#66BB6A', alpha: 0.4
     }).setOrigin(0.5).setDepth(20);
     return;
   }
@@ -1282,9 +1270,9 @@ GameScene.prototype.displayPlay = function (cards, player) {
 
   // \u786E\u5B9A\u4F4D\u7F6E
   var positions = {
-    player: { x: 360, y: 250, w: 52, h: 75, origin: 0.5 },
-    ai1:    { x: 280, y: 180, w: 42, h: 60, origin: 0.5 },
-    ai2:    { x: 680, y: 180, w: 42, h: 60, origin: 0.5 }
+    player: { x: 360, y: 184, w: 44, h: 64, origin: 0.5 },
+    ai1:    { x: 280, y: 133, w: 36, h: 52, origin: 0.5 },
+    ai2:    { x: 680, y: 133, w: 36, h: 52, origin: 0.5 }
   };
   var pos = positions[player] || positions.player;
   var n = cards.length;
@@ -1335,15 +1323,15 @@ GameScene.prototype._showTypeSelection = function (aiId, aiName) {
     { id: 'life_hack', label: '生活常识', icon: '🏠', desc: '生活小窍门，你真的会吗' }
   ];
 
-  var title2 = self.add.text(480, 105, '📋 选个题型，开始搞事情', {
+  var title2 = self.add.text(480, 77, '📋 选个题型，开始搞事情', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '16px', color: '#333333', fontStyle: 'bold'
+    fontSize: '14px', color: '#333333', fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(302);
   self.chaosElements.push(title2);
 
   // 2x2 网格：题型卡片
   var cardX = [220, 500];
-  var cardY = [145, 245];
+  var cardY = [107, 181];
   var cardW = 260, cardH = 88;
 
   for (var ti = 0; ti < types.length; ti++) {
@@ -1359,17 +1347,17 @@ GameScene.prototype._showTypeSelection = function (aiId, aiName) {
     card.setInteractive(new Phaser.Geom.Rectangle(cx, cy, cardW, cardH), Phaser.Geom.Rectangle.Contains);
 
     var iconTxt = self.add.text(cx + 12, cy + 12, t.icon, {
-      fontFamily: 'sans-serif', fontSize: '30px'
+      fontFamily: 'sans-serif', fontSize: '26px'
     }).setDepth(303);
 
     var labelTxt = self.add.text(cx + 58, cy + 14, t.label, {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '16px', color: '#222222', fontStyle: 'bold'
+      fontSize: '14px', color: '#222222', fontStyle: 'bold'
     }).setDepth(303);
 
     var descTxt = self.add.text(cx + 58, cy + 40, t.desc, {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '12px', color: '#888888'
+      fontSize: '10px', color: '#888888'
     }).setDepth(303);
 
     self.chaosElements.push(card, iconTxt, labelTxt, descTxt);
@@ -1426,41 +1414,41 @@ GameScene.prototype._createChaosOverlay = function (aiId, callback) {
   // \u767D\u8272\u9898\u76EE\u5361\u7247\u80CC\u666F
   var cardBg = self.add.graphics();
   cardBg.fillStyle(0xFFFFFF, 1);
-  cardBg.fillRoundedRect(200, 95, 560, 340, 12);
+  cardBg.fillRoundedRect(200, 70, 560, 251, 9);
   cardBg.fillStyle(0x000000, 0.08);
-  cardBg.fillRoundedRect(204, 99, 560, 340, 12);
+  cardBg.fillRoundedRect(204, 73, 560, 251, 9);
   cardBg.setDepth(301);
   self.chaosElements.push(cardBg);
   self.chaosCardBg = cardBg;
 
   // \u201C\u641E\u4E8B\u60C5\u201D \u6807\u9898
-  var title = self.add.text(480, 102, '🔥 搞\u4E8B\u60C5\uFF01 答\u9898\u6311\u6218', {
+  var title = self.add.text(480, 77, '🔥 搞\u4E8B\u60C5\uFF01 答\u9898\u6311\u6218', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '22px', color: '#FF6B35', fontStyle: 'bold'
+    fontSize: '19px', color: '#FF6B35', fontStyle: 'bold'
   }).setOrigin(0.5, 0).setDepth(302);
   self.chaosElements.push(title);
   self.chaosTitle = title;
 
   // \u5206\u6570\u663E\u793A
-  var scoreText = self.add.text(660, 102, '得分: ' + (self.chaosScore || 0), {
+  var scoreText = self.add.text(660, 77, '得分: ' + (self.chaosScore || 0), {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '14px', color: '#333333'
+    fontSize: '12px', color: '#333333'
   }).setDepth(302);
   self.chaosElements.push(scoreText);
   self.chaosScoreText = scoreText;
 
   // AI \u53F0\u8BCD\u6C14\u6CE1
-  self._showAiBubble(aiId, 'easy', 290);
+  self._showAiBubble(aiId, 'easy', 214);
 
   // \u5173\u6389\u6309\u94AE
   var closeBtnBg = self.add.graphics();
   closeBtnBg.fillStyle(0xE53935, 1);
-  closeBtnBg.fillRoundedRect(720, 98, 28, 28, 14).setDepth(302);
-  var closeBtnText = self.add.text(734, 112, '✖', {
+  closeBtnBg.fillRoundedRect(720, 72, 20, 28, 10).setDepth(302);
+  var closeBtnText = self.add.text(734, 83, '✖', {
     fontFamily: '"PingFang SC",sans-serif',
-    fontSize: '18px', color: '#FFFFFF'
+    fontSize: '15px', color: '#FFFFFF'
   }).setOrigin(0.5).setDepth(303);
-  closeBtnBg.setInteractive(new Phaser.Geom.Rectangle(720, 98, 28, 28), Phaser.Geom.Rectangle.Contains);
+  closeBtnBg.setInteractive(new Phaser.Geom.Rectangle(720, 72, 20, 20), Phaser.Geom.Rectangle.Contains);
   closeBtnBg.on('pointerup', function () { self._destroyChaos(); });
   self.chaosElements.push(closeBtnBg, closeBtnText);
 
@@ -1505,16 +1493,16 @@ GameScene.prototype._renderQuestion = function (q, aiId) {
   if (typeLabel.indexOf('trivia') >= 0) typeIcon = '💡';
   if (typeLabel.indexOf('life') >= 0) typeIcon = '🏠';
 
-  var tag = self.add.text(220, 132, typeIcon + ' ' + typeLabel, {
+  var tag = self.add.text(220, 97, typeIcon + ' ' + typeLabel, {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '13px', color: '#FF6B35', fontStyle: 'bold'
+    fontSize: '11px', color: '#FF6B35', fontStyle: 'bold'
   }).setDepth(302);
   self.chaosElements.push(tag);
 
   var questionText = q.question || q.text || '暂无题目';
-  var qText = self.add.text(220, 155, questionText, {
+  var qText = self.add.text(220, 114, questionText, {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '14px', color: '#222222',
+    fontSize: '12px', color: '#222222',
     wordWrap: { width: 520 }, lineSpacing: 3
   }).setDepth(302);
   self.chaosElements.push(qText);
@@ -1525,7 +1513,7 @@ GameScene.prototype._renderQuestion = function (q, aiId) {
 
   // 2×2 网格布局
   var gridX = [215, 495];
-  var gridY = [224, 272];
+  var gridY = [165, 201];
 
   for (var oi = 0; oi < optionKeys.length; oi++) {
     var ok = optionKeys[oi];
@@ -1544,16 +1532,16 @@ GameScene.prototype._renderQuestion = function (q, aiId) {
 
     var optMarkBg = self.add.graphics();
     optMarkBg.fillStyle(0x4ECDC4, 1);
-    optMarkBg.fillCircle(gx + 20, gy + 21, 12).setDepth(303);
+    optMarkBg.fillCircle(gx + 20, gy + 21, 9).setDepth(303);
     var optMarkTxt = self.add.text(gx + 20, gy + 21, ok, {
       fontFamily: '"PingFang SC",sans-serif',
-      fontSize: '12px', color: '#FFFFFF', fontStyle: 'bold'
+      fontSize: '10px', color: '#FFFFFF', fontStyle: 'bold'
     }).setOrigin(0.5).setDepth(304);
 
     var displayOpt = optText.length > 18 ? optText.substring(0, 18) + '...' : optText;
     var optTxt = self.add.text(gx + 40, gy + 21, displayOpt, {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '13px', color: '#333333'
+      fontSize: '11px', color: '#333333'
     }).setOrigin(0, 0.5).setDepth(303);
 
     optBg.setData('optKey', ok);
@@ -1601,9 +1589,9 @@ GameScene.prototype._handleOptionClick = function (self, optBg, optKey, aiId, q)
   var resultColor = isCorrect ? '#4CAF50' : '#E53935';
 
   // 反馈图标（居中，Y=140）
-  var fbIcon = self.add.text(480, 140, resultIcon + ' ' + resultText, {
+  var fbIcon = self.add.text(480, 103, resultIcon + ' ' + resultText, {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '24px', color: resultColor, fontStyle: 'bold'
+    fontSize: '20px', color: resultColor, fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(305);
   self.chaosElements.push(fbIcon);
 
@@ -1613,7 +1601,7 @@ GameScene.prototype._handleOptionClick = function (self, optBg, optKey, aiId, q)
     var correctAns = self.add.text(220, fbY,
       '\u6B63\u786E\u7B54\u6848: ' + q.answer + '. ' + (q.options[q.answer] || ''), {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '14px', color: '#4CAF50', fontStyle: 'bold',
+      fontSize: '12px', color: '#4CAF50', fontStyle: 'bold',
       wordWrap: { width: 500 }
     }).setDepth(305);
     self.chaosElements.push(correctAns);
@@ -1624,7 +1612,7 @@ GameScene.prototype._handleOptionClick = function (self, optBg, optKey, aiId, q)
   if (q.explanation) {
     var expl = self.add.text(220, fbY, q.explanation, {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '13px', color: '#555555',
+      fontSize: '11px', color: '#555555',
       wordWrap: { width: 500 }, lineSpacing: 2
     }).setDepth(305);
     self.chaosElements.push(expl);
@@ -1635,14 +1623,14 @@ GameScene.prototype._handleOptionClick = function (self, optBg, optKey, aiId, q)
   self._showAiBubble(aiId, feedbackScene, fbY + 10);
 
   // 底部按钮行
-  var btnY = Math.max(fbY + 60, 340);
+  var btnY = Math.max(fbY + 60, 251);
   // "再来一题" 按钮
   var againBg = self.add.graphics();
   againBg.fillStyle(0x4ECDC4, 1);
   againBg.fillRoundedRect(220, btnY, 220, 40, 10).setDepth(305);
   var againTxt = self.add.text(330, btnY + 20, '🔄 再来一题', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '15px', color: '#FFFFFF', fontStyle: 'bold'
+    fontSize: '13px', color: '#FFFFFF', fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(306);
   againBg.setInteractive(new Phaser.Geom.Rectangle(220, btnY, 220, 40), Phaser.Geom.Rectangle.Contains);
   againBg.on('pointerup', function () {
@@ -1659,7 +1647,7 @@ GameScene.prototype._handleOptionClick = function (self, optBg, optKey, aiId, q)
   closeBg.fillRoundedRect(510, btnY, 220, 40, 10).setDepth(305);
   var closeTxt = self.add.text(620, btnY + 20, '\u2716 \u5173\u6389\u56DE\u724C', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '15px', color: '#FFFFFF', fontStyle: 'bold'
+    fontSize: '13px', color: '#FFFFFF', fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(306);
   closeBg.setInteractive(new Phaser.Geom.Rectangle(510, btnY, 220, 40), Phaser.Geom.Rectangle.Contains);
   closeBg.on('pointerup', function () { self._destroyChaos(); });
@@ -1700,18 +1688,18 @@ GameScene.prototype._showCardSwapAnimation = function (event, aiId) {
   var aiName = aiId === 'duidui' ? '王怼怼' : '苏甜甜';
 
   // 换牌提示文字动画
-  var swapText = self.add.text(480, 250, '🔄 ' + aiName + ' 换走了你的牌！', {
+  var swapText = self.add.text(480, 184, '🔄 ' + aiName + ' 换走了你的牌！', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '20px', color: '#FF6B35', fontStyle: 'bold',
+    fontSize: '17px', color: '#FF6B35', fontStyle: 'bold',
     stroke: '#000000', strokeThickness: 3
   }).setOrigin(0.5).setDepth(310);
 
   // 显示已被换走的牌
   var rankStr = Doudizhu.RANK_NAMES ? Doudizhu.RANK_NAMES[swappedCard.rank] : (swappedCard.rank || '');
   var suitStr = Doudizhu.SUIT_NAMES ? Doudizhu.SUIT_NAMES[swappedCard.suit] : (swappedCard.suit || '');
-  var cardText = self.add.text(480, 285, '[' + suitStr + rankStr + ']', {
+  var cardText = self.add.text(480, 210, '[' + suitStr + rankStr + ']', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '16px', color: '#FFFFFF',
+    fontSize: '14px', color: '#FFFFFF',
     stroke: '#000000', strokeThickness: 2
   }).setOrigin(0.5).setDepth(310);
 
@@ -1786,21 +1774,21 @@ GameScene.prototype._showPlayBubble = function (aiId, event, context) {
     avatar.fillStyle(avatarColor, 1);
     avatar.fillCircle(80, y + 14, 18).setDepth(20);
     var avatarTxt = self.add.text(80, y + 14, aiId === 'duidui' ? '😎' : '😊', {
-      fontFamily: 'sans-serif', fontSize: '18px'
+      fontFamily: 'sans-serif', fontSize: '15px'
     }).setOrigin(0.5).setDepth(21);
     self.playBubbleElements.push(avatar, avatarTxt);
 
     // AI 名字
     var nameTxt = self.add.text(105, y - 2, aiDisplayName, {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '12px', color: '#E8F5E9', fontStyle: 'bold'
+      fontSize: '10px', color: '#E8F5E9', fontStyle: 'bold'
     }).setDepth(21);
     self.playBubbleElements.push(nameTxt);
 
     // 台词气泡背景（圆角矩形）
     var bubble = self.add.graphics();
     bubble.fillStyle(0x000000, 0.4);
-    bubble.fillRoundedRect(230, y + 10, 500, 28, 6).setDepth(20);
+    bubble.fillRoundedRect(230, y + 10, 500, 20, 6).setDepth(20);
     self.playBubbleElements.push(bubble);
 
     // B36: 对话气泡三角箭头
@@ -1819,7 +1807,7 @@ GameScene.prototype._showPlayBubble = function (aiId, event, context) {
     // 台词文本
     var bubbleTxt = self.add.text(240, y + 24, line, {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '13px', color: '#FFFFFF'
+      fontSize: '11px', color: '#FFFFFF'
     }).setDepth(21);
     self.playBubbleElements.push(bubbleTxt);
 
@@ -1871,26 +1859,26 @@ GameScene.prototype._showAiBubble = function (aiId, sceneKey, y) {
   avatar.fillCircle(80, y + 14, 18).setDepth(302);
   var avatarTxt = self.add.text(80, y + 14, aiId === 'duidui' ? '😎' : '😊', {
     fontFamily: 'sans-serif',
-    fontSize: '18px'
+    fontSize: '15px'
   }).setOrigin(0.5).setDepth(303);
   self.chaosBubbleElements.push(avatar, avatarTxt);
 
   // AI \u540D\u5B57
   var nameTxt = self.add.text(105, y - 2, aiDisplayName, {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '12px', color: '#999999'
+    fontSize: '10px', color: '#999999'
   }).setDepth(302);
   self.chaosBubbleElements.push(nameTxt);
 
   // \u53F0\u8BCD\u6C14\u6CE1
   var bubble = self.add.graphics();
   bubble.fillStyle(0x000000, 0.08);
-  bubble.fillRoundedRect(230, y + 10, 500, 28, 6).setDepth(302);
+  bubble.fillRoundedRect(230, y + 10, 500, 20, 6).setDepth(302);
   self.chaosBubbleElements.push(bubble);
 
   var bubbleTxt = self.add.text(240, y + 24, line, {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '13px', color: '#444444'
+    fontSize: '11px', color: '#444444'
   }).setDepth(303);
   self.chaosBubbleElements.push(bubbleTxt);
 };
@@ -1949,10 +1937,10 @@ GameScene.prototype._destroyChaos = function () {
 // 功能按钮
 // ================================================================
 function createActionButtons(scene) {
-  var bw = 88, bh = 44, gap = 12;
+  var bw = 65, bh = 44, gap = 12;
   var totalW = bw * 5 + gap * 4;
   var startX = (960 - totalW) / 2;
-  var btnY = 504;
+  var btnY = 372;
 
   var buttons = [
     { label: '\u51FA\u724C', color: 0x4ECDC4, key: 'play' },
@@ -1975,7 +1963,7 @@ function createActionButtons(scene) {
 
     var txt = scene.add.text(bx + bw / 2, btnY + bh / 2, b.label, {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '15px', color: '#FFFFFF', fontStyle: 'bold'
+      fontSize: '13px', color: '#FFFFFF', fontStyle: 'bold'
     }).setOrigin(0.5).setDepth(101);
     scene.actionButtons.push(txt);
 
@@ -2000,10 +1988,10 @@ function showToast(scene, message) {
   var cx = 300;
   var toastBg = scene.add.graphics();
   toastBg.fillStyle(0x000000, 0.7);
-  toastBg.fillRoundedRect(cx - 100, 280, 200, 38, 10).setDepth(200);
+  toastBg.fillRoundedRect(cx - 100, 206, 200, 38, 10).setDepth(200);
   var toastText = scene.add.text(cx, 299, message, {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '15px', color: '#FFFFFF'
+    fontSize: '13px', color: '#FFFFFF'
   }).setOrigin(0.5).setDepth(201);
   scene.time.delayedCall(1200, function () {
     toastBg.destroy();
@@ -2017,11 +2005,11 @@ function showToast(scene, message) {
 function createPlayHistoryArea(scene) {
   var bg = scene.add.graphics();
   bg.fillStyle(0x000000, 0.25);
-  bg.fillRoundedRect(12, 540, 936, 52, 6).setDepth(200);
+  bg.fillRoundedRect(12, 398, 936, 52, 6).setDepth(200);
 
   scene.add.text(20, 543, '最近出牌', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '9px', color: '#81C784'
+    fontSize: '8px', color: '#81C784'
   }).setDepth(201);
 
   scene.playHistoryText = scene.add.text(20, 554, '', {
