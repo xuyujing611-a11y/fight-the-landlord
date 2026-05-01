@@ -111,6 +111,7 @@ function checkCondition(eventId, gameState, playerHistory) {
 
   // 冷却检查
   const playerId = gameState.playerId || 'default';
+  if (!event.cooldownPerPlayer) event.cooldownPerPlayer = {};
   const lastTriggered = event.cooldownPerPlayer[playerId] || 0;
   if (lastTriggered > 0 && round - lastTriggered < event.cooldown) return false;
 

@@ -1,0 +1,35 @@
+[
+  {
+    "eventId": "scoreDouble",
+    "eventLabel": "🔥 得分加倍",
+    "eventDesc": "下一题得分翻倍！拼了！",
+    "timestamp": "2026-05-01T12:28:36.455Z",
+    "round": 5,
+    "effects": [
+      {
+        "type": "scoreMultiplier",
+        "detail": "下一题得分 ×2！",
+        "multiplier": 2,
+        "duration": "next_round"
+      }
+    ],
+    "playerId": "test_player",
+    "gameId": "test_game_001"
+  },
+  {
+    "eventId": "taunt",
+    "eventLabel": "😏 AI嘲讽",
+    "eventDesc": "AI 开始嘴炮攻击！答对下一题可以反击！",
+    "timestamp": "2026-05-01T12:28:36.485Z",
+    "round": 3,
+    "effects": [
+      {
+        "type": "taunt",
+        "detail": "建议你直接过牌，真的",
+        "counterCondition": "答对此题可嘲讽回击"
+      }
+    ],
+    "playerId": "p1",
+    "gameId": "g1"
+  }
+]
