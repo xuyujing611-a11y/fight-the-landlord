@@ -249,60 +249,119 @@ GameScene.prototype.renderPlayerHand = function () {
   this.cardDomElements = [];
   this.handCards = [];
 
-  var n = hand.length, cardWidth = 44;
-  var overlap = n > 6 ? Math.min(16, (315 - cardWidth) / (n - 1)) : 30;
-  var totalWidth = cardWidth + (n - 1) * overlap;
+  var n = hand.length, cw = 40, ch = 58;
+  var overlap = n > 6 ? Math.min(14, (320 - cw) / (n - 1)) : 28;
+  var totalWidth = cw + (n - 1) * overlap;
   var startX = (375 - totalWidth) / 2;
-  var baseY = 590;
+  var baseY = 592;
 
   for (var i = 0; i < n; i++) {
     var card = hand[i];
-    var x = startX + i * overlap + cardWidth / 2;
-    var arcOffset = Math.pow((i / (n - 1)) - 0.5, 2) * 32;
-    var y = baseY - arcOffset;
+    var cx = startX + i * overlap + cw / 2;
+    var arcOffset = Math.pow((i / (n - 1)) - 0.5, 2) * 28;
+    var cy = baseY - arcOffset;
     var isRed = card.isRed ? card.isRed() : (card.suit === 'heart' || card.suit === 'diamond' || card.rank === 14);
-    var colorClass = isRed ? 'ddz-card-red' : 'ddz-card-black';
+    var clr = isRed ? '#E53935' : '#212121';
     var display = card.displayName ? card.displayName() : Doudizhu.RANK_NAME_MAP[card.rank];
     var symbol = card.suitSymbol ? card.suitSymbol() : Doudizhu.SUIT_SYMBOLS[card.suit];
 
-    var cardDiv = document.createElement('div');
-    cardDiv.className = 'ddz-card-dom ' + colorClass;
-    cardDiv.innerHTML = '<div class="ddz-dom-top">' + display + '</div>' +
-      '<div class="ddz-dom-center">' + symbol + '</div>' +
-      '<div class="ddz-dom-bottom">' + display + '</div>';
-    var cardEl = this.add.dom(x, y, cardDiv).setOrigin(0.5, 0.5).setDepth(110);
-    cardEl.setData('cardIdx', i);
-    cardEl.setData('card', card);
-    cardEl.setData('selected', false);
+    var g = self.add.graphics().setDepth(110);
+    g.fillStyle(0xFFFFFF, 1);
+    g.fillRoundedRect(cx - cw/2, cy - ch/2, cw, ch, 4);
+    g.lineStyle(1, 0x90A4AE, 1);
+    g.strokeRoundedRect(cx - cw/2, cy - ch/2, cw, ch, 4);
 
-    (function (el, idx) {
-      el.addListener('click');
-      el.on('click', function () {
-        if (self.gameState !== GAME_STATE.PLAYER_TURN) {
-          showToast(self, '\u73B0\u5728\u4E0D\u662F\u4F60\u7684\u51FA\u724C\u9636\u6BB5');
-          return;
-        }
-        var s = this.getData('selected');
-        var cardNode2 = this.node && this.node.firstElementChild;
-        if (s) {
-          if (cardNode2) cardNode2.classList.remove('ddz-card-selected');
-          this.setY(this.y + 20);
-          this.setData('selected', false);
-          var pos = self.selectedCards.indexOf(idx);
-          if (pos >= 0) self.selectedCards.splice(pos, 1);
-        } else {
-          if (cardNode2) cardNode2.classList.add('ddz-card-selected');
-          this.setY(this.y - 20);
-          this.setData('selected', true);
-          self.selectedCards.push(idx);
-        }
-      });
-    })(cardEl, i);
+    var txtRank = self.add.text(cx - cw/2 + 3, cy - ch/2 + 2, display, {
+      fontFamily: 'Arial', fontSize: '11px', color: clr, fontStyle: 'bold'
+    }).setOrigin(0, 0).setDepth(111);
 
-    this.cardDomElements.push(cardEl);
-    this.handCards.push(cardEl);
+    var txtSuit = self.add.text(cx, cy - 2, symbol, {
+      fontFamily: 'Arial', fontSize: '20px', color: clr
+    }).setOrigin(0.5, 0.5).setDepth(111);
+
+    var txtRank2 = self.add.text(cx + cw/2 - 3, cy + ch/2 - 2, display, {
+      fontFamily: 'Arial', fontSize: '11px', color: clr, fontStyle: 'bold'
+    }).setOrigin(1, 1).setDepth(111);
+    txtRank2.setAngle(180);
+
+    var hitZone = self.add.zone(cx, cy, cw, ch).setInteractive().setDepth(112);
+    hitZone.setData('cardIdx', i);
+    hitZone.setData('card', card);
+    hitZone.setData('selected', false);
+    hitZone.setData('bg', g);
+    hitZone.setData('txtRank', txtRank);
+    hitZone.setData('txtSuit', txtSuit);
+    hitZone.setData('txtRank2', txtRank2);
+    hitZone.setData('origY', cy);
+
+    hitZone.on('pointerdown', function () {
+      if (self.gameState !== GAME_STATE.PLAYER_TURN) {
+        showToast(self, '\u73B0\u5728\u4E0D\u662F\u4F60\u7684\u51FA\u724C\u9636\u6BB5');
+        return;
+      }
+      var idx2 = this.getData('cardIdx');
+      var s = this.getData('selected');
+      var bg = this.getData('bg');
+      if (s) {
+        bg.clear();
+        bg.fillStyle(0xFFFFFF, 1);
+        bg.fillRoundedRect(cx - cw/2, cy - ch/2, cw, ch, 4);
+        bg.lineStyle(1, 0x90A4AE, 1);
+        bg.strokeRoundedRect(cx - cw/2, cy - ch/2, cw, ch, 4);
+        this.y += 20;
+        this.setData('selected', false);
+        var pos = self.selectedCards.indexOf(idx2);
+        if (pos >= 0) self.selectedCards.splice(pos, 1);
+      } else {
+        bg.clear();
+        bg.fillStyle(0xFFFFFF, 1);
+        bg.fillRoundedRect(cx - cw/2, cy - ch/2, cw, ch, 4);
+        bg.lineStyle(2, 0x4ECDC4, 1);
+        bg.strokeRoundedRect(cx - cw/2, cy - ch/2, cw, ch, 4);
+        this.y -= 20;
+        this.setData('selected', true);
+        self.selectedCards.push(idx2);
+      }
+    });
+
+    this.cardDomElements.push(hitZone);
+    this.handCards.push(hitZone);
   }
-  ensureCardCSS();
+};
+
+// ================================================================
+// 卡牌选中/取消辅助方法
+// ================================================================
+
+GameScene.prototype._clearCardSelection = function () {
+  for (var i = 0; i < this.cardDomElements.length; i++) {
+    var el = this.cardDomElements[i];
+    if (el.getData('selected')) {
+      var bg = el.getData('bg');
+      if (bg) {
+        var cw = 40, ch = 58;
+        bg.clear();
+        bg.fillStyle(0xFFFFFF, 1);
+        bg.fillRoundedRect(el.x - cw/2, el.y - ch/2, cw, ch, 4);
+        bg.lineStyle(1, 0x90A4AE, 1);
+        bg.strokeRoundedRect(el.x - cw/2, el.y - ch/2, cw, ch, 4);
+      }
+      el.setData('selected', false);
+    }
+  }
+};
+
+GameScene.prototype._highlightCard = function (el) {
+  el.setData('selected', true);
+  var bg = el.getData('bg');
+  if (bg) {
+    var cw = 40, ch = 58;
+    bg.clear();
+    bg.fillStyle(0xFFFFFF, 1);
+    bg.fillRoundedRect(el.x - cw/2, el.y - ch/2, cw, ch, 4);
+    bg.lineStyle(2, 0x4ECDC4, 1);
+    bg.strokeRoundedRect(el.x - cw/2, el.y - ch/2, cw, ch, 4);
+  }
 };
 
 // ================================================================
@@ -458,15 +517,7 @@ GameScene.prototype.localHint = function () {
     return;
   }
   var hintPlay = plays[0];
-  for (var i = 0; i < this.cardDomElements.length; i++) {
-    var el = this.cardDomElements[i];
-    if (el.getData('selected')) {
-      if (el.node && el.node.firstElementChild) {
-        el.node.firstElementChild.classList.remove('ddz-card-selected');
-      }
-      el.setData('selected', false);
-    }
-  }
+  this._clearCardSelection();
   this.selectedCards = [];
   var hintRanks = {};
   for (var j = 0; j < hintPlay.length; j++) {
@@ -476,11 +527,7 @@ GameScene.prototype.localHint = function () {
     var card = this.cardDomElements[k].getData('card');
     var key = card.suit + ':' + card.rank;
     if (hintRanks[key]) {
-      var el2 = this.cardDomElements[k];
-      if (el2.node && el2.node.firstElementChild) {
-        el2.node.firstElementChild.classList.add('ddz-card-selected');
-      }
-      el2.setData('selected', true);
+      this._highlightCard(this.cardDomElements[k]);
       this.selectedCards.push(k);
     }
   }
@@ -489,26 +536,14 @@ GameScene.prototype.localHint = function () {
 };
 
 GameScene.prototype.highlightHint = function (hint) {
-  for (var i = 0; i < this.cardDomElements.length; i++) {
-    var el = this.cardDomElements[i];
-    if (el.getData('selected')) {
-      if (el.node && el.node.firstElementChild) {
-        el.node.firstElementChild.classList.remove('ddz-card-selected');
-      }
-      el.setData('selected', false);
-    }
-  }
+  this._clearCardSelection();
   this.selectedCards = [];
   if (!hint.cards) return;
   for (var j = 0; j < this.cardDomElements.length; j++) {
     var card = this.cardDomElements[j].getData('card');
     for (var k = 0; k < hint.cards.length; k++) {
       if (card.suit === hint.cards[k].suit && card.rank === hint.cards[k].rank) {
-        var el2 = this.cardDomElements[j];
-        if (el2.node && el2.node.firstElementChild) {
-          el2.node.firstElementChild.classList.add('ddz-card-selected');
-        }
-        el2.setData('selected', true);
+        this._highlightCard(this.cardDomElements[j]);
         this.selectedCards.push(j);
         break;
       }
