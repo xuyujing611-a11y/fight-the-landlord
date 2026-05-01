@@ -1,21 +1,33 @@
 {
   "name": "fight-the-landlord",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "AI斗地主 - 后端 API 服务",
+  "main": "src/server/index.js",
   "directories": {
     "doc": "docs"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node src/server/index.js",
+    "test": "node src/client/js/CardEngine.test.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
     "phaser": "^3.80.1"
   },
   "devDependencies": {
     "http-server": "^14.1.1"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xuyujing611-a11y/fight-the-landlord.git"
+  },
+  "bugs": {
+    "url": "https://github.com/xuyujing611-a11y/fight-the-landlord/issues"
+  },
+  "homepage": "https://github.com/xuyujing611-a11y/fight-the-landlord#readme"
 }

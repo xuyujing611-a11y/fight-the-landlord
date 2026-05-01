@@ -3,7 +3,7 @@
  * Node.js 直接运行: node card-engine-test.js
  */
 
-var Doudizhu = require('./card-engine.js');
+var Doudizhu = require('./CardEngine.js');
 var Card = Doudizhu.Card;
 var Deck = Doudizhu.Deck;
 var HAND_TYPES = Doudizhu.HAND_TYPES;
