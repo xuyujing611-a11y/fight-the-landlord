@@ -1511,9 +1511,11 @@ GameScene.prototype._renderQuestion = function (q, aiId) {
   var optionKeys = ['A', 'B', 'C', 'D'];
   self.chaosQuestionAnswered = false;
 
-  // 2×2 网格布局
+  // 2×2 网格布局 — 增大选项框高度防止文字溢出
+  var optH = 54; // 增大到54px支持多行文字
+  var optW = 260;
   var gridX = [215, 495];
-  var gridY = [165, 201];
+  var gridY = [165, 200];
 
   for (var oi = 0; oi < optionKeys.length; oi++) {
     var ok = optionKeys[oi];
@@ -1525,23 +1527,25 @@ GameScene.prototype._renderQuestion = function (q, aiId) {
 
     var optBg = self.add.graphics();
     optBg.fillStyle(0xF5F5F5, 1);
-    optBg.fillRoundedRect(gx, gy, 260, 42, 8).setDepth(302);
+    optBg.fillRoundedRect(gx, gy, optW, optH, 8).setDepth(302);
     optBg.lineStyle(1.5, 0xCCCCCC, 1);
-    optBg.strokeRoundedRect(gx, gy, 260, 42, 8);
-    optBg.setInteractive(new Phaser.Geom.Rectangle(gx, gy, 260, 42), Phaser.Geom.Rectangle.Contains);
+    optBg.strokeRoundedRect(gx, gy, optW, optH, 8);
+    optBg.setInteractive(new Phaser.Geom.Rectangle(gx, gy, optW, optH), Phaser.Geom.Rectangle.Contains);
 
     var optMarkBg = self.add.graphics();
     optMarkBg.fillStyle(0x4ECDC4, 1);
-    optMarkBg.fillCircle(gx + 20, gy + 21, 9).setDepth(303);
-    var optMarkTxt = self.add.text(gx + 20, gy + 21, ok, {
+    optMarkBg.fillCircle(gx + 20, gy + optH / 2, 9).setDepth(303);
+    var optMarkTxt = self.add.text(gx + 20, gy + optH / 2, ok, {
       fontFamily: '"PingFang SC",sans-serif',
       fontSize: '10px', color: '#FFFFFF', fontStyle: 'bold'
     }).setOrigin(0.5).setDepth(304);
 
-    var displayOpt = optText.length > 18 ? optText.substring(0, 18) + '...' : optText;
-    var optTxt = self.add.text(gx + 40, gy + 21, displayOpt, {
+    // 取消18字截断，改用自动换行
+    var optTxt = self.add.text(gx + 40, gy + optH / 2, optText, {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '11px', color: '#333333'
+      fontSize: '11px', color: '#333333',
+      wordWrap: { width: optW - 52 },
+      lineSpacing: 1
     }).setOrigin(0, 0.5).setDepth(303);
 
     optBg.setData('optKey', ok);
