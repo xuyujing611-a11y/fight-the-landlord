@@ -1,6 +1,6 @@
 /**
  * game.js - 斗地主 Phaser 3 主游戏
- * 375x812 手机竖屏布局
+ * 960x600 横屏布局
  * 依赖: Phaser 3 CDN + CardEngine.js + apiClient.js
  */
 
