@@ -340,16 +340,23 @@ function writeEventLog(logs) {
   fs.writeFileSync(EVENT_LOG_PATH, JSON.stringify(logs, null, 2));
 }
 
+const MAX_EVENT_LOG = 500;
+
 function logEvent(eventResult, gameState) {
   if (!eventResult) return;
   const logs = readEventLog();
+
+  // 超限时先裁剪旧记录再追加，避免数组膨胀
+  while (logs.length >= MAX_EVENT_LOG) {
+    logs.shift();
+  }
+
   logs.push({
     ...eventResult,
     playerId: gameState.playerId || 'anonymous',
     gameId: gameState.gameId || 'unknown'
   });
-  // 只保留最近500条
-  if (logs.length > 500) logs.splice(0, logs.length - 500);
+
   writeEventLog(logs);
 }
 

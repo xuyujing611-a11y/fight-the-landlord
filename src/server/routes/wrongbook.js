@@ -87,11 +87,12 @@ router.post('/record', (req, res) => {
 
     // 只在答错时记录
     if (!record.isCorrect) {
+      // 新记录插到队首（最新在前）
       WRONG_BOOK.unshift(record);
 
-      // 限制最大记录数
+      // 超限时裁剪最旧记录（队尾），确保不超过 MAX_RECORDS
       if (WRONG_BOOK.length > MAX_RECORDS) {
-        WRONG_BOOK.length = MAX_RECORDS;
+        WRONG_BOOK.splice(MAX_RECORDS);
       }
 
       // 持久化到磁盘
