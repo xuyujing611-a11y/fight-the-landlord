@@ -33,94 +33,62 @@ var game = new Phaser.Game(GameConfig);
 // SoundManager - Web Audio API 音效
 // ================================================================
 var SoundManager = {
-  ctx: null,
-  init: function () {
-    try {
-      this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-    } catch (e) {
-      console.warn('Web Audio API not available');
-    }
+  scene: null,
+  init: function (scene) {
+    this.scene = scene;
+    // \u6D17\u724C\u97F3\u6548 - \u5F00\u5C40\u65F6\u64AD\u653E
+    if (this.scene) this.scene.sound.play('dieShuffle1', { volume: 0.5 });
   },
-  _play: function (freq, duration, type, volume, delay) {
-    if (!this.ctx) return;
-    try {
-      if (this.ctx.state === 'suspended') this.ctx.resume();
-      var t = this.ctx.currentTime + (delay || 0);
-      var osc = this.ctx.createOscillator();
-      var gain = this.ctx.createGain();
-      osc.type = type || 'sine';
-      osc.frequency.setValueAtTime(freq, t);
-      gain.gain.setValueAtTime(volume || 0.3, t);
-      gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-      osc.start(t);
-      osc.stop(t + duration);
-    } catch (e) { /* ignore audio errors */ }
+  _random: function (base, count) {
+    return base + (Math.floor(Math.random() * count) + 1);
   },
-  // 出牌 - 短促的"哒"点击声
-  playCard: function () { this._play(880, 0.06, 'square', 0.12); },
-  // 选牌 - 高音滴
-  selectCard: function () { this._play(660, 0.08, 'sine', 0.15); },
-  // 取消选牌 - 低音滴
-  deselectCard: function () { this._play(480, 0.08, 'sine', 0.12); },
-  // 轮到玩家 - 上升提示音
+  playCard: function () {
+    if (!this.scene) return;
+    this.scene.sound.play(this._random('cardPlace', 3), { volume: 0.6 });
+  },
+  selectCard: function () {
+    if (!this.scene) return;
+    this.scene.sound.play(this._random('cardSlide', 3), { volume: 0.4 });
+  },
+  deselectCard: function () {
+    if (!this.scene) return;
+    this.scene.sound.play(this._random('cardSlide', 3), { volume: 0.3 });
+  },
   playerTurn: function () {
-    if (!this.ctx) return;
-    try {
-      if (this.ctx.state === 'suspended') this.ctx.resume();
-      var osc = this.ctx.createOscillator();
-      var gain = this.ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(500, this.ctx.currentTime);
-      osc.frequency.linearRampToValueAtTime(880, this.ctx.currentTime + 0.15);
-      gain.gain.setValueAtTime(0.18, this.ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.25);
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-      osc.start();
-      osc.stop(this.ctx.currentTime + 0.25);
-    } catch (e) {}
+    if (!this.scene) return;
+    this.scene.sound.play(this._random('chipsCollide', 3), { volume: 0.5 });
   },
-  // 叫分 - 三连升调
   bid: function () {
-    this._play(440, 0.1, 'triangle', 0.18, 0);
-    this._play(660, 0.1, 'triangle', 0.18, 0.12);
-    this._play(880, 0.18, 'triangle', 0.22, 0.24);
+    if (!this.scene) return;
+    this.scene.sound.play(this._random('chipsCollide', 3), { volume: 0.5 });
   },
-  // 不叫 - 简短下降
   passBid: function () {
-    this._play(440, 0.08, 'sine', 0.12, 0);
-    this._play(300, 0.12, 'sine', 0.10, 0.08);
+    if (!this.scene) return;
+    this.scene.sound.play(this._random('cardSlide', 3), { volume: 0.3 });
   },
-  // 胜利 - 凯旋号角
   win: function () {
-    this._play(523, 0.15, 'sine', 0.22, 0);
-    this._play(659, 0.15, 'sine', 0.22, 0.18);
-    this._play(784, 0.15, 'sine', 0.22, 0.36);
-    this._play(1047, 0.35, 'sine', 0.28, 0.54);
+    if (!this.scene) return;
+    this.scene.sound.play('cardPlace3', { volume: 0.7 });
   },
-  // 失败 - 低沉衰退
   lose: function () {
-    if (!this.ctx) return;
-    try {
-      if (this.ctx.state === 'suspended') this.ctx.resume();
-      var osc = this.ctx.createOscillator();
-      var gain = this.ctx.createGain();
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(350, this.ctx.currentTime);
-      osc.frequency.linearRampToValueAtTime(120, this.ctx.currentTime + 0.5);
-      gain.gain.setValueAtTime(0.12, this.ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.6);
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-      osc.start();
-      osc.stop(this.ctx.currentTime + 0.6);
-    } catch (e) {}
+    if (!this.scene) return;
+    this.scene.sound.play('cardSlide1', { volume: 0.4 });
   },
-  // 轮到AI思考 - 轻微提示
-  aiThink: function () { this._play(350, 0.06, 'sine', 0.08); }
+  aiThink: function () {
+    // no specific sound for AI thinking
+  }
 };
+
+
+// ================================================================
+// \u724C\u9762\u56FE\u7247\u5E2E\u52A9\u51FD\u6570
+// ================================================================
+function getCardImageKey(card) {
+  if (card.suit === 'joker') return 'cardJoker';
+  var suitMap = { spade:'Spades', heart:'Hearts', club:'Clubs', diamond:'Diamonds' };
+  var rankNames = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'];
+  return 'card' + suitMap[card.suit] + rankNames[card.rank];
+}
 
 // ================================================================
 // 工具函数
@@ -180,8 +148,29 @@ GameScene.prototype.init = function () {
 };
 
 GameScene.prototype.preload = function () {
+  // \u5934\u50CF
   this.load.image('avatar_wang', 'assets/avatars/wang_duidui.png');
   this.load.image('avatar_su', 'assets/avatars/su_tiantian.png');
+
+  // \u724C\u9762\u56FE\u7247 (54\u5F20)
+  var suitNames = ['Clubs','Diamonds','Hearts','Spades'];
+  var rankNames = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'];
+  for (var si = 0; si < suitNames.length; si++) {
+    for (var ri = 0; ri < rankNames.length; ri++) {
+      var key = 'card' + suitNames[si] + rankNames[ri];
+      this.load.image(key, 'assets/cards/' + key + '.png');
+    }
+  }
+  this.load.image('cardJoker', 'assets/cards/cardJoker.png');
+  this.load.image('cardBack', 'assets/cards/cardBack_blue1.png');
+
+  // \u97F3\u6548
+  for (var ai = 1; ai <= 3; ai++) {
+    this.load.audio('cardPlace' + ai, 'assets/sounds/cardPlace' + ai + '.ogg');
+    this.load.audio('cardSlide' + ai, 'assets/sounds/cardSlide' + ai + '.ogg');
+    this.load.audio('chipsCollide' + ai, 'assets/sounds/chipsCollide' + ai + '.ogg');
+  }
+  this.load.audio('dieShuffle1', 'assets/sounds/dieShuffle1.ogg');
 };
 
 GameScene.prototype.create = function () {
@@ -193,12 +182,11 @@ GameScene.prototype.create = function () {
   createHandArea(this);
   createActionButtons(this);
 
-  this.domContainer = this.add.dom(0, 0).setOrigin(0, 0).setDepth(100);
   this.renderPlayerHand();
   this.setStatusText('\u8F6E\u5230\u4F60\u51FA\u724C\uFF08\u81EA\u7531\u51FA\u724C\uFF09');
 
   // 初始化音效
-  SoundManager.init();
+  SoundManager.init(this);
 
   // 创建出牌记录区域
   createPlayHistoryArea(this);
@@ -362,82 +350,54 @@ GameScene.prototype.renderPlayerHand = function () {
   var self = this;
   var hand = this.playerHand;
   if (!hand || hand.length === 0) return;
-  for (var i = 0; i < this.cardDomElements.length; i++) {
-    if (this.cardDomElements[i]) this.cardDomElements[i].destroy();
+
+  // \u9500\u6BC1\u65E7\u7684\u624B\u724C\u5BF9\u8C61
+  for (var di = 0; di < this.cardDomElements.length; di++) {
+    var old = this.cardDomElements[di];
+    if (old) {
+      if (old.img) old.img.destroy();
+      old.destroy();
+    }
   }
   this.cardDomElements = [];
   this.handCards = [];
 
   var n = hand.length, cw = 56, ch = 84;
-  var overlap = n > 6 ? Math.min(18, (520 - cw) / (n - 1)) : 28;
+  var overlap = n > 6 ? Math.min(28, (520 - cw) / (n - 1)) : 28;
   var totalWidth = cw + (n - 1) * overlap;
   var startX = (600 - totalWidth) / 2;
   var baseY = 700;
 
-  for (var i = 0; i < n; i++) {
-    var card = hand[i];
-    var cx = startX + i * overlap + cw / 2;
-    var arcOffset = Math.pow((i / (n - 1)) - 0.5, 2) * 36;
+  for (var ii = 0; ii < n; ii++) {
+    var card = hand[ii];
+    var cx = startX + ii * overlap + cw / 2;
+    var arcOffset = Math.pow((ii / (n - 1)) - 0.5, 2) * 36;
     var cy = baseY - arcOffset;
-    var isRed = card.isRed ? card.isRed() : (card.suit === 'heart' || card.suit === 'diamond' || card.rank === 14);
-    var clr = isRed ? '#E53935' : '#212121';
-    var display = card.displayName ? card.displayName() : Doudizhu.RANK_NAME_MAP[card.rank];
-    var symbol = card.suitSymbol ? card.suitSymbol() : Doudizhu.SUIT_SYMBOLS[card.suit];
+    var key = getCardImageKey(card);
 
-    var g = self.add.graphics().setDepth(110);
-    g.fillStyle(0xFFFFFF, 1);
-    g.fillRoundedRect(cx - cw/2, cy - ch/2, cw, ch, 4);
-    g.lineStyle(1, 0x90A4AE, 1);
-    g.strokeRoundedRect(cx - cw/2, cy - ch/2, cw, ch, 4);
+    var img = self.add.image(cx, cy, key).setDisplaySize(cw, ch).setDepth(110);
 
-    var txtRank = self.add.text(cx - cw/2 + 3, cy - ch/2 + 2, display, {
-      fontFamily: 'Arial', fontSize: '14px', color: clr, fontStyle: 'bold'
-    }).setOrigin(0, 0).setDepth(111);
+    // \u70B9\u51FB\u4E0E\u9009\u62E9
+    img.setInteractive();
+    img.setData('cardIdx', ii);
+    img.setData('card', card);
+    img.setData('selected', false);
+    img.setData('origY', cy);
 
-    var txtSuit = self.add.text(cx, cy - 2, symbol, {
-      fontFamily: 'Arial', fontSize: '28px', color: clr
-    }).setOrigin(0.5, 0.5).setDepth(111);
-
-    var txtRank2 = self.add.text(cx + cw/2 - 3, cy + ch/2 - 2, display, {
-      fontFamily: 'Arial', fontSize: '14px', color: clr, fontStyle: 'bold'
-    }).setOrigin(1, 1).setDepth(111);
-    txtRank2.setAngle(180);
-
-    var hitZone = self.add.zone(cx, cy, cw, ch).setInteractive().setDepth(112);
-    hitZone.setData('cardIdx', i);
-    hitZone.setData('card', card);
-    hitZone.setData('selected', false);
-    hitZone.setData('bg', g);
-    hitZone.setData('txtRank', txtRank);
-    hitZone.setData('txtSuit', txtSuit);
-    hitZone.setData('txtRank2', txtRank2);
-    hitZone.setData('origY', cy);
-
-    hitZone.on('pointerdown', function () {
+    img.on('pointerdown', function () {
       if (self.gameState !== GAME_STATE.PLAYER_TURN) {
         showToast(self, '\u73B0\u5728\u4E0D\u662F\u4F60\u7684\u51FA\u724C\u9636\u6BB5');
         return;
       }
       var idx2 = this.getData('cardIdx');
       var s = this.getData('selected');
-      var bg = this.getData('bg');
       if (s) {
-        bg.clear();
-        bg.fillStyle(0xFFFFFF, 1);
-        bg.fillRoundedRect(cx - cw/2, cy - ch/2, cw, ch, 4);
-        bg.lineStyle(1, 0x90A4AE, 1);
-        bg.strokeRoundedRect(cx - cw/2, cy - ch/2, cw, ch, 4);
         this.y += 28;
         this.setData('selected', false);
         var pos = self.selectedCards.indexOf(idx2);
         if (pos >= 0) self.selectedCards.splice(pos, 1);
         SoundManager.deselectCard();
-    } else {
-        bg.clear();
-        bg.fillStyle(0xFFFFFF, 1);
-        bg.fillRoundedRect(cx - cw/2, cy - ch/2, cw, ch, 4);
-        bg.lineStyle(2, 0x4ECDC4, 1);
-        bg.strokeRoundedRect(cx - cw/2, cy - ch/2, cw, ch, 4);
+      } else {
         this.y -= 28;
         this.setData('selected', true);
         self.selectedCards.push(idx2);
@@ -445,49 +405,29 @@ GameScene.prototype.renderPlayerHand = function () {
       }
     });
 
-    this.cardDomElements.push(hitZone);
-    this.handCards.push(hitZone);
+    self.cardDomElements.push(img);
+    self.handCards.push(img);
   }
 };
-
-// ================================================================
-// 卡牌选中/取消辅助方法
 // ================================================================
 
 GameScene.prototype._clearCardSelection = function () {
-  var n = this.playerHand.length;
-  var cw = 56, ch = 84;
-  for (var i = 0; i < this.cardDomElements.length; i++) {
-    var el = this.cardDomElements[i];
-    var bg = el.getData('bg');
-    if (bg) {
-      bg.clear();
-      bg.fillStyle(0xFFFFFF, 1);
-      bg.fillRoundedRect(el.x - cw/2, el.y - ch/2, cw, ch, 4);
-      bg.lineStyle(1, 0x90A4AE, 1);
-      bg.strokeRoundedRect(el.x - cw/2, el.y - ch/2, cw, ch, 4);
-    }
-    el.setData('selected', false);
-    if (n > 0) {
-      var overlap = n > 6 ? Math.min(18, (520 - cw) / (n - 1)) : 32;
-      var arcOffset = Math.pow((i / Math.max(1, n - 1)) - 0.5, 2) * 36;
-      el.setY(698 - arcOffset);
+  for (var ci = 0; ci < this.cardDomElements.length; ci++) {
+    var el = this.cardDomElements[ci];
+    if (!el) continue;
+    var s = el.getData('selected');
+    if (s) {
+      var origY = el.getData('origY');
+      if (origY !== undefined) el.y = origY;
+      el.setData('selected', false);
     }
   }
 };
-
 GameScene.prototype._highlightCard = function (el) {
+  if (!el) return;
   el.setData('selected', true);
-  el.setY(el.y - 28);
-  var bg = el.getData('bg');
-  if (bg) {
-    var cw = 56, ch = 84;
-    bg.clear();
-    bg.fillStyle(0xFFFFFF, 1);
-    bg.fillRoundedRect(el.x - cw/2, el.y - ch/2, cw, ch, 4);
-    bg.lineStyle(2, 0x4ECDC4, 1);
-    bg.strokeRoundedRect(el.x - cw/2, el.y - ch/2, cw, ch, 4);
-  }
+  var origY = el.getData('origY');
+  if (origY !== undefined) el.y = origY - 28;
 };
 
 // ================================================================
@@ -777,79 +717,33 @@ GameScene.prototype.finishBidding = function (res) {
 };
 
 GameScene.prototype.showBottomCards = function (cards) {
-  if (!cards || cards.length === 0) return;
-  var cx = 300;
-  // 清除旧的底牌文字与图形
-  if (this.bottomCardsText) this.bottomCardsText.destroy();
-  if (this.bottomCardGfx) this.bottomCardGfx.destroy();
-
-  var display = cards.map(function (c) {
-    return Doudizhu.RANK_NAME_MAP[c.rank] || '?';
-  }).join(' ');
-
-  this.bottomCardsText = this.add.text(cx, 449, '底牌: ' + display, {
-    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '16px', color: '#FFD93D', fontStyle: 'bold',
-    stroke: '#000000', strokeThickness: 3
-  }).setOrigin(0.5).setDepth(20);
-
-  // 绘制底牌牌面图案（蓝色牌背花纹）
-  this.bottomCardGfx = this.add.graphics().setDepth(19);
-  var bw = 24, bh = 34, gap = 5;
-  var totalW = cards.length * (bw + gap) - gap;
-  var bx = Math.round(cx - totalW / 2);
-  for (var i = 0; i < cards.length; i++) {
-    var c = cards[i];
-    var cx2 = bx + i * (bw + gap);
-    // 蓝色牌背
-    this.bottomCardGfx.fillStyle(0x1565C0, 1);
-    this.bottomCardGfx.fillRoundedRect(cx2, 471, bw, bh, 2);
-    this.bottomCardGfx.lineStyle(1, 0x0D47A1, 0.5);
-    this.bottomCardGfx.strokeRoundedRect(cx2, 471, bw, bh, 2);
-    this.bottomCardGfx.fillStyle(0x1976D2, 1);
-    this.bottomCardGfx.fillRect(cx2 + 4, 476, bw - 8, bh - 10);
-    this.bottomCardGfx.fillStyle(0x42A5F5, 0.4);
-    this.bottomCardGfx.fillCircle(cx2 + bw/2, 488, 4);
-    // 花色颜色标记
-    var isRed = c.isRed ? c.isRed() : (c.suit === 'heart' || c.suit === 'diamond');
-    this.bottomCardGfx.fillStyle(isRed ? 0xE53935 : 0x212121, 0.7);
-    this.bottomCardGfx.fillRect(cx2 + 5, 477, 4, 4);
+  // \u6E05\u9664\u65E7\u7684\u5E95\u724C\u56FE\u7247
+  if (this.bottomCardImgs) {
+    for (var bi = 0; bi < this.bottomCardImgs.length; bi++) this.bottomCardImgs[bi].destroy();
   }
-};
-GameScene.prototype.localAssignLandlord = function () {
-  // 本地模式：随机定地主，直接开始游戏
-  this.landlordIndex = Math.floor(Math.random() * 3);
-  this.isLandlord = (this.landlordIndex === 0);
+  this.bottomCardImgs = [];
 
-  if (this.landlordIndex === 0) {
-    for (var i = 0; i < this.remainingCards.length; i++) {
-      this.playerHand.push(this.remainingCards[i]);
-    }
-    this.playerHand = Doudizhu.sortCards(this.playerHand);
-    this.renderPlayerHand();
-  } else if (this.landlordIndex === 1) {
-    for (var i = 0; i < this.remainingCards.length; i++) {
-      this.ai1Hand.push(this.remainingCards[i]);
-    }
-    this.updateAICount(1);
-  } else {
-    for (var i = 0; i < this.remainingCards.length; i++) {
-      this.ai2Hand.push(this.remainingCards[i]);
-    }
-    this.updateAICount(2);
+  if (!cards || cards.length === 0) {
+    // \u6CA1\u6709\u5E95\u724C\u65F6\u663E\u793A\u95EE\u53F7
+    if (this.bottomCardText) this.bottomCardText.destroy();
+    this.bottomCardText = this.add.text(300, 451, '\u5E95\u724C: ? ? ?', {
+      fontFamily: '\u201CPingFang SC\u201D,\u201CMicrosoft YaHei\u201D,sans-serif',
+      fontSize: '9px', color: '#66BB6A', alpha: 0.4
+    }).setOrigin(0.5).setDepth(20);
+    return;
   }
 
-  this.showBottomCards(this.remainingCards);
-  this.setStatusText('\u5F00\u59CB\u51FA\u724C');
+  if (this.bottomCardText) this.bottomCardText.destroy();
 
-  var self = this;
-  this.time.delayedCall(1200, function () {
-    self.gameState = GAME_STATE.PLAYER_TURN;
-    self.setStatusText('\u8F6E\u5230\u4F60\u51FA\u724C\uFF08\u81EA\u7531\u51FA\u724C\uFF09');
-    self.showActionButtons();
-  });
+  // \u663E\u793A3\u5F20\u724C\u80CC\u56FE\u7247
+  var startX = 300 - 80;
+  var arr = [];
+  for (var bj = 0; bj < Math.min(cards.length, 3); bj++) {
+    var bImg = this.add.image(startX + bj * 60, 451, 'cardBack').setDisplaySize(50, 70).setDepth(20);
+    arr.push(bImg);
+  }
+  this.bottomCardImgs = arr;
 };
-
 GameScene.prototype.restartGame = function () {
   // 销毁所有 UI 元素
   this.hideBiddingUI();
@@ -885,8 +779,9 @@ GameScene.prototype.checkAPIConnection = function () {
     self.isAPIMode = false;
     return;
   }
-  ApiClient.identify([new Doudizhu.Card('spade', 0)])
-    .then(function () {
+  // \u53EA\u68C0\u67E5\u670D\u52A1\u5668\u662F\u5426\u5728\u7EBF\uFF0C\u4E0D\u53D1\u771F\u5B9E\u724C\u68C0\u6D4B
+  apiGetSimple('/api/verify/health')
+    .then(function (res) {
       console.log('API OK, using API mode');
       self.isAPIMode = true;
       self.setStatusText('\u8FDE\u63A5\u670D\u52A1\u5668\u6210\u529F');
@@ -897,6 +792,22 @@ GameScene.prototype.checkAPIConnection = function () {
       self.setStatusText('\u672C\u5730\u6A21\u5F0F\uFF08\u672A\u68C0\u6D4B\u5230\u540E\u7AEF\uFF09');
     });
 };
+
+function apiGetSimple(path) {
+  var url = 'http://localhost:3100' + path;
+  return new Promise(function (resolve, reject) {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState === 4) {
+        if (xhr.status >= 200 && xhr.status < 300) resolve(xhr.responseText);
+        else reject(new Error('HTTP ' + xhr.status));
+      }
+    };
+    xhr.onerror = function () { reject(new Error('Network error')); };
+    xhr.send();
+  });
+}
 
 GameScene.prototype.doPlayerPlay = function () {
   var self = this;
@@ -991,7 +902,17 @@ GameScene.prototype.doPlayerPass = function () {
     this.passCount = 0;
     this.lastPlay = null;
     this.lastPlayInfo = null;
-    this.setStatusText('\u4E24\u5BB6\u90FD\u8FC7\uFF0C\u8F6E\u5230\u4F60\u81EA\u7531\u51FA\u724C');
+    // \u81EA\u7531\u51FA\u724C\u6743\u7ED9\u4E0A\u4E00\u8F6E\u6700\u540E\u51FA\u724C\u8005
+    if (this.lastPlayPlayer !== 'player') {
+      var aiIdx = this.lastPlayPlayer === 'ai1' ? 0 : 1;
+      var aiName = this.lastPlayPlayer === 'ai1' ? '\u738B\u603C\u603C' : '\u82CF\u751C\u751C';
+      var selfB1 = this;
+      this.setStatusText('\u4E24\u5BB6\u90FD\u8FC7\uFF0C\u8F6E\u5230' + aiName);
+      this.time.delayedCall(500, function () { selfB1.doAITurn(aiIdx); });
+    } else {
+      this.gameState = GAME_STATE.PLAYER_TURN;
+      this.setStatusText('\u4E24\u5BB6\u90FD\u8FC7\uFF0C\u8F6E\u5230\u4F60\u81EA\u7531\u51FA\u724C');
+    }
     return;
   }
   var self = this;
@@ -1109,8 +1030,20 @@ GameScene.prototype.handleAIPlay = function (aiIndex, aiName, res) {
     }
   }
   if (playCards.length !== apiCards.length) {
-    this.localAIPlay(aiIndex, aiName);
-    return;
+    // \u5339\u914D\u5931\u8D25\u65F6\u4F7F\u7528\u5DF2\u6210\u529F\u5339\u914D\u7684\u724C\uFF0C\u800C\u4E0D\u662F\u5E9F\u5F03\u5168\u90E8
+    if (playCards.length > 0) {
+      var partialInfo = Doudizhu.identifyType(playCards);
+      if (partialInfo.type !== 'INVALID') {
+        // \u5339\u914D\u90E8\u5206\u6709\u6548\u724C\u578B\uFF0C\u7528\u5B83
+        console.warn('Partial match:', playCards.length, '/', apiCards.length);
+      } else {
+        this.localAIPlay(aiIndex, aiName);
+        return;
+      }
+    } else {
+      this.localAIPlay(aiIndex, aiName);
+      return;
+    }
   }
   var info = Doudizhu.identifyType(playCards);
   this.lastPlay = playCards;
@@ -1151,8 +1084,17 @@ GameScene.prototype.handleAIPass = function (aiIndex, aiName) {
     this.passCount = 0;
     this.lastPlay = null;
     this.lastPlayInfo = null;
-    this.gameState = GAME_STATE.PLAYER_TURN;
-    this.setStatusText('\u4E24\u5BB6\u90FD\u8FC7\uFF0C\u8F6E\u5230\u4F60\u81EA\u7531\u51FA\u724C');
+    // \u81EA\u7531\u51FA\u724C\u6743\u7ED9\u4E0A\u4E00\u8F6E\u6700\u540E\u51FA\u724C\u8005\uFF08\u4E0D\u662F\u5F53\u524Dpass\u7684\u4EBA\uFF09
+    if (this.lastPlayPlayer === 'player') {
+      this.gameState = GAME_STATE.PLAYER_TURN;
+      this.setStatusText('\u4E24\u5BB6\u90FD\u8FC7\uFF0C\u8F6E\u5230\u4F60\u81EA\u7531\u51FA\u724C');
+    } else {
+      var lastAiIdx = this.lastPlayPlayer === 'ai1' ? 0 : 1;
+      var lastAiName = this.lastPlayPlayer === 'ai1' ? '\u738B\u603C\u603C' : '\u82CF\u751C\u751C';
+      this.setStatusText('\u4E24\u5BB6\u90FD\u8FC7\uFF0C\u8F6E\u5230' + lastAiName);
+      var selfB1b = this;
+      this.time.delayedCall(500, function () { selfB1b.doAITurn(lastAiIdx); });
+    }
     return;
   }
   if (aiIndex === 0) {
@@ -1170,7 +1112,16 @@ GameScene.prototype.localAIPlay = function (aiIndex, aiName) {
   var hand = aiIndex === 0 ? this.ai1Hand : this.ai2Hand;
   var plays = Doudizhu.findValidPlays(hand, this.lastPlay);
   if (plays.length === 0) { this.handleAIPass(aiIndex, aiName); return; }
-  var chosen = plays[Math.floor(Math.random() * plays.length)];
+  // \u7B80\u5355\u7B56\u7565: \u4F18\u5148\u51FA\u6700\u5C0F\u7684\u724C\u578B\uFF08\u5355\u5F20>\u5BF9\u5B50>\u4E09\u5F20>\u987A\u5B50>\u70B8\u5F39\uFF09
+  var chosen = plays[0];
+  // \u5982\u679C\u662F\u81EA\u7531\u51FA\u724C\u4E14\u6709\u5355\u5F20\u53EF\u51FA\uff0c\u9009\u6700\u5C0F\u7684\u5355\u5F20
+  if (!this.lastPlay || this.lastPlay.length === 0) {
+    var singlePlay = null;
+    for (var pi = 0; pi < plays.length; pi++) {
+      if (plays[pi].length === 1) { singlePlay = plays[pi]; break; }
+    }
+    if (singlePlay) chosen = singlePlay;
+  }
   var info = Doudizhu.identifyType(chosen);
   for (var i = 0; i < chosen.length; i++) {
     for (var j = 0; j < hand.length; j++) {
@@ -1190,7 +1141,7 @@ GameScene.prototype.localAIPlay = function (aiIndex, aiName) {
   this.addPlayHistory(aiIndex === 0 ? 'ai1' : 'ai2', chosen);
   SoundManager.playCard();
   if (hand.length === 0) {
-    this.setStatusText(aiName + ' \u51FA\u5B8C\u4E86\uFF01\u83B7\u80FD\uFF01');
+    this.setStatusText(aiName + ' \u51FA\u5B8C\u4E86\uFF01\u83B7\u80DC\uFF01');
     showToast(this, aiName + '\u83B7\u80DC\uFF01');
     this.gameState = GAME_STATE.ROUND_END;
     SoundManager.lose();
@@ -1215,57 +1166,36 @@ GameScene.prototype.updateAICount = function (aiIndex) {
 };
 
 GameScene.prototype.displayPlay = function (cards, player) {
-  var gfx;
-  var baseX, baseY;
-  if (player === 'player') {
-    gfx = this.myPlayCardsGraphics;
-    baseX = 300; baseY = 396;
-  } else if (player === 'ai1') {
-    gfx = this.ai1PlayCardsGraphics;
-    baseX = 80; baseY = 177;
-  } else {
-    gfx = this.ai2PlayCardsGraphics;
-    baseX = 448; baseY = 177;
+  // \u6E05\u7406\u65E7\u7684\u51FA\u724C\u56FE\u7247
+  var gfxKey = player === 'player' ? 'myPlayCardsGfx' : (player === 'ai1' ? 'ai1PlayCardsGfx' : 'ai2PlayCardsGfx');
+  var oldGfx = this[gfxKey];
+  if (oldGfx) {
+    for (var gi = 0; gi < oldGfx.length; gi++) oldGfx[gi].destroy();
   }
-  if (!gfx) return;
-  gfx.clear();
-  // Destroy old card text objects for this player
-  var textKey = player + 'PlayTexts';
-  if (this[textKey]) {
-    this[textKey].forEach(function(t) { t.destroy(); });
-  }
-  this[textKey] = [];
-  var cardW = 40, cardH = 54, gap = 4;
+  this[gfxKey] = [];
+
+  if (!cards || cards.length === 0) return;
+
+  // \u786E\u5B9A\u4F4D\u7F6E
+  var positions = {
+    player: { x: 300, y: 396, w: 45, h: 68, origin: 0.5 },
+    ai1:    { x: 160, y: 175, w: 35, h: 53, origin: 0.5 },
+    ai2:    { x: 420, y: 175, w: 35, h: 53, origin: 0.5 }
+  };
+  var pos = positions[player] || positions.player;
   var n = cards.length;
-  var totalW = n * (cardW + gap) - gap;
-  var startX = Math.round(baseX - totalW / 2);
-  for (var i = 0; i < n; i++) {
-    var c = cards[i];
-    var cx = startX + i * (cardW + gap);
-    var cy = Math.round(baseY - cardH / 2);
-    // Card face
-    gfx.fillStyle(0xFFFFFF, 1);
-    gfx.fillRoundedRect(cx, cy, cardW, cardH, 3);
-    gfx.lineStyle(1, 0x90A4AE, 0.8);
-    gfx.strokeRoundedRect(cx, cy, cardW, cardH, 3);
-    var isRed = c.isRed ? c.isRed() : (c.suit === 'heart' || c.suit === 'diamond');
-    var display = c.displayName ? c.displayName() : Doudizhu.RANK_NAME_MAP[c.rank];
-    var symbol = c.suitSymbol ? c.suitSymbol() : Doudizhu.SUIT_SYMBOLS[c.suit];
-    // Build card text: rank + suit symbol
-    var cardText = display + symbol;
-    if (!symbol) cardText = display; // Joker: no suit symbol
-    // Draw rank + suit as a Phaser Text object centered on the card
-    var txt = this.add.text(cx + cardW / 2, cy + cardH / 2, cardText, {
-      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '18px',
-      fontStyle: 'bold',
-      color: isRed ? '#E53935' : '#212121',
-      align: 'center'
-    }).setOrigin(0.5).setDepth(12);
-    this[textKey].push(txt);
+  var overlap = Math.min(pos.w * 0.6, (480 - pos.w) / Math.max(n - 1, 1));
+  var totalW = pos.w + (n - 1) * overlap;
+  var startX = pos.x - totalW / 2;
+  var arr = this[gfxKey];
+
+  for (var pi = 0; pi < n; pi++) {
+    var pcx = startX + pi * overlap + pos.w / 2;
+    var pkey = getCardImageKey(cards[pi]);
+    var pimg = this.add.image(pcx, pos.y, pkey).setDisplaySize(pos.w, pos.h).setDepth(12);
+    arr.push(pimg);
   }
 };
-
 GameScene.prototype.doAction = function () {
   var self = this;
   if (this.gameState !== GAME_STATE.PLAYER_TURN) return;
@@ -1410,25 +1340,3 @@ GameScene.prototype.renderPlayHistory = function () {
   this.playHistoryText.setText(lines.join('\n'));
 };
 
-// ================================================================
-// CSS
-// ================================================================
-var _cardCSSInjected = false;
-function ensureCardCSS() {
-  if (_cardCSSInjected) return;
-  _cardCSSInjected = true;
-  var style = document.createElement('style');
-  style.textContent = [
-    '.ddz-card-dom{display:inline-flex;flex-direction:column;align-items:center;justify-content:center;width:40px;height:60px;background:linear-gradient(145deg,#FFF,#F5F5F5);border:1.5px solid #90A4AE;border-radius:6px;font-size:14px;font-weight:bold;cursor:pointer;user-select:none;box-shadow:0 2px 6px rgba(0,0,0,0.25),inset 0 1px 0 rgba(255,255,255,0.8);transition:transform 0.15s ease,box-shadow 0.15s ease}',
-    '.ddz-card-selected{border-color:#4ECDC4!important;box-shadow:0 0 0 2px #4ECDC4,0 4px 12px rgba(78,205,196,0.4)!important;transform:translateY(-4px)}',
-    '.ddz-card-red{color:#E53935}',
-    '.ddz-card-black{color:#212121}',
-    '.ddz-dom-top{font-size:10px;line-height:1.2;align-self:flex-start;margin-left:3px}',
-    '.ddz-dom-center{font-size:18px;line-height:1.4}',
-    '.ddz-dom-bottom{font-size:10px;line-height:1.2;align-self:flex-end;margin-right:3px;transform:rotate(180deg)}',
-    '.ddz-card-compact{display:inline-flex;align-items:center;justify-content:center;width:30px;height:42px;margin:1px;background:linear-gradient(145deg,#FFF,#F5F5F5);border:1px solid #90A4AE;border-radius:4px;font-size:11px;font-weight:bold;box-shadow:0 1px 3px rgba(0,0,0,0.2)}',
-    '#game-container canvas{display:block}',
-    '#game-container div{pointer-events:auto}'
-  ].join('');
-  document.head.appendChild(style);
-}
