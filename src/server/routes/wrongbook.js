@@ -6,15 +6,47 @@
  * GET  /api/wrong-book/stats   - 错题统计
  * POST /api/wrong-book/clear   - 清空错题本
  *
- * 使用内存存储（简单实现，重启丢失）。
- * 后续可以替换为数据库持久化。
+ * 使用文件持久化存储，重启不丢失。
+ * 数据保存在 src/server/data/wrongbook.json
  */
 
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const router = express.Router();
 
-const WRONG_BOOK = []; // 内存存储
+const DATA_FILE = path.resolve(__dirname, '../data/wrongbook.json');
 const MAX_RECORDS = 500;
+
+/** 从磁盘加载错题本 */
+function loadWrongBook() {
+  try {
+    if (fs.existsSync(DATA_FILE)) {
+      const raw = fs.readFileSync(DATA_FILE, 'utf8');
+      const data = JSON.parse(raw);
+      if (Array.isArray(data)) return data;
+    }
+  } catch (e) {
+    console.warn('[WrongBook] Failed to load data file, starting fresh:', e.message);
+  }
+  return [];
+}
+
+/** 写入磁盘 */
+function saveWrongBook(records) {
+  try {
+    const dir = path.dirname(DATA_FILE);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(DATA_FILE, JSON.stringify(records), 'utf8');
+  } catch (e) {
+    console.error('[WrongBook] Failed to save data file:', e.message);
+  }
+}
+
+// 启动时加载
+const WRONG_BOOK = loadWrongBook();
 
 // ============================================================
 // POST /api/wrong-book/record - 记录错题
@@ -61,6 +93,9 @@ router.post('/record', (req, res) => {
       if (WRONG_BOOK.length > MAX_RECORDS) {
         WRONG_BOOK.length = MAX_RECORDS;
       }
+
+      // 持久化到磁盘
+      saveWrongBook(WRONG_BOOK);
     }
 
     res.json({
@@ -168,11 +203,13 @@ router.post('/clear', (req, res) => {
         WRONG_BOOK.splice(i, 1);
       }
     }
+    saveWrongBook(WRONG_BOOK);
     res.json({ cleared: before - WRONG_BOOK.length, message: `Cleared records for ${playerId}` });
   } else {
     // 全量清空
     const before = WRONG_BOOK.length;
     WRONG_BOOK.length = 0;
+    saveWrongBook(WRONG_BOOK);
     res.json({ cleared: before, message: 'All wrong book records cleared' });
   }
 });
