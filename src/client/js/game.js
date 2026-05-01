@@ -18,8 +18,8 @@ var GAME_STATE = {
 
 var GameConfig = {
   type: Phaser.AUTO,
-  width: 375,
-  height: 812,
+  width: 600,
+  height: 960,
   parent: 'game-container',
   backgroundColor: '#1B5E20',
   dom: { createContainer: true },
@@ -117,7 +117,7 @@ GameScene.prototype.create = function () {
 // 背景
 // ================================================================
 function drawTableBackground(scene) {
-  var W = 375, H = 812;
+  var W = 600, H = 960;
   var bg = scene.add.graphics();
   bg.fillGradientStyle(0x1B5E20, 0x1B5E20, 0x0D3B0F, 0x0D3B0F, 1);
   bg.fillRect(0, 0, W, H);
@@ -128,47 +128,47 @@ function drawTableBackground(scene) {
   glow.fillEllipse(W / 2, H / 2 - 40, 240, 360);
   var border = scene.add.graphics();
   border.lineStyle(2, 0x4CAF50, 0.3);
-  border.strokeRoundedRect(8, 60, W - 16, H - 110, 12);
+  border.strokeRoundedRect(13, 71, W - 26, H - 130, 12);
   var diamond = scene.add.graphics();
   diamond.lineStyle(1, 0x66BB6A, 0.15);
   var cx = W / 2, cy = H / 2 - 40;
-  diamond.strokeRect(cx - 50, cy - 70, 100, 140);
-  diamond.strokeRect(cx - 30, cy - 50, 60, 100);
+  diamond.strokeRect(cx - 80, cy - 83, 160, 166);
+  diamond.strokeRect(cx - 48, cy - 59, 96, 118);
 
   // Decorative table corners
-  var cPos = [[22, 72], [W-22, 72], [22, H-48], [W-22, H-48]];
+  var cPos = [[35, 85], [W-35, 85], [35, H-57], [W-35, H-57]];
   for (var ci = 0; ci < cPos.length; ci++) {
     var dx = cPos[ci][0], dy = cPos[ci][1];
     diamond.lineStyle(1, 0x4CAF50, 0.18);
+    diamond.strokeCircle(dx, dy, 16);
     diamond.strokeCircle(dx, dy, 10);
-    diamond.strokeCircle(dx, dy, 6);
-    diamond.strokeCircle(dx, dy, 3);
+    diamond.strokeCircle(dx, dy, 5);
   }
 
   // Center decorative circles
   diamond.lineStyle(1, 0x66BB6A, 0.08);
-  diamond.strokeCircle(cx, cy - 10, 42);
-  diamond.strokeCircle(cx, cy - 10, 58);
+  diamond.strokeCircle(cx, cy - 10, 67);
+  diamond.strokeCircle(cx, cy - 10, 93);
 }
 
 // ================================================================
 // 顶部状态栏
 // ================================================================
 function createTopBar(scene) {
-  scene.roundText = scene.add.text(16, 12, '\u7B2C 1/10 \u56DE\u5408', {
+  scene.roundText = scene.add.text(26, 14, '\u7B2C 1/10 \u56DE\u5408', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '14px', color: '#E8F5E9', fontStyle: 'bold'
   }).setDepth(10);
 
   // status text (center)
-  scene.statusText = scene.add.text(187, 26, '', {
+  scene.statusText = scene.add.text(299, 31, '', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '11px', color: '#A5D6A7'
   }).setOrigin(0.5).setDepth(10);
 
   var line = scene.add.graphics();
   line.lineStyle(1, 0x66BB6A, 0.2);
-  line.lineBetween(0, 44, 375, 44);
+  line.lineBetween(0, 52, 600, 52);
   line.setDepth(10);
 }
 
@@ -177,69 +177,69 @@ function createTopBar(scene) {
 // ================================================================
 function createAIArea(scene) {
   // AI1: Wang Duidui - 酷拽墨镜男
-  makeAvatarImage(scene, 'avatar_wang', 48, 74, 0xFF6B35, '\u738B\u603C\u603C');
-  scene.add.text(80, 60, '\u738B\u603C\u603C', {
+  makeAvatarImage(scene, 'avatar_wang', 77, 87, 0xFF6B35, '\u738B\u603C\u603C');
+  scene.add.text(128, 71, '\u738B\u603C\u603C', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '13px', color: '#FFFFFF', fontStyle: 'bold'
+    fontSize: '15px', color: '#FFFFFF', fontStyle: 'bold'
   }).setDepth(11);
-  scene.ai1Count = scene.add.text(80, 78, '\u5269\u4F59 17 \u5F20', {
+  scene.ai1Count = scene.add.text(128, 92, '\u5269\u4F59 17 \u5F20', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '11px', color: '#A5D6A7'
   }).setDepth(11);
 
   // AI2: Su Tiantian - 甜美可爱少女
-  makeAvatarImage(scene, 'avatar_su', 325, 74, 0x7C4DFF, '\u82CF\u751C\u751C');
-  scene.add.text(244, 60, '\u82CF\u751C\u751C', {
+  makeAvatarImage(scene, 'avatar_su', 520, 87, 0x7C4DFF, '\u82CF\u751C\u751C');
+  scene.add.text(390, 71, '\u82CF\u751C\u751C', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '13px', color: '#FFFFFF', fontStyle: 'bold'
+    fontSize: '15px', color: '#FFFFFF', fontStyle: 'bold'
   }).setOrigin(1, 0).setDepth(11);
-  scene.ai2Count = scene.add.text(244, 78, '\u5269\u4F59 17 \u5F20', {
+  scene.ai2Count = scene.add.text(390, 92, '\u5269\u4F59 17 \u5F20', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '11px', color: '#A5D6A7'
   }).setOrigin(1, 0).setDepth(11);
 
-  scene.add.text(187, 72, 'VS', {
+  scene.add.text(299, 85, 'VS', {
     fontFamily: '"Arial",sans-serif', fontSize: '11px', color: '#66BB6A', fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(11);
 
   var divider = scene.add.graphics();
   divider.lineStyle(1, 0x66BB6A, 0.1);
-  divider.lineBetween(0, 110, 375, 110).setDepth(10);
+  divider.lineBetween(0, 130, 600, 130).setDepth(10);
 }
 
 // ================================================================
 // 中央出牌区
 // ================================================================
 function createPlayArea(scene) {
-  var cx = 187;
+  var cx = 300;
   var playBg = scene.add.graphics();
   playBg.fillStyle(0x000000, 0.1);
-  playBg.fillRoundedRect(20, 120, 335, 260, 12).setDepth(10);
+  playBg.fillRoundedRect(32, 142, 536, 307, 14).setDepth(10);
 
-  scene.add.text(cx, 250, '\u51FA\u724C\u533A', {
+  scene.add.text(cx, 296, '\u51FA\u724C\u533A', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '12px', color: '#66BB6A', alpha: 0.4
   }).setOrigin(0.5).setDepth(11);
 
-  scene.ai1PlayLabel = scene.add.text(50, 130, '\u738B\u603C\u603C\uFF1A', {
+  scene.ai1PlayLabel = scene.add.text(80, 154, '\u738B\u603C\u603C\uFF1A', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '10px', color: '#A5D6A7'
   }).setDepth(11);
   scene.ai1PlayCardsGraphics = scene.add.graphics().setDepth(11);
 
-  scene.ai2PlayLabel = scene.add.text(280, 130, '\u82CF\u751C\u751C\uFF1A', {
+  scene.ai2PlayLabel = scene.add.text(448, 154, '\u82CF\u751C\u751C\uFF1A', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '10px', color: '#A5D6A7'
   }).setDepth(11);
   scene.ai2PlayCardsGraphics = scene.add.graphics().setDepth(11);
 
-  scene.myPlayLabel = scene.add.text(cx, 310, '\u4F60\u51FA\uFF1A', {
+  scene.myPlayLabel = scene.add.text(cx, 367, '\u4F60\u51FA\uFF1A', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '10px', color: '#A5D6A7'
   }).setOrigin(0.5).setDepth(11);
   scene.myPlayCardsGraphics = scene.add.graphics().setDepth(11);
 
-  scene.add.text(10, 355, '\u5E95\u724C: ? ? ?', {
+  scene.add.text(16, 420, '\u5E95\u724C: ? ? ?', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '9px', color: '#66BB6A', alpha: 0.4
   }).setDepth(11);
@@ -251,8 +251,8 @@ function createPlayArea(scene) {
 function createHandArea(scene) {
   var handBg = scene.add.graphics();
   handBg.fillStyle(0x000000, 0.15);
-  handBg.fillRoundedRect(4, 510, 367, 160, 12).setDepth(10);
-  scene.add.text(16, 514, '\u4F60\u7684\u624B\u724C', {
+  handBg.fillRoundedRect(6, 603, 587, 189, 14).setDepth(10);
+  scene.add.text(26, 608, '\u4F60\u7684\u624B\u724C', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '11px', color: '#A5D6A7'
   }).setDepth(11);
@@ -268,16 +268,16 @@ GameScene.prototype.renderPlayerHand = function () {
   this.cardDomElements = [];
   this.handCards = [];
 
-  var n = hand.length, cw = 40, ch = 58;
-  var overlap = n > 6 ? Math.min(14, (320 - cw) / (n - 1)) : 28;
+  var n = hand.length, cw = 56, ch = 84;
+  var overlap = n > 6 ? Math.min(18, (520 - cw) / (n - 1)) : 28;
   var totalWidth = cw + (n - 1) * overlap;
-  var startX = (375 - totalWidth) / 2;
-  var baseY = 592;
+  var startX = (600 - totalWidth) / 2;
+  var baseY = 700;
 
   for (var i = 0; i < n; i++) {
     var card = hand[i];
     var cx = startX + i * overlap + cw / 2;
-    var arcOffset = Math.pow((i / (n - 1)) - 0.5, 2) * 28;
+    var arcOffset = Math.pow((i / (n - 1)) - 0.5, 2) * 36;
     var cy = baseY - arcOffset;
     var isRed = card.isRed ? card.isRed() : (card.suit === 'heart' || card.suit === 'diamond' || card.rank === 14);
     var clr = isRed ? '#E53935' : '#212121';
@@ -291,15 +291,15 @@ GameScene.prototype.renderPlayerHand = function () {
     g.strokeRoundedRect(cx - cw/2, cy - ch/2, cw, ch, 4);
 
     var txtRank = self.add.text(cx - cw/2 + 3, cy - ch/2 + 2, display, {
-      fontFamily: 'Arial', fontSize: '11px', color: clr, fontStyle: 'bold'
+      fontFamily: 'Arial', fontSize: '14px', color: clr, fontStyle: 'bold'
     }).setOrigin(0, 0).setDepth(111);
 
     var txtSuit = self.add.text(cx, cy - 2, symbol, {
-      fontFamily: 'Arial', fontSize: '20px', color: clr
+      fontFamily: 'Arial', fontSize: '28px', color: clr
     }).setOrigin(0.5, 0.5).setDepth(111);
 
     var txtRank2 = self.add.text(cx + cw/2 - 3, cy + ch/2 - 2, display, {
-      fontFamily: 'Arial', fontSize: '11px', color: clr, fontStyle: 'bold'
+      fontFamily: 'Arial', fontSize: '14px', color: clr, fontStyle: 'bold'
     }).setOrigin(1, 1).setDepth(111);
     txtRank2.setAngle(180);
 
@@ -327,7 +327,7 @@ GameScene.prototype.renderPlayerHand = function () {
         bg.fillRoundedRect(cx - cw/2, cy - ch/2, cw, ch, 4);
         bg.lineStyle(1, 0x90A4AE, 1);
         bg.strokeRoundedRect(cx - cw/2, cy - ch/2, cw, ch, 4);
-        this.y += 20;
+        this.y += 28;
         this.setData('selected', false);
         var pos = self.selectedCards.indexOf(idx2);
         if (pos >= 0) self.selectedCards.splice(pos, 1);
@@ -337,7 +337,7 @@ GameScene.prototype.renderPlayerHand = function () {
         bg.fillRoundedRect(cx - cw/2, cy - ch/2, cw, ch, 4);
         bg.lineStyle(2, 0x4ECDC4, 1);
         bg.strokeRoundedRect(cx - cw/2, cy - ch/2, cw, ch, 4);
-        this.y -= 20;
+        this.y -= 28;
         this.setData('selected', true);
         self.selectedCards.push(idx2);
       }
@@ -354,26 +354,38 @@ GameScene.prototype.renderPlayerHand = function () {
 
 GameScene.prototype._clearCardSelection = function () {
   var n = this.playerHand.length;
-  var cardWidth = 44;
-  var baseY = 590;
+  var cw = 56, ch = 84;
   for (var i = 0; i < this.cardDomElements.length; i++) {
     var el = this.cardDomElements[i];
-    var cardNode = el.node && el.node.firstElementChild;
-    if (cardNode) cardNode.classList.remove('ddz-card-selected');
+    var bg = el.getData('bg');
+    if (bg) {
+      bg.clear();
+      bg.fillStyle(0xFFFFFF, 1);
+      bg.fillRoundedRect(el.x - cw/2, el.y - ch/2, cw, ch, 4);
+      bg.lineStyle(1, 0x90A4AE, 1);
+      bg.strokeRoundedRect(el.x - cw/2, el.y - ch/2, cw, ch, 4);
+    }
     el.setData('selected', false);
     if (n > 0) {
-      var overlap = n > 6 ? Math.min(16, (315 - cardWidth) / (n - 1)) : 30;
-      var arcOffset = Math.pow((i / Math.max(1, n - 1)) - 0.5, 2) * 32;
-      el.setY(baseY - arcOffset);
+      var overlap = n > 6 ? Math.min(18, (520 - cw) / (n - 1)) : 32;
+      var arcOffset = Math.pow((i / Math.max(1, n - 1)) - 0.5, 2) * 36;
+      el.setY(698 - arcOffset);
     }
   }
 };
 
 GameScene.prototype._highlightCard = function (el) {
   el.setData('selected', true);
-  el.setY(el.y - 20);
-  var cardNode = el.node && el.node.firstElementChild;
-  if (cardNode) cardNode.classList.add('ddz-card-selected');
+  el.setY(el.y - 28);
+  var bg = el.getData('bg');
+  if (bg) {
+    var cw = 56, ch = 84;
+    bg.clear();
+    bg.fillStyle(0xFFFFFF, 1);
+    bg.fillRoundedRect(el.x - cw/2, el.y - ch/2, cw, ch, 4);
+    bg.lineStyle(2, 0x4ECDC4, 1);
+    bg.strokeRoundedRect(el.x - cw/2, el.y - ch/2, cw, ch, 4);
+  }
 };
 
 // ================================================================
@@ -442,8 +454,8 @@ GameScene.prototype.showBiddingUI = function () {
   var self = this;
   this.hideBiddingUI();
 
-  var cx = 187;
-  var uiY = 560;
+  var cx = 300;
+  var uiY = 662;
   var bids = [
     { label: '\u4E0D\u53EB', value: 0, color: 0xFF6B6B },
     { label: '1\u5206', value: 1, color: 0x4ECDC4 },
@@ -452,15 +464,15 @@ GameScene.prototype.showBiddingUI = function () {
   ];
 
   // 提示文字
-  var promptText = this.add.text(cx, 510, '\u8BF7\u53EB\u5206', {
+  var promptText = this.add.text(cx, 603, '\u8BF7\u53EB\u5206', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '18px', color: '#FFFFFF', fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(200);
   this.biddingUI.push(promptText);
 
-  var bw = 72, bh = 44, gap = 10;
+  var bw = 96, bh = 52, gap = 12;
   var totalW = bw * 4 + gap * 3;
-  var startX = (375 - totalW) / 2;
+  var startX = (600 - totalW) / 2;
 
   for (var i = 0; i < bids.length; i++) {
     var b = bids[i];
@@ -491,7 +503,7 @@ GameScene.prototype.showBiddingUI = function () {
   if (state && state.handStrength !== undefined) {
     var strength = state.handStrength;
     var label = strength >= 20 ? '\u624B\u724C\u5F88\u5F3A' : (strength >= 14 ? '\u624B\u724C\u4E0D\u9519' : (strength >= 9 ? '\u624B\u724C\u4E00\u822C' : '\u624B\u724C\u8F83\u5F31'));
-    var infoText = this.add.text(cx, 620, '\u2605 ' + label + ' (\u5F3A\u5EA6\u5206: ' + strength + ')', {
+    var infoText = this.add.text(cx, 733, '\u2605 ' + label + ' (\u5F3A\u5EA6\u5206: ' + strength + ')', {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
       fontSize: '12px', color: '#A5D6A7'
     }).setOrigin(0.5).setDepth(200);
@@ -661,7 +673,7 @@ GameScene.prototype.finishBidding = function (res) {
 
 GameScene.prototype.showBottomCards = function (cards) {
   if (!cards || cards.length === 0) return;
-  var cx = 187;
+  var cx = 300;
   // 清除旧的底牌文字与图形
   if (this.bottomCardsText) this.bottomCardsText.destroy();
   if (this.bottomCardGfx) this.bottomCardGfx.destroy();
@@ -670,15 +682,15 @@ GameScene.prototype.showBottomCards = function (cards) {
     return Doudizhu.RANK_NAME_MAP[c.rank] || '?';
   }).join(' ');
 
-  this.bottomCardsText = this.add.text(cx, 380, '底牌: ' + display, {
+  this.bottomCardsText = this.add.text(cx, 449, '底牌: ' + display, {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '14px', color: '#FFD93D', fontStyle: 'bold',
+    fontSize: '16px', color: '#FFD93D', fontStyle: 'bold',
     stroke: '#000000', strokeThickness: 3
   }).setOrigin(0.5).setDepth(20);
 
   // 绘制底牌牌面图案（蓝色牌背花纹）
   this.bottomCardGfx = this.add.graphics().setDepth(19);
-  var bw = 20, bh = 28, gap = 4;
+  var bw = 24, bh = 34, gap = 5;
   var totalW = cards.length * (bw + gap) - gap;
   var bx = Math.round(cx - totalW / 2);
   for (var i = 0; i < cards.length; i++) {
@@ -686,17 +698,17 @@ GameScene.prototype.showBottomCards = function (cards) {
     var cx2 = bx + i * (bw + gap);
     // 蓝色牌背
     this.bottomCardGfx.fillStyle(0x1565C0, 1);
-    this.bottomCardGfx.fillRoundedRect(cx2, 398, bw, bh, 2);
+    this.bottomCardGfx.fillRoundedRect(cx2, 471, bw, bh, 2);
     this.bottomCardGfx.lineStyle(1, 0x0D47A1, 0.5);
-    this.bottomCardGfx.strokeRoundedRect(cx2, 398, bw, bh, 2);
+    this.bottomCardGfx.strokeRoundedRect(cx2, 471, bw, bh, 2);
     this.bottomCardGfx.fillStyle(0x1976D2, 1);
-    this.bottomCardGfx.fillRect(cx2 + 3, 398 + 4, bw - 6, bh - 8);
+    this.bottomCardGfx.fillRect(cx2 + 4, 476, bw - 8, bh - 10);
     this.bottomCardGfx.fillStyle(0x42A5F5, 0.4);
-    this.bottomCardGfx.fillCircle(cx2 + bw/2, 398 + bh/2, 3);
+    this.bottomCardGfx.fillCircle(cx2 + bw/2, 488, 4);
     // 花色颜色标记
     var isRed = c.isRed ? c.isRed() : (c.suit === 'heart' || c.suit === 'diamond');
     this.bottomCardGfx.fillStyle(isRed ? 0xE53935 : 0x212121, 0.7);
-    this.bottomCardGfx.fillRect(cx2 + 4, 398 + 5, 4, 3);
+    this.bottomCardGfx.fillRect(cx2 + 5, 477, 4, 4);
   }
 };
 GameScene.prototype.localAssignLandlord = function () {
@@ -1084,17 +1096,17 @@ GameScene.prototype.displayPlay = function (cards, player) {
   var baseX, baseY;
   if (player === 'player') {
     gfx = this.myPlayCardsGraphics;
-    baseX = 187; baseY = 335;
+    baseX = 300; baseY = 396;
   } else if (player === 'ai1') {
     gfx = this.ai1PlayCardsGraphics;
-    baseX = 50; baseY = 150;
+    baseX = 80; baseY = 177;
   } else {
     gfx = this.ai2PlayCardsGraphics;
-    baseX = 280; baseY = 150;
+    baseX = 448; baseY = 177;
   }
   if (!gfx) return;
   gfx.clear();
-  var cardW = 26, cardH = 36, gap = 3;
+  var cardW = 40, cardH = 54, gap = 4;
   var n = cards.length;
   var totalW = n * (cardW + gap) - gap;
   var startX = Math.round(baseX - totalW / 2);
@@ -1113,11 +1125,11 @@ GameScene.prototype.displayPlay = function (cards, player) {
     var symbol = c.suitSymbol ? c.suitSymbol() : Doudizhu.SUIT_SYMBOLS[c.suit];
     // Draw tiny rank+symbol on card
     gfx.fillStyle(color, 1);
-    gfx.fillRect(cx + 3, cy + 2, 6, 8);
+    gfx.fillRect(cx + 4, cy + 3, 8, 12);
     gfx.fillStyle(0xFFFFFF, 1);
-    gfx.fillRect(cx + 2, cy + 1, 8, 8);
+    gfx.fillRect(cx + 3, cy + 2, 10, 12);
     gfx.fillStyle(color, 1);
-    gfx.fillRect(cx + 3, cy + 2, 6, 6);
+    gfx.fillRect(cx + 4, cy + 3, 8, 8);
   }
 };
 
@@ -1151,10 +1163,10 @@ GameScene.prototype.doAction = function () {
 // 功能按钮
 // ================================================================
 function createActionButtons(scene) {
-  var bw = 72, bh = 38, gap = 8;
+  var bw = 96, bh = 48, gap = 10;
   var totalW = bw * 4 + gap * 3;
-  var startX = (375 - totalW) / 2;
-  var btnY = 700;
+  var startX = (600 - totalW) / 2;
+  var btnY = 828;
 
   var buttons = [
     { label: '\u51FA\u724C', color: 0x4ECDC4, key: 'play' },
@@ -1176,7 +1188,7 @@ function createActionButtons(scene) {
 
     var txt = scene.add.text(bx + bw / 2, btnY + bh / 2, b.label, {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '14px', color: '#FFFFFF', fontStyle: 'bold'
+      fontSize: '16px', color: '#FFFFFF', fontStyle: 'bold'
     }).setOrigin(0.5).setDepth(101);
     scene.actionButtons.push(txt);
 
@@ -1197,13 +1209,13 @@ function createActionButtons(scene) {
 // Toast
 // ================================================================
 function showToast(scene, message) {
-  var cx = 187;
+  var cx = 300;
   var toastBg = scene.add.graphics();
   toastBg.fillStyle(0x000000, 0.7);
-  toastBg.fillRoundedRect(cx - 80, 390, 160, 32, 8).setDepth(200);
-  var toastText = scene.add.text(cx, 406, message, {
+  toastBg.fillRoundedRect(cx - 100, 461, 200, 38, 10).setDepth(200);
+  var toastText = scene.add.text(cx, 480, message, {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '13px', color: '#FFFFFF'
+    fontSize: '15px', color: '#FFFFFF'
   }).setOrigin(0.5).setDepth(201);
   scene.time.delayedCall(1200, function () {
     toastBg.destroy();
