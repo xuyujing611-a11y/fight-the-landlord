@@ -1250,23 +1250,104 @@ GameScene.prototype.doAction = function () {
   var self = this;
   if (this.gameState !== GAME_STATE.PLAYER_TURN && this.gameState !== GAME_STATE.CHAOS_MODE) return;
 
-  // \u6682\u505C\u51FA\u724C\u97F3\u6548
+  // 暂停出牌音效
   SoundManager.pauseAll();
 
-  // \u8BBE\u7F6E\u87BA\u65CB\u6A21\u5F0F
+  // 设置螺旋模式
   this.gameState = GAME_STATE.CHAOS_MODE;
   this.chaosScore = this.chaosScore || 0;
-  this.setStatusText('\u641E\u4E8B\u60C5\u4E2D...');
+  this.setStatusText('选题型...');
 
-  // \u9009\u62E9\u88AB\u641E\u7684AI\u89D2\u8272
+  // 选择被搞的AI角色
   var aiId = Math.random() < 0.5 ? 'duidui' : 'tiantian';
-  var aiName = aiId === 'duidui' ? '\u738B\u603C\u603C' : '\u82CF\u751C\u751C';
+  var aiName = aiId === 'duidui' ? '王怼怼' : '苏甜甜';
 
-  // \u521B\u5EFA\u906E\u7F69
+  // 创建遮罩 -> 先显示题型选择
   self._createChaosOverlay(aiId, function () {
-    // \u7F29\u7565\u56DE\u8C03 - \u89E6\u53D1\u51FA\u9898
-    self._showChaosQuestion(aiId, aiName);
+    self._showTypeSelection(aiId, aiName);
   });
+};
+
+GameScene.prototype._showTypeSelection = function (aiId, aiName) {
+  var self = this;
+  self.chaosTypeSelection = true;
+
+  var types = [
+    { id: 'vocabulary', label: '四六级单词', icon: '📚', desc: '看释义选单词，AI给你出牌' },
+    { id: 'expression', label: '口语表达', icon: '💬', desc: '地道俚语挑战，口语达人' },
+    { id: 'trivia', label: '冷知识', icon: '🧠', desc: '奇怪的知识增加了' },
+    { id: 'life_hack', label: '生活常识', icon: '🏠', desc: '生活小窍门，你真的会吗' }
+  ];
+
+  var title2 = self.add.text(480, 105, '📋 选个题型，开始搞事情', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '16px', color: '#333333', fontStyle: 'bold'
+  }).setOrigin(0.5).setDepth(302);
+  self.chaosElements.push(title2);
+
+  // 2x2 网格：题型卡片
+  var cardX = [220, 500];
+  var cardY = [145, 245];
+  var cardW = 260, cardH = 88;
+
+  for (var ti = 0; ti < types.length; ti++) {
+    var t = types[ti];
+    var cx = cardX[ti % 2];
+    var cy = cardY[Math.floor(ti / 2)];
+
+    var card = self.add.graphics();
+    card.fillStyle(0xF0F4FF, 1);
+    card.fillRoundedRect(cx, cy, cardW, cardH, 10).setDepth(302);
+    card.lineStyle(1.5, 0xCCD8FF, 1);
+    card.strokeRoundedRect(cx, cy, cardW, cardH, 10);
+    card.setInteractive(new Phaser.Geom.Rectangle(cx, cy, cardW, cardH), Phaser.Geom.Rectangle.Contains);
+
+    var iconTxt = self.add.text(cx + 12, cy + 12, t.icon, {
+      fontFamily: 'sans-serif', fontSize: '30px'
+    }).setDepth(303);
+
+    var labelTxt = self.add.text(cx + 58, cy + 14, t.label, {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '16px', color: '#222222', fontStyle: 'bold'
+    }).setDepth(303);
+
+    var descTxt = self.add.text(cx + 58, cy + 40, t.desc, {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '12px', color: '#888888'
+    }).setDepth(303);
+
+    self.chaosElements.push(card, iconTxt, labelTxt, descTxt);
+
+    card.setData('typeId', t.id);
+    (function (typeId) {
+      card.on('pointerover', function () {
+        this.clear();
+        this.fillStyle(0xE0EAFF, 1);
+        this.fillRoundedRect(cx, cy, cardW, cardH, 10);
+        this.lineStyle(2, 0x7C4DFF, 1);
+        this.strokeRoundedRect(cx, cy, cardW, cardH, 10);
+      });
+      card.on('pointerout', function () {
+        this.clear();
+        this.fillStyle(0xF0F4FF, 1);
+        this.fillRoundedRect(cx, cy, cardW, cardH, 10);
+        this.lineStyle(1.5, 0xCCD8FF, 1);
+        this.strokeRoundedRect(cx, cy, cardW, cardH, 10);
+      });
+      card.on('pointerdown', function () {
+        if (self.chaosTypeSelection) {
+          self.chaosTypeSelection = false;
+          // 销毁类型选择UI（保留基础元素：遮罩、卡片背景、标题栏、分数、关闭按钮）
+          for (var di = self.chaosElements.length - 1; di >= 5; di--) {
+            if (self.chaosElements[di]) self.chaosElements[di].destroy();
+          }
+          self.chaosElements = self.chaosElements.slice(0, 5);
+          // 开始出题
+          self._showChaosQuestion(aiId, aiName, typeId);
+        }
+      });
+    })(t.id);
+  }
 };
 
 // ================================================================
@@ -1287,9 +1368,9 @@ GameScene.prototype._createChaosOverlay = function (aiId, callback) {
   // \u767D\u8272\u9898\u76EE\u5361\u7247\u80CC\u666F
   var cardBg = self.add.graphics();
   cardBg.fillStyle(0xFFFFFF, 1);
-  cardBg.fillRoundedRect(200, 95, 560, 250, 12);
+  cardBg.fillRoundedRect(200, 95, 560, 340, 12);
   cardBg.fillStyle(0x000000, 0.08);
-  cardBg.fillRoundedRect(204, 99, 560, 250, 12);
+  cardBg.fillRoundedRect(204, 99, 560, 340, 12);
   cardBg.setDepth(301);
   self.chaosElements.push(cardBg);
   self.chaosCardBg = cardBg;
@@ -1331,12 +1412,12 @@ GameScene.prototype._createChaosOverlay = function (aiId, callback) {
 // ================================================================
 // 搞事情 - 显示题目（含4个选项）
 // ================================================================
-GameScene.prototype._showChaosQuestion = function (aiId, aiName) {
+GameScene.prototype._showChaosQuestion = function (aiId, aiName, type) {
   var self = this;
   self.setStatusText(aiName + ' \u51FA\u9898\u4E2D...');
 
   if (this.isAPIMode && typeof ApiClient !== 'undefined') {
-    ApiClient.generateChaosQuestion('random', 'normal', 1)
+    ApiClient.generateChaosQuestion(type || 'random', 'normal', 1)
       .then(function (res) {
         if (res.success && res.questions && res.questions.length > 0) {
           self._renderQuestion(res.questions[0], aiId);
@@ -1441,83 +1522,72 @@ GameScene.prototype._renderQuestion = function (q, aiId) {
 // 搞事情 - 处理选项点击
 // ================================================================
 GameScene.prototype._handleOptionClick = function (self, optBg, optKey, aiId, q) {
-  // \u9AD8\u4EAE\u9009\u4E2D\u9009\u9879
-  var bg = optBg.getData('optBg');
-  var txt = optBg.getData('optTxt');
-  var markBg = optBg.getData('optMarkBg');
-  var markTxt = optBg.getData('optMarkTxt');
+  // 判断对错
   var answer = optBg.getData('answer');
-
-  // \u9AD8\u4EAE\u6548\u679C
-  if (markBg) {
-    markBg.clear();
-    markBg.fillStyle(0xFF6B35, 1);
-    markBg.fillCircle(markBg.x + 74 - 48 - 26, optBg.y + 23, 14).setDepth(303);
-  }
-
-  // \u5C01\u952E\u5176\u4ED6\u9009\u9879
-  for (var ci = 0; ci < self.chaosElements.length; ci++) {
-    var el = self.chaosElements[ci];
-    if (el && el.getData && el.getData('optKey') && el.getData('optKey') !== optKey) {
-      el.alpha = 0.3;
-    }
-  }
-
-  // \u5224\u65AD\u5BF9\u9519
   var isCorrect = (optKey === answer);
   if (isCorrect) {
     self.chaosScore = (self.chaosScore || 0) + 1;
-    if (self.chaosScoreText) self.chaosScoreText.setText('得分: ' + self.chaosScore);
+    if (self.chaosScoreText) self.chaosScoreText.setText('\u5F97\u5206: ' + self.chaosScore);
   }
 
-  // \u663E\u793A\u53CD\u9988
+  // 播放音效
+  if (isCorrect) { SoundManager.win(); } else { SoundManager.lose(); }
+
+  // 清空题目区域（保留基础元素）
+  self._clearQuestionArea();
+
+  // 显示反馈
   var feedbackScene = isCorrect ? 'correct' : 'wrong';
   var resultIcon = isCorrect ? '\u2705' : '\u274C';
-  var resultText = isCorrect ? '\u7B54\u5BF9\u4E86\uFF01' : '\u7B54\u9519\u4E86\uFF01';
+  var resultText = isCorrect ? '\u7B54\u5BF9\u4E86\uFF01+1' : '\u7B54\u9519\u4E86\uFF01';
   var resultColor = isCorrect ? '#4CAF50' : '#E53935';
 
-  // \u53CD\u9988\u6807\u5FD7
-  var fbIcon = self.add.text(480, 200, resultIcon + ' ' + resultText, {
+  // 反馈图标（居中，Y=140）
+  var fbIcon = self.add.text(480, 140, resultIcon + ' ' + resultText, {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '20px', color: resultColor, fontStyle: 'bold'
+    fontSize: '24px', color: resultColor, fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(305);
   self.chaosElements.push(fbIcon);
 
-  // \u663E\u793A\u6B63\u786E\u7B54\u6848\u548C\u89E3\u6790
+  // 正确答案（答错时显示）
+  var fbY = 180;
   if (!isCorrect && q.answer) {
-    var correctAns = self.add.text(220, 225, '正确答案: ' + q.answer + '. ' + (q.options[q.answer] || ''), {
+    var correctAns = self.add.text(220, fbY,
+      '\u6B63\u786E\u7B54\u6848: ' + q.answer + '. ' + (q.options[q.answer] || ''), {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '12px', color: '#4CAF50',
-      wordWrap: { width: 490 }
+      fontSize: '14px', color: '#4CAF50', fontStyle: 'bold',
+      wordWrap: { width: 500 }
     }).setDepth(305);
     self.chaosElements.push(correctAns);
+    fbY += 28;
   }
 
+  // 解析说明
   if (q.explanation) {
-    var expl = self.add.text(220, 248, q.explanation, {
+    var expl = self.add.text(220, fbY, q.explanation, {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '12px', color: '#666666',
-      wordWrap: { width: 490 }
+      fontSize: '13px', color: '#555555',
+      wordWrap: { width: 500 }, lineSpacing: 2
     }).setDepth(305);
     self.chaosElements.push(expl);
+    fbY += q.explanation.length > 40 ? 50 : 28;
   }
 
-  // AI \u53F0\u8BCD
-  self._showAiBubble(aiId, feedbackScene, 460);
+  // AI 反馈气泡
+  self._showAiBubble(aiId, feedbackScene, fbY + 10);
 
-  // \u663E\u793A\u6309\u94AE - \u7EE7\u7EED\u641E\u4E8B\u60C5 / \u5173\u6389
-  var btnY = 500;
-  // \u201C\u7EE7\u7EED\u201D \u6309\u94AE
+  // 底部按钮行
+  var btnY = Math.max(fbY + 60, 340);
+  // "再来一题" 按钮
   var againBg = self.add.graphics();
   againBg.fillStyle(0x4ECDC4, 1);
-  againBg.fillRoundedRect(230, 304, 220, 36, 8).setDepth(305);
-  var againTxt = self.add.text(340, 322, '🔄 \u518D\u6765\u4E00\u9898', {
+  againBg.fillRoundedRect(220, btnY, 220, 40, 10).setDepth(305);
+  var againTxt = self.add.text(330, btnY + 20, '\U0001F504 \u518D\u6765\u4E00\u9898', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '15px', color: '#FFFFFF', fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(306);
-  againBg.setInteractive(new Phaser.Geom.Rectangle(230, 304, 220, 36), Phaser.Geom.Rectangle.Contains);
+  againBg.setInteractive(new Phaser.Geom.Rectangle(220, btnY, 220, 40), Phaser.Geom.Rectangle.Contains);
   againBg.on('pointerup', function () {
-    // \u518D\u6765\u4E00\u9898
     self.chaosQuestionAnswered = false;
     self._clearQuestionArea();
     var aiId2 = Math.random() < 0.5 ? 'duidui' : 'tiantian';
@@ -1525,24 +1595,17 @@ GameScene.prototype._handleOptionClick = function (self, optBg, optKey, aiId, q)
   });
   self.chaosElements.push(againBg, againTxt);
 
-  // \u201C\u5173\u6389\u201D \u6309\u94AE
+  // "关掉" 按钮
   var closeBg = self.add.graphics();
   closeBg.fillStyle(0xFF6B6B, 1);
-  closeBg.fillRoundedRect(510, 304, 220, 36, 8).setDepth(305);
-  var closeTxt = self.add.text(620, 322, '✖ \u5173掉\u56DE\u724C', {
+  closeBg.fillRoundedRect(510, btnY, 220, 40, 10).setDepth(305);
+  var closeTxt = self.add.text(620, btnY + 20, '\u2716 \u5173\u6389\u56DE\u724C', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '15px', color: '#FFFFFF', fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(306);
-  closeBg.setInteractive(new Phaser.Geom.Rectangle(510, 304, 220, 36), Phaser.Geom.Rectangle.Contains);
+  closeBg.setInteractive(new Phaser.Geom.Rectangle(510, btnY, 220, 40), Phaser.Geom.Rectangle.Contains);
   closeBg.on('pointerup', function () { self._destroyChaos(); });
   self.chaosElements.push(closeBg, closeTxt);
-
-  // \u64AD\u653E\u97F3\u6548
-  if (isCorrect) {
-    SoundManager.win();
-  } else {
-    SoundManager.lose();
-  }
 };
 
 // ================================================================
@@ -1705,7 +1768,7 @@ GameScene.prototype._clearQuestionArea = function () {
   var self = this;
   if (!self.chaosElements) return;
   // \u4FDD\u7559\u524D3\u4E2A\u5143\u7D20\uFF08\u906E\u7F69\u3001\u5361\u724C\u80CC\u666F\u3001\u6807\u9898\u3001\u5206\u6570\u3001\u5173\u6389\u6309\u94AE\uFF09
-  var toKeep = self.chaosElements.slice(0, 4); // overlay, cardBg, title, scoreText, AI bubble area elements
+  var toKeep = self.chaosElements.slice(0, 5); // overlay, cardBg, title, scoreText, closeBtn
   for (var di = 5; di < self.chaosElements.length; di++) {
     if (self.chaosElements[di]) self.chaosElements[di].destroy();
   }
