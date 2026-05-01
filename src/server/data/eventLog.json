@@ -31,5 +31,39 @@
     ],
     "playerId": "p1",
     "gameId": "g1"
+  },
+  {
+    "eventId": "cardSwap",
+    "eventLabel": "🔄 AI换牌",
+    "eventDesc": "AI 突然从你手牌中换走一张牌",
+    "timestamp": "2026-05-01T23:46:18.744Z",
+    "round": 5,
+    "effects": [
+      {
+        "type": "swapCards",
+        "detail": "AI从你的手牌中换走了1张牌",
+        "count": 1,
+        "aiTaunt": "拿来吧你！这题你配不上"
+      }
+    ],
+    "playerId": "test",
+    "gameId": "unknown"
+  },
+  {
+    "eventId": "scoreDouble",
+    "eventLabel": "🔥 得分加倍",
+    "eventDesc": "下一题得分翻倍！拼了！",
+    "timestamp": "2026-05-01T23:46:18.804Z",
+    "round": 5,
+    "effects": [
+      {
+        "type": "scoreMultiplier",
+        "detail": "下一题得分 ×2！",
+        "multiplier": 2,
+        "duration": "next_round"
+      }
+    ],
+    "playerId": "test",
+    "gameId": "unknown"
   }
 ]

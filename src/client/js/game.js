@@ -1762,57 +1762,66 @@ GameScene.prototype._showPlayBubble = function (aiId, event, context) {
   self.playBubbleElements = [];
 
   // B36: AI1在上、AI2在下，错开位置
-  var y = aiId === 'duidui' ? 130 : 160;
+  var y = aiId === 'duidui' ? 120 : 150;
 
   var renderBubble = function (line) {
     var aiDisplayName = aiId === 'duidui' ? '王怼怼' : '苏甜甜';
     var avatarColor = aiId === 'duidui' ? 0x4FC3F7 : 0xFFB74D;
-    var arrowDir = aiId === 'duidui' ? 1 : -1; // 箭头指向角色方向
+    var arrowDir = aiId === 'duidui' ? 1 : -1;
+
+    // 计算气泡尺寸（根据文本长度自适应）
+    var bubbleW = Math.min(540, 240 + line.length * 10);
+    var bubbleH = 36;
+    var bubbleX = 230;
+    var bubbleY = y + 10;
 
     // AI 头像圆圈
     var avatar = self.add.graphics();
     avatar.fillStyle(avatarColor, 1);
-    avatar.fillCircle(80, y + 14, 18).setDepth(20);
-    var avatarTxt = self.add.text(80, y + 14, aiId === 'duidui' ? '😎' : '😊', {
-      fontFamily: 'sans-serif', fontSize: '15px'
+    avatar.fillCircle(80, y + 16, 22).setDepth(20);
+    avatar.lineStyle(2, 0xFFFFFF, 0.6);
+    avatar.strokeCircle(80, y + 16, 22).setDepth(20);
+    var avatarTxt = self.add.text(80, y + 16, aiId === 'duidui' ? '😎' : '😊', {
+      fontFamily: 'sans-serif', fontSize: '18px'
     }).setOrigin(0.5).setDepth(21);
     self.playBubbleElements.push(avatar, avatarTxt);
 
     // AI 名字
-    var nameTxt = self.add.text(105, y - 2, aiDisplayName, {
+    var nameTxt = self.add.text(105, y - 4, aiDisplayName, {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '10px', color: '#E8F5E9', fontStyle: 'bold'
+      fontSize: '12px', color: '#FFFFFF', fontStyle: 'bold'
     }).setDepth(21);
     self.playBubbleElements.push(nameTxt);
 
-    // 台词气泡背景（圆角矩形）
+    // 台词气泡背景（圆角矩形 — 真实气泡风格）
     var bubble = self.add.graphics();
-    bubble.fillStyle(0x000000, 0.4);
-    bubble.fillRoundedRect(230, y + 10, 500, 20, 6).setDepth(20);
+    bubble.fillStyle(0x1B5E20, 0.85);
+    bubble.fillRoundedRect(bubbleX, bubbleY, bubbleW, bubbleH, 12).setDepth(20);
+    bubble.lineStyle(1.5, 0x66BB6A, 0.5);
+    bubble.strokeRoundedRect(bubbleX, bubbleY, bubbleW, bubbleH, 12).setDepth(20);
     self.playBubbleElements.push(bubble);
 
-    // B36: 对话气泡三角箭头
+    // 三角形箭头（指向头像方向的三角尾）
     var arrow = self.add.graphics();
-    arrow.fillStyle(0x000000, 0.4);
-    // 指向左侧（说话者方向），箭头在气泡左边
-    var arrowX = 230;
-    var arrowYmid = y + 10 + 14;
+    arrow.fillStyle(0x1B5E20, 0.85);
+    var arrowTipX = bubbleX;
+    var arrowMidY = bubbleY + bubbleH / 2;
     arrow.fillTriangle(
-      arrowX, arrowYmid,
-      arrowX - 10, arrowYmid - 5,
-      arrowX - 10, arrowYmid + 5
+      arrowTipX, arrowMidY,
+      arrowTipX - 12, arrowMidY - 6,
+      arrowTipX - 12, arrowMidY + 6
     ).setDepth(20);
     self.playBubbleElements.push(arrow);
 
-    // 台词文本
-    var bubbleTxt = self.add.text(240, y + 24, line, {
+    // 台词文本（加大字号、留白内边距）
+    var bubbleTxt = self.add.text(bubbleX + 14, bubbleY + bubbleH / 2, line, {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '11px', color: '#FFFFFF'
-    }).setDepth(21);
+      fontSize: '14px', color: '#FFFFFF'
+    }).setOrigin(0, 0.5).setDepth(21);
     self.playBubbleElements.push(bubbleTxt);
 
-    // 3秒后自动消失
-    self.time.delayedCall(3000, function () {
+    // 5秒后自动消失（延长显示时间）
+    self.time.delayedCall(5000, function () {
       if (self.playBubbleElements) {
         for (var i = 0; i < self.playBubbleElements.length; i++) {
           if (self.playBubbleElements[i]) self.playBubbleElements[i].destroy();
@@ -1853,36 +1862,55 @@ GameScene.prototype._showAiBubble = function (aiId, sceneKey, y) {
   var aiDisplayName = aiId === 'duidui' ? '\u738B\u603C\u603C' : '\u82CF\u751C\u751C';
   var aiEmoji = aiId === 'duidui' ? '😎' : '😊';
 
-  // AI \u5934\u50CF\u5706\u5708
+  // \u8BA1\u7B97\u6C14\u6CE1\u5C3A\u5BF8\uFF08\u81EA\u9002\u5E94\u6587\u672C\u957F\u5EA6\uFF09
+  var bubbleW = Math.min(540, 200 + line.length * 10);
+  var bubbleH = 36;
+  var bubbleX = 230;
+  var bubbleY = y + 10;
+
+  // AI \u5934\u50CF\u5706\u5708\uFF08\u52A0\u5927\uFF09
   var avatar = self.add.graphics();
   avatar.fillStyle(aiId === 'duidui' ? 0x4FC3F7 : 0xFFB74D, 1);
-  avatar.fillCircle(80, y + 14, 18).setDepth(302);
-  var avatarTxt = self.add.text(80, y + 14, aiId === 'duidui' ? '😎' : '😊', {
-    fontFamily: 'sans-serif',
-    fontSize: '15px'
+  avatar.fillCircle(80, y + 16, 22).setDepth(302);
+  avatar.lineStyle(2, 0xFFFFFF, 0.5);
+  avatar.strokeCircle(80, y + 16, 22).setDepth(302);
+  var avatarTxt = self.add.text(80, y + 16, aiId === 'duidui' ? '😎' : '😊', {
+    fontFamily: 'sans-serif', fontSize: '18px'
   }).setOrigin(0.5).setDepth(303);
   self.chaosBubbleElements.push(avatar, avatarTxt);
 
-  // AI \u540D\u5B57
-  var nameTxt = self.add.text(105, y - 2, aiDisplayName, {
+  // AI \u540D\u5B57\uFF08\u52A0\u5927\uFF09
+  var nameTxt = self.add.text(105, y - 4, aiDisplayName, {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '10px', color: '#999999'
+    fontSize: '12px', color: '#FFFFFF', fontStyle: 'bold'
   }).setDepth(302);
   self.chaosBubbleElements.push(nameTxt);
 
-  // \u53F0\u8BCD\u6C14\u6CE1
+  // \u53F0\u8BCD\u6C14\u6CE1\uFF08\u5B9E\u5FC3\u7EFF\u8272\u6C14\u6CE1\u5E26\u8FB9\u6846\uFF09
   var bubble = self.add.graphics();
-  bubble.fillStyle(0x000000, 0.08);
-  bubble.fillRoundedRect(230, y + 10, 500, 20, 6).setDepth(302);
+  bubble.fillStyle(0x1B5E20, 0.85);
+  bubble.fillRoundedRect(bubbleX, bubbleY, bubbleW, bubbleH, 12).setDepth(302);
+  bubble.lineStyle(1.5, 0x66BB6A, 0.5);
+  bubble.strokeRoundedRect(bubbleX, bubbleY, bubbleW, bubbleH, 12).setDepth(302);
   self.chaosBubbleElements.push(bubble);
 
-  var bubbleTxt = self.add.text(240, y + 24, line, {
+  // \u4E09\u89D2\u7BAD\u5934\u6307\u5411\u5DE6\u4FA7\u89D2\u8272
+  var arrow = self.add.graphics();
+  arrow.fillStyle(0x1B5E20, 0.85);
+  arrow.fillTriangle(
+    bubbleX, bubbleY + bubbleH / 2,
+    bubbleX - 12, bubbleY + bubbleH / 2 - 6,
+    bubbleX - 12, bubbleY + bubbleH / 2 + 6
+  ).setDepth(302);
+  self.chaosBubbleElements.push(arrow);
+
+  // \u53F0\u8BCD\u6587\u672C\uFF08\u52A0\u5927\u5B57\u53F7\u3001\u767D\u8272\uFF09
+  var bubbleTxt = self.add.text(bubbleX + 14, bubbleY + bubbleH / 2, line, {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '11px', color: '#444444'
-  }).setDepth(303);
+    fontSize: '14px', color: '#FFFFFF'
+  }).setOrigin(0, 0.5).setDepth(303);
   self.chaosBubbleElements.push(bubbleTxt);
 };
-
 // ================================================================
 // 搞事情 - 清除题目区域
 // ================================================================
