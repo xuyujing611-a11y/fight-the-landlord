@@ -212,7 +212,7 @@ GameScene.prototype.create = function () {
 // 背景
 // ================================================================
 function drawTableBackground(scene) {
-  var W = 600, H = 960;
+  var W = 960, H = 600;
   var bg = scene.add.graphics();
   bg.fillGradientStyle(0x1B5E20, 0x1B5E20, 0x0D3B0F, 0x0D3B0F, 1);
   bg.fillRect(0, 0, W, H);
@@ -1672,16 +1672,17 @@ GameScene.prototype._destroyChaos = function () {
 // 功能按钮
 // ================================================================
 function createActionButtons(scene) {
-  var bw = 96, bh = 48, gap = 10;
-  var totalW = bw * 4 + gap * 3;
-  var startX = (600 - totalW) / 2;
+  var bw = 88, bh = 44, gap = 12;
+  var totalW = bw * 5 + gap * 4;
+  var startX = (960 - totalW) / 2;
   var btnY = 504;
 
   var buttons = [
     { label: '\u51FA\u724C', color: 0x4ECDC4, key: 'play' },
     { label: '\u63D0\u793A', color: 0xFFD93D, key: 'hint' },
     { label: '\u4E0D\u51FA', color: 0xFF6B6B, key: 'pass' },
-    { label: '\u641E\u4E8B\u60C5', color: 0x7C4DFF, key: 'action' }
+    { label: '\u641E\u4E8B\u60C5', color: 0x7C4DFF, key: 'action' },
+    { label: '\u5E95\u724C\u67E5\u770B', color: 0x78909C, key: 'bottom' }
   ];
 
   if (!scene.actionButtons) scene.actionButtons = [];
@@ -1697,7 +1698,7 @@ function createActionButtons(scene) {
 
     var txt = scene.add.text(bx + bw / 2, btnY + bh / 2, b.label, {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '16px', color: '#FFFFFF', fontStyle: 'bold'
+      fontSize: '15px', color: '#FFFFFF', fontStyle: 'bold'
     }).setOrigin(0.5).setDepth(101);
     scene.actionButtons.push(txt);
 
@@ -1708,6 +1709,7 @@ function createActionButtons(scene) {
           case 'hint': scene.doHint(); break;
           case 'pass': scene.doPlayerPass(); break;
           case 'action': scene.doAction(); break;
+          case 'bottom': scene.showBottomCards(scene.remainingCards); break;
         }
       });
     })(b.key);
