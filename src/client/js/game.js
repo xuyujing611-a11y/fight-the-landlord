@@ -934,7 +934,7 @@ GameScene.prototype.checkAPIConnection = function () {
 };
 
 function apiGetSimple(path) {
-  var url = 'http://localhost:3100' + path;
+  var url = (typeof window !== 'undefined' ? (window.location.protocol + '//' + window.location.host) : 'http://localhost:3100') + path;
   return new Promise(function (resolve, reject) {
     var xhr = new XMLHttpRequest();
     xhr.open('GET', url, true);
