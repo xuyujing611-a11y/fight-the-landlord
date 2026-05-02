@@ -1450,7 +1450,7 @@ GameScene.prototype._showTypeSelection = function (aiId, aiName) {
   self.chaosElements.push(title2);
 
   // 2x2 网格：题型卡片
-  var cardX = [400, 680];
+  var cardX = [390, 670];
   var cardY = [107, 181];
   var cardW = 260, cardH = 88;
 
@@ -1660,7 +1660,7 @@ GameScene.prototype._renderQuestion = function (q, aiId) {
   if (typeLabel.indexOf('trivia') >= 0) typeIcon = '💡';
   if (typeLabel.indexOf('life') >= 0) typeIcon = '🏠';
 
-  var tag = self.add.text(170, 97, typeIcon + ' ' + typeLabel, {
+  var tag = self.add.text(350, 97, typeIcon + ' ' + typeLabel, {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '13px', color: '#FF6B35', fontStyle: 'bold'
   }).setDepth(302);
@@ -1672,10 +1672,10 @@ GameScene.prototype._renderQuestion = function (q, aiId) {
     questionText = '场景：' + q.scene + '\n对话：' + (q.dialogue || '');
   }
   if (!questionText) questionText = '【题目解析降级，请直接根据选项推理】';
-  var qText = self.add.text(170, 114, questionText, {
+  var qText = self.add.text(350, 114, questionText, {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '15px', color: '#222222', fontStyle: 'bold',
-    wordWrap: { width: 720, useAdvancedWrap: true }, lineSpacing: 4
+    wordWrap: { width: 600 }, lineSpacing: 4
   }).setDepth(302);
   self.chaosElements.push(qText);
 
@@ -1685,7 +1685,7 @@ GameScene.prototype._renderQuestion = function (q, aiId) {
 
   var optH = 85;
   var optW = 340;
-  var gridX = [130, 470];
+  var gridX = [310, 650];
   var gridY = [158, 250];
 
   for (var oi = 0; oi < optionKeys.length; oi++) {
