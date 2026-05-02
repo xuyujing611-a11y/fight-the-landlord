@@ -60,6 +60,7 @@ This prevents audio fatigue by adding subtle variation on each play.
 | `passBid()` | cardSlide1-3 | 0.5 | Player passes in bidding | Quieter, less assertive |
 | `win()` | cardPlace3 | 0.9 | Player wins round | Triumphant single strong sound |
 | `lose()` | cardSlide1 | 0.6 | Player loses round | Deflating slide sound |
+| `bomb()` | cardPlace1 + bombEffect | 0.9 | Bomb/rocket is played | Explosive effect, double-length tail |
 | `aiThink()` | — | — | AI's turn | Currently silent, intentional |
 
 ### 2.4 Sound File Requirements

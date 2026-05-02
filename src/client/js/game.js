@@ -1504,17 +1504,20 @@ GameScene.prototype._createChaosOverlay = function (aiId, callback) {
   self._showAiBubble(aiId, 'easy', 180);
   self._chaosAiId = aiId;
 
-  // \u5173\u6389\u6309\u94AE
+  // 圆形关闭按钮
   var closeBtnBg = self.add.graphics();
-  closeBtnBg.fillStyle(0xE53935, 1);
-  closeBtnBg.fillRoundedRect(720, 72, 20, 28, 10).setDepth(302);
-  var closeBtnText = self.add.text(734, 83, '✖', {
-    fontFamily: '"PingFang SC",sans-serif',
-    fontSize: '15px', color: '#FFFFFF'
-  }).setOrigin(0.5).setDepth(303);
-  closeBtnBg.setInteractive(new Phaser.Geom.Rectangle(720, 72, 20, 28), Phaser.Geom.Rectangle.Contains);
+  closeBtnBg.fillStyle(0x000000, 0.3);
+  closeBtnBg.fillCircle(735, 86, 18).setDepth(302);
+  closeBtnBg.lineStyle(1.5, 0xFFFFFF, 0.4);
+  closeBtnBg.strokeCircle(735, 86, 18);
+  closeBtnBg.setInteractive(new Phaser.Geom.Circle(735, 86, 18), Phaser.Geom.Circle.Contains);
   closeBtnBg.on('pointerup', function () { self._destroyChaos(); });
+  var closeBtnText = self.add.text(735, 86, '✕', {
+    fontFamily: 'sans-serif',
+    fontSize: '16px', color: '#FFFFFF'
+  }).setOrigin(0.5).setDepth(303);
   self.chaosElements.push(closeBtnBg, closeBtnText);
+
 
   if (callback) callback();
 };
