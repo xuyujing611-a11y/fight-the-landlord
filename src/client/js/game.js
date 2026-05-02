@@ -44,6 +44,7 @@ var game = new Phaser.Game(GameConfig);
 // ================================================================
 var SoundManager = {
   scene: null,
+  audioReady: false,
   init: function (scene) {
     this.scene = scene;
     var self = this;
@@ -53,17 +54,43 @@ var SoundManager = {
       if (ctx && ctx.state === 'suspended') {
         ctx.resume().then(function () {
           self.audioReady = true;
-          console.log('AudioContext resumed');
+          self.playBGM(); // 激活时尝试播放背景音乐
         }).catch(function () {});
       } else if (ctx && ctx.state === 'running') {
         self.audioReady = true;
+        self.playBGM();
       }
       if (!ctx) self.audioReady = true;
     }
     scene.input.on('pointerdown', tryResume);
     scene.time.delayedCall(500, tryResume);
   },
-  audioReady: false,
+  // 播放背景音乐（带容错，找不到文件也不会报错崩溃）
+  playBGM: function() {
+    if (this.bgmPlaying || !this.scene) return;
+    try {
+      var bgm = this.scene.sound.add('bgm', { loop: true, volume: 0.25 });
+      bgm.play();
+      this.bgmPlaying = true;
+    } catch (e) {
+      console.warn('背景音乐(bgm)未找到，已跳过静默处理。');
+    }
+  },
+  // 纯本地动态 TTS 语音引擎
+  speak: function(text, aiId) {
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    var msg = new SpeechSynthesisUtterance(text);
+    msg.lang = 'zh-CN';
+    if (aiId === 'duidui') {
+      msg.pitch = 0.7;   // 王怼怼：低沉、傲慢
+      msg.rate = 1.1;
+    } else {
+      msg.pitch = 1.6;   // 苏甜甜：高频、可爱
+      msg.rate = 1.25;
+    }
+    window.speechSynthesis.speak(msg);
+  },
   _ensureReady: function () {
     if (this.audioReady) return true;
     var ctx = this.scene && this.scene.sound && this.scene.sound.context;
@@ -77,53 +104,18 @@ var SoundManager = {
   _random: function (base, count) {
     return base + (Math.floor(Math.random() * count) + 1);
   },
-  playCard: function () {
-    if (!this.scene || !this._ensureReady()) return;
-    this.scene.sound.play(this._random('cardPlace', 3), { volume: 0.8 });
-  },
-  selectCard: function () {
-    if (!this.scene || !this._ensureReady()) return;
-    this.scene.sound.play(this._random('cardSlide', 3), { volume: 0.6 });
-  },
-  deselectCard: function () {
-    if (!this.scene || !this._ensureReady()) return;
-    this.scene.sound.play(this._random('cardSlide', 3), { volume: 0.5 });
-  },
-  playerTurn: function () {
-    if (!this.scene || !this._ensureReady()) return;
-    this.scene.sound.play(this._random('chipsCollide', 3), { volume: 0.7 });
-  },
-  bid: function () {
-    if (!this.scene || !this._ensureReady()) return;
-    this.scene.sound.play(this._random('chipsCollide', 3), { volume: 0.7 });
-  },
-  passBid: function () {
-    if (!this.scene || !this._ensureReady()) return;
-    this.scene.sound.play(this._random('cardSlide', 3), { volume: 0.5 });
-  },
-  win: function () {
-    if (!this.scene || !this._ensureReady()) return;
-    this.scene.sound.play('cardPlace3', { volume: 0.9 });
-  },
-  lose: function () {
-    if (!this.scene || !this._ensureReady()) return;
-    this.scene.sound.play('cardSlide1', { volume: 0.6 });
-  },
-  aiThink: function () {
-    // no specific sound for AI thinking
-  },
-  bomb: function () {
-    if (!this.scene || !this._ensureReady()) return;
-    this.scene.sound.play(this._random('cardPlace', 3), { volume: 1.0, detune: -400 });
-  },
-  pauseAll: function () {
-    if (!this.scene) return;
-    this.scene.sound.pauseAll();
-  },
-  resumeAll: function () {
-    if (!this.scene) return;
-    this.scene.sound.resumeAll();
-  }
+  playCard: function () { if(this._ensureReady()) this.scene.sound.play(this._random('cardPlace', 3), { volume: 0.8 }); },
+  selectCard: function () { if(this._ensureReady()) this.scene.sound.play(this._random('cardSlide', 3), { volume: 0.6 }); },
+  deselectCard: function () { if(this._ensureReady()) this.scene.sound.play(this._random('cardSlide', 3), { volume: 0.5 }); },
+  playerTurn: function () { if(this._ensureReady()) this.scene.sound.play(this._random('chipsCollide', 3), { volume: 0.7 }); },
+  bid: function () { if(this._ensureReady()) this.scene.sound.play(this._random('chipsCollide', 3), { volume: 0.7 }); },
+  passBid: function () { if(this._ensureReady()) this.scene.sound.play(this._random('cardSlide', 3), { volume: 0.5 }); },
+  win: function () { if(this._ensureReady()) this.scene.sound.play('cardPlace3', { volume: 0.9 }); },
+  lose: function () { if(this._ensureReady()) this.scene.sound.play('cardSlide1', { volume: 0.6 }); },
+  aiThink: function () {},
+  bomb: function () { if(this._ensureReady()) this.scene.sound.play(this._random('cardPlace', 3), { volume: 1.0, detune: -400 }); },
+  pauseAll: function () { if (this.scene) this.scene.sound.pauseAll(); },
+  resumeAll: function () { if (this.scene) this.scene.sound.resumeAll(); }
 };
 
 // ================================================================
@@ -1002,6 +994,7 @@ GameScene.prototype.doPlayerPass = function () {
   this.selectedCards = [];
   this.addPlayHistory('player', true);
   if (this.passCount >= 2) {
+    this.clearTablePlays();
     this.passCount = 0;
     this.lastPlay = null;
     this.lastPlayInfo = null;
@@ -1193,6 +1186,7 @@ GameScene.prototype.handleAIPass = function (aiIndex, aiName) {
   this.addPlayHistory(aiIndex === 0 ? 'ai1' : 'ai2', true);
   this._showPlayBubble(aiIndex === 0 ? 'duidui' : 'tiantian', 'pass', '');
   if (this.passCount >= 2) {
+    this.clearTablePlays();
     this.passCount = 0;
     this.lastPlay = null;
     this.lastPlayInfo = null;
@@ -2333,6 +2327,7 @@ GameScene.prototype._showPlayBubble = function (aiId, event, context) {
     self.playBubbleElements.push(arrow);
     // 文字最后push到底部渲染在上层
     self.playBubbleElements.push(bubbleTxt);
+    SoundManager.speak(line, aiId);
 
     // 弹入动画: Container 包裹所有元素
     self.playBubbleContainer = self.add.container(0, 0, self.playBubbleElements);
@@ -2867,45 +2862,59 @@ GameScene.prototype.renderRoundEndPanel = function (winner) {
 // 出牌记录区域
 // ================================================================
 function createPlayHistoryArea(scene) {
-  // A3: 扩大历史面板，移到左侧显眼位置
   var bg = scene.add.graphics();
-  bg.fillStyle(0x000000, 0.35);
+  // 颜色加深，增加边框质感
+  bg.fillStyle(0x000000, 0.45);
   bg.fillRoundedRect(12, 58, 140, 240, 8).setDepth(200);
-  bg.lineStyle(1, 0x66BB6A, 0.3);
+  bg.lineStyle(1.5, 0x4CAF50, 0.5);
   bg.strokeRoundedRect(12, 58, 140, 240, 8).setDepth(200);
 
-  scene.add.text(18, 62, '📋 出牌记录', {
+  scene.add.text(82, 68, '📜 出牌记录', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '10px', color: '#81C784', fontStyle: 'bold'
-  }).setDepth(201);
+    fontSize: '12px', color: '#A5D6A7', fontStyle: 'bold'
+  }).setOrigin(0.5).setDepth(201);
 
-  scene.playHistoryText = scene.add.text(18, 76, '', {
+  scene.playHistoryText = scene.add.text(18, 85, '', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '10px', color: '#C8E6C9',
-    lineSpacing: 4,
-    wordWrap: { width: 126 }
+    fontSize: '11px', color: '#FFFFFF',
+    lineSpacing: 6,
+    wordWrap: { width: 128 }
   }).setDepth(201);
 }
 
+// ================================================================
+// 新增：清理桌面上一轮打出的废牌
+// ================================================================
+GameScene.prototype.clearTablePlays = function() {
+  var self = this;
+  ['myPlayCardsGfx', 'ai1PlayCardsGfx', 'ai2PlayCardsGfx'].forEach(function(key) {
+    if (self[key]) {
+      self[key].forEach(function(img) { img.destroy(); });
+      self[key] = [];
+    }
+  });
+};
+
 GameScene.prototype.addPlayHistory = function (player, cardsOrPass) {
-  var labels = { player: '你', ai1: '王怼怼', ai2: '苏甜甜' };
+  var labels = { player: '你', ai1: '怼怼', ai2: '甜甜' };
   var label = labels[player] || player;
   var entry;
   if (cardsOrPass === true) {
-    // pass
     entry = { text: label + ': 不出', pass: true };
   } else if (cardsOrPass && cardsOrPass.length > 0) {
+    // 增加扑克牌花色符号显示
+    var suitSymbol = { spade:'♠', heart:'♥', club:'♣', diamond:'♦', joker:'🃏' };
     var display = cardsOrPass.map(function (c) {
-      return Doudizhu.RANK_NAME_MAP[c.rank] || '?';
+      return (suitSymbol[c.suit] || '') + (Doudizhu.RANK_NAME_MAP[c.rank] || '?');
     }).join(' ');
     entry = { text: label + ': ' + display, cards: cardsOrPass };
   } else {
-    return; // ignore empty entries
+    return;
   }
   this.playHistory.push(entry);
-  // 只保留最近8条
-  if (this.playHistory.length > 8) {
-    this.playHistory = this.playHistory.slice(-8);
+  // 保留最近 9 条记录，避免撑爆面板
+  if (this.playHistory.length > 9) {
+    this.playHistory.shift();
   }
   this.renderPlayHistory();
 };
@@ -2913,10 +2922,8 @@ GameScene.prototype.addPlayHistory = function (player, cardsOrPass) {
 GameScene.prototype.renderPlayHistory = function () {
   if (!this.playHistoryText) return;
   var lines = [];
-  var start = Math.max(0, this.playHistory.length - 6);
-  for (var i = start; i < this.playHistory.length; i++) {
-    var entry = this.playHistory[i];
-    lines.push(entry.text);
+  for (var i = 0; i < this.playHistory.length; i++) {
+    lines.push(this.playHistory[i].text);
   }
   this.playHistoryText.setText(lines.join('\n'));
 };
