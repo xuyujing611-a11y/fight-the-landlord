@@ -2158,14 +2158,20 @@ GameScene.prototype._showPlayBubble = function (aiId, event, context) {
 
     var isDuidui = (aiId === 'duidui');
     var isEmergency = (event === 'bomb');
-    var y = 96;
+    var y = 50;
     var aiDisplayName = isDuidui ? '王怼怼' : '苏甜甜';
-    var avatarX = isDuidui ? 80 : 880;
+    var avatarX = isDuidui ? 176 : 788;
+    var avatarY = y + 16;
     var avatarColor = isDuidui ? 0x4FC3F7 : 0xFFB74D;
 
-    var bubbleW = Math.min(280, 140 + line.length * 10);
-    var bubbleX = isDuidui ? 110 : (avatarX - bubbleW - 30);
-    var bubbleY = y + 10;
+    // 方块形气泡
+    var baseSize = 64;
+    var bubbleW = Math.min(baseSize, 40 + line.length * 6);
+    var bubbleH = Math.max(baseSize, 30 + Math.ceil(line.length / 3) * 14);
+    bubbleW = Math.max(bubbleW, bubbleH * 0.7);
+    bubbleH = Math.max(bubbleH, bubbleW * 0.7);
+    var bubbleX = avatarX - bubbleW / 2;
+    var bubbleY = y + 36;
     var cornerRadius = isDuidui ? 12 : 4;
     var bubbleBgColor = isEmergency ? 0x500A00 : (isDuidui ? 0x1B5E20 : 0x311B92);
     var bubbleBorderColor = isEmergency ? 0xFF5252 : (isDuidui ? 0x66BB6A : 0xCE93D8);
@@ -2173,21 +2179,20 @@ GameScene.prototype._showPlayBubble = function (aiId, event, context) {
     // AI 头像圆圈
     var avatar = self.add.graphics();
     avatar.fillStyle(avatarColor, 1);
-    avatar.fillCircle(avatarX, y + 16, 22).setDepth(20);
+    avatar.fillCircle(avatarX, avatarY, 22).setDepth(20);
     avatar.lineStyle(2, 0xFFFFFF, 0.6);
-    avatar.strokeCircle(avatarX, y + 16, 22).setDepth(20);
-    var avatarTxt = self.add.text(avatarX, y + 16, isDuidui ? '😎' : '😊', {
+    avatar.strokeCircle(avatarX, avatarY, 22).setDepth(20);
+    var avatarTxt = self.add.text(avatarX, avatarY, isDuidui ? '😎' : '😊', {
       fontFamily: 'sans-serif', fontSize: '18px'
     }).setOrigin(0.5).setDepth(21);
     self.playBubbleElements.push(avatar, avatarTxt);
 
     // AI 名字
-    var nameX = isDuidui ? (avatarX + 25) : (bubbleX - 5);
-    var nameTxt = self.add.text(nameX, y - 4, aiDisplayName, {
+    var nameX = avatarX;
+    var nameTxt = self.add.text(nameX, y, aiDisplayName, {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
       fontSize: '12px', color: '#FFFFFF', fontStyle: 'bold'
-    }).setDepth(21);
-    if (!isDuidui) nameTxt.setOrigin(1, 0);
+    }).setOrigin(0.5, 0).setDepth(21);
     self.playBubbleElements.push(nameTxt);
 
     // 气泡高度自适应: 先创建文字获取高度，再用高度绘制气泡
@@ -2203,7 +2208,7 @@ GameScene.prototype._showPlayBubble = function (aiId, event, context) {
     var textX = isDuidui ? (bubbleX + 14) : (bubbleX + 10);
     var bubbleTxt = self.add.text(bubbleX + 14, 0, line, textStyle).setDepth(21);
     var textBounds = bubbleTxt.getBounds();
-    var bubbleH = Math.max(36, textBounds.height + 20);
+    bubbleH = Math.max(bubbleH, textBounds.height + 20);
     bubbleTxt.setPosition(textX, bubbleY + bubbleH / 2).setOrigin(0, 0.5);
     self.playBubbleElements.push(bubbleTxt);
 
