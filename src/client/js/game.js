@@ -156,6 +156,10 @@ GameScene.prototype.init = function () {
   this.playHistory = [];
   this.gameStartTime = Date.now();
   this.totalBombs = 0;
+  this.chaosScore = 0;
+  // 重置气泡队列全局变量
+  bubbleQueue = [];
+  bubbleShowing = false;
 };
 
 GameScene.prototype.preload = function () {
