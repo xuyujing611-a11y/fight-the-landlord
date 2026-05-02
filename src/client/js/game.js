@@ -2155,7 +2155,6 @@ GameScene.prototype._showPlayBubble = function (aiId, event, context) {
     var avatarColor = isDuidui ? 0x4FC3F7 : 0xFFB74D;
 
     var bubbleW = Math.min(280, 140 + line.length * 10);
-    var bubbleH = 36;
     var bubbleX = isDuidui ? 110 : (avatarX - bubbleW - 30);
     var bubbleY = y + 10;
     var cornerRadius = isDuidui ? 12 : 4;
@@ -2181,6 +2180,23 @@ GameScene.prototype._showPlayBubble = function (aiId, event, context) {
     }).setDepth(21);
     if (!isDuidui) nameTxt.setOrigin(1, 0);
     self.playBubbleElements.push(nameTxt);
+
+    // 气泡高度自适应: 先创建文字获取高度，再用高度绘制气泡
+    var textStyle = isEmergency ? {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '16px', color: '#FFCDD2', fontStyle: 'bold',
+      wordWrap: { width: bubbleW - 28 }
+    } : {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '14px', color: '#FFFFFF',
+      wordWrap: { width: bubbleW - 28 }
+    };
+    var textX = isDuidui ? (bubbleX + 14) : (bubbleX + 10);
+    var bubbleTxt = self.add.text(bubbleX + 14, 0, line, textStyle).setDepth(21);
+    var textBounds = bubbleTxt.getBounds();
+    var bubbleH = Math.max(36, textBounds.height + 20);
+    bubbleTxt.setPosition(textX, bubbleY + bubbleH / 2).setOrigin(0, 0.5);
+    self.playBubbleElements.push(bubbleTxt);
 
     // 台词气泡背景（填充+边框分开，炸弹时边框可独立闪烁）
     var bubbleBg = self.add.graphics();
@@ -2221,19 +2237,6 @@ GameScene.prototype._showPlayBubble = function (aiId, event, context) {
       ).setDepth(20);
     }
     self.playBubbleElements.push(arrow);
-
-    // 台词文本（炸弹时加粗+加阴影）
-    var textStyle = isEmergency ? {
-      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '16px', color: '#FFCDD2', fontStyle: 'bold'
-    } : {
-      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '14px', color: '#FFFFFF'
-    };
-    var textX = isDuidui ? (bubbleX + 14) : (bubbleX + 10);
-    var bubbleTxt = self.add.text(textX, bubbleY + bubbleH / 2, line, textStyle
-    ).setOrigin(0, 0.5).setDepth(21);
-    self.playBubbleElements.push(bubbleTxt);
 
     // 弹入动画: Container 包裹所有元素
     self.playBubbleContainer = self.add.container(0, 0, self.playBubbleElements);
