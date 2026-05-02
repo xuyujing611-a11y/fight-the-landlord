@@ -368,11 +368,11 @@ function createTopBar(scene) {
 
   // AI2 (right)
   var sAvatar = makeAvatarImage(scene, 'avatar_su', 788, 20, 0xFFB74D, '\u82CF\u751C\u751C');
-  scene.add.text(720, 9, '\u82CF\u751C\u751C', {
+  scene.add.text(788, 9, '\u82CF\u751C\u751C', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '10px', color: '#E8F5E9', fontStyle: 'bold'
   }).setDepth(11);
-  scene.ai2Count = scene.add.text(720, 22, '\u5269\u4F59 17 \u5F20', {
+  scene.ai2Count = scene.add.text(788, 22, '\u5269\u4F59 17 \u5F20', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '10px', color: '#A5D6A7'
   }).setDepth(11);
