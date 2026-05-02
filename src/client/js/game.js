@@ -483,7 +483,7 @@ GameScene.prototype.renderPlayerHand = function () {
 
   for (var ii = 0; ii < n; ii++) {
     var card = hand[ii];
-    var cx = startX + ii * (cw + gap) + cw / 2;
+    var cx = startX + ii * (cw + overlap) + cw / 2;
     var cy = baseY;
     var key = getCardImageKey(card);
 
