@@ -316,7 +316,7 @@ GameScene.prototype.create = function () {
     self.checkAPIConnection();
   });
 
-  var fsBtn = self.add.text(940, 24, '⛶', {
+  var fsBtn = self.add.text(1280, 24, '⛶', {
     fontSize: '22px', color: '#FFFFFF',
     backgroundColor: '#00000066', padding: { x: 8, y: 6 }
   }).setOrigin(1, 0.5).setInteractive().setDepth(200);
@@ -1803,7 +1803,7 @@ GameScene.prototype._handleOptionClick = function (self, optBg, optKey, aiId, q)
   // 动态叠加 Y 坐标，防止长答案重叠
   var fbY = 145;
   if (!isCorrect && q.answer) {
-    var correctAns = self.add.text(220, fbY, '正确答案: ' + q.answer + '. ' + (q.options[q.answer] || ''), {
+    var correctAns = self.add.text(400, fbY, '正确答案: ' + q.answer + '. ' + (q.options[q.answer] || ''), {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
       fontSize: '14px', color: '#4CAF50', fontStyle: 'bold',
       wordWrap: { width: 520, useAdvancedWrap: true }, lineSpacing: 4
@@ -1812,7 +1812,7 @@ GameScene.prototype._handleOptionClick = function (self, optBg, optKey, aiId, q)
     fbY += correctAns.height + 15;
   }
   if (q.explanation) {
-    var expl = self.add.text(220, fbY, '解析: ' + q.explanation, {
+    var expl = self.add.text(400, fbY, '解析: ' + q.explanation, {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
       fontSize: '13px', color: '#555555',
       wordWrap: { width: 520, useAdvancedWrap: true }, lineSpacing: 4
@@ -1892,9 +1892,9 @@ GameScene.prototype._showSwapResult = function (aiId, isCorrect, fbY) {
   }
   var panelBg = self.add.graphics();
   panelBg.fillStyle(0xFFF8E1, 1);
-  panelBg.fillRoundedRect(220, confirmPanelY, 520, 130, 10).setDepth(308);
+  panelBg.fillRoundedRect(400, confirmPanelY, 520, 130, 10).setDepth(308);
   panelBg.lineStyle(2, 0xFFC107, 1);
-  panelBg.strokeRoundedRect(220, confirmPanelY, 520, 130, 10).setDepth(308);
+  panelBg.strokeRoundedRect(400, confirmPanelY, 520, 130, 10).setDepth(308);
   self.chaosElements.push(panelBg);
   var hintTxt = self.add.text(660, confirmPanelY + 20, '⚠️ 惩罚：' + aiName + ' 决定用它的最小牌换走你的一张牌！', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
@@ -1911,14 +1911,14 @@ GameScene.prototype._showSwapResult = function (aiId, isCorrect, fbY) {
     var img = self.add.image(x, y, key).setDisplaySize(40, 56).setDepth(310);
     self.chaosElements.push(img);
   };
-  var t1 = self.add.text(380, confirmPanelY + 65, '你的牌:', {
+  var t1 = self.add.text(420, confirmPanelY + 65, '你的牌:', {
     fontFamily: '"PingFang SC"', fontSize: '13px', color: '#333'
   }).setOrigin(1, 0.5).setDepth(309);
-  drawCardWithShadow(410, confirmPanelY + 65, lostCard);
+  drawCardWithShadow(450, confirmPanelY + 65, lostCard);
   var swapIcon = self.add.text(660, confirmPanelY + 65, '🔄', {
     fontSize: '26px'
   }).setOrigin(0.5).setDepth(309);
-  var t2 = self.add.text(530, confirmPanelY + 65, 'AI的牌:', {
+  var t2 = self.add.text(570, confirmPanelY + 65, 'AI的牌:', {
     fontFamily: '"PingFang SC"', fontSize: '13px', color: '#333'
   }).setOrigin(0, 0.5).setDepth(309);
   if (aiMinCard) {
@@ -2217,12 +2217,12 @@ GameScene.prototype._showSwapButtons = function (aiId, btnY) {
   });
   var againBg = self.add.graphics();
   againBg.fillStyle(0x4ECDC4, 1);
-  againBg.fillRoundedRect(220, btnY, 220, 40, 10).setDepth(305);
-  var againTxt = self.add.text(330, btnY + 20, '🔄 再来一题', {
+  againBg.fillRoundedRect(550, btnY, 220, 40, 10).setDepth(305);
+  var againTxt = self.add.text(660, btnY + 20, '🔄 再来一题', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '13px', color: '#FFFFFF', fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(306);
-  againBg.setInteractive(new Phaser.Geom.Rectangle(220, btnY, 220, 40), Phaser.Geom.Rectangle.Contains);
+  againBg.setInteractive(new Phaser.Geom.Rectangle(550, btnY, 220, 40), Phaser.Geom.Rectangle.Contains);
   againBg.on('pointerup', function () {
     self.chaosQuestionAnswered = false;
     self._clearQuestionArea();
@@ -2232,12 +2232,12 @@ GameScene.prototype._showSwapButtons = function (aiId, btnY) {
   self.chaosElements.push(againBg, againTxt);
   var closeBg = self.add.graphics();
   closeBg.fillStyle(0xFF6B6B, 1);
-  closeBg.fillRoundedRect(510, btnY, 220, 40, 10).setDepth(305);
-  var closeTxt = self.add.text(620, btnY + 20, '✖ 关掉回牌', {
+  closeBg.fillRoundedRect(675, btnY, 220, 40, 10).setDepth(305);
+  var closeTxt = self.add.text(785, btnY + 20, '✖ 关掉回牌', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '13px', color: '#FFFFFF', fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(306);
-  closeBg.setInteractive(new Phaser.Geom.Rectangle(510, btnY, 220, 40), Phaser.Geom.Rectangle.Contains);
+  closeBg.setInteractive(new Phaser.Geom.Rectangle(675, btnY, 220, 40), Phaser.Geom.Rectangle.Contains);
   closeBg.on('pointerup', function () {
     self._destroyChaos();
   });
