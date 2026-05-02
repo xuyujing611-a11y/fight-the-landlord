@@ -1432,10 +1432,11 @@ GameScene.prototype._showTypeSelection = function (aiId, aiName) {
           // B34: 选完题型恢复主标题显示
           if (self.chaosTitle) self.chaosTitle.setVisible(true);
           // 销毁类型选择UI（保留基础元素：遮罩、卡片背景、标题栏、分数、关闭按钮）
-          for (var di = self.chaosElements.length - 1; di >= 5; di--) {
+          // 保留[0..5]: overlay, cardBg, title, score, closeBtnBg, closeBtnText
+          for (var di = self.chaosElements.length - 1; di >= 6; di--) {
             if (self.chaosElements[di]) self.chaosElements[di].destroy();
           }
-          self.chaosElements = self.chaosElements.slice(0, 5);
+          self.chaosElements = self.chaosElements.slice(0, 6);
           // 开始出题
           self._showChaosQuestion(aiId, aiName, typeId);
         }
@@ -2413,8 +2414,8 @@ GameScene.prototype._clearQuestionArea = function () {
   var self = this;
   if (!self.chaosElements) return;
   // \u4FDD\u7559\u524D3\u4E2A\u5143\u7D20\uFF08\u906E\u7F69\u3001\u5361\u724C\u80CC\u666F\u3001\u6807\u9898\u3001\u5206\u6570\u3001\u5173\u6389\u6309\u94AE\uFF09
-  var toKeep = self.chaosElements.slice(0, 5); // overlay, cardBg, title, scoreText, closeBtn
-  for (var di = 5; di < self.chaosElements.length; di++) {
+  var toKeep = self.chaosElements.slice(0, 6); // overlay, cardBg, title, scoreText, closeBtnBg, closeBtnText
+  for (var di = 6; di < self.chaosElements.length; di++) {
     if (self.chaosElements[di]) self.chaosElements[di].destroy();
   }
   self.chaosElements = toKeep;
