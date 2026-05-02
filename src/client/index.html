@@ -18,28 +18,23 @@
       -webkit-tap-highlight-color: transparent;
       overscroll-behavior: none;
     }
+    /* 只需要把容器撑满，其余全部交给 Phaser 引擎自己处理 */
     #game-container {
       width: 100%; height: 100%;
-      display: flex; align-items: center; justify-content: center;
+      position: relative; z-index: 1;
     }
-    /* 竖屏拦截器：仅在竖屏时显示，提示玩家旋转手机 */
     #orientation-lock {
       display: none;
-      position: fixed; top: 0; left: 0;
-      width: 100vw; height: 100vh;
-      background: #1B5E20;
-      z-index: 99999;
-      color: white;
-      justify-content: center; align-items: center;
-      flex-direction: column;
-      text-align: center;
+      position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+      background: #1B5E20; z-index: 99999;
+      color: white; justify-content: center; align-items: center;
+      flex-direction: column; text-align: center;
     }
     .phone-icon { font-size: 48px; margin-bottom: 20px; animation: rotatePhone 1.5s ease-in-out infinite; }
     @keyframes rotatePhone { 0% { transform: rotate(0deg); } 100% { transform: rotate(-90deg); } }
-    /* 核心修复：纯 CSS 拦截竖屏，不再操作 Canvas 旋转 */
-    @media screen and (orientation: portrait) {
-      #game-container { display: none !important; }
-      #orientation-lock { display: flex !important; }
+    /* 仅在竖屏时拦截 */
+    @media screen and (max-width: 850px) and (orientation: portrait) {
+      #orientation-lock { display: flex; }
     }
     /* 加载画面 */
     #loading-screen {

@@ -17,20 +17,18 @@ var GAME_STATE = {
   CHAOS_MODE: 'CHAOS_MODE'
 };
 
-// 动态计算手机的真实宽高比，将游戏宽度动态延展
-var screenRatio = window.innerWidth / window.innerHeight;
-var dynamicWidth = Math.max(960, 600 * screenRatio);
-
 var GameConfig = {
   type: Phaser.AUTO,
-  width: dynamicWidth,
+  width: 960,
   height: 600,
   parent: 'game-container',
   backgroundColor: '#0D3B0F',
   dom: { createContainer: true },
-  // 开启高清屏支持，解决分辨率不清晰的问题
+  // 开启高清 DPI 渲染 + 强制抗锯齿
   resolution: window.devicePixelRatio || 1,
-  autoRound: false, // 允许亚像素渲染，让文字和卡牌边缘更平滑
+  autoRound: false, // 允许亚像素渲染
+  antialias: true,  // 开启抗锯齿
+  antialiasGL: true, // WebGL 级别抗锯齿
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH
@@ -294,24 +292,23 @@ GameScene.prototype.create = function () {
     self.checkAPIConnection();
   });
 
-  // B40: 全屏/缩放模式切换按钮（右上角）——点击切换 FIT ↔ FILL
   var fsBtn = self.add.text(940, 24, '⛶', {
     fontSize: '22px', color: '#FFFFFF',
-    backgroundColor: '#00000066',
-    padding: { x: 8, y: 6 }
+    backgroundColor: '#00000066', padding: { x: 8, y: 6 }
   }).setOrigin(1, 0.5).setInteractive().setDepth(200);
 
   fsBtn.on('pointerdown', function () {
-    // 核心修复：动态切换引擎的缩放模式
+    // 在"等比留边"和"裁剪放大"之间切换
     if (game.scale.scaleMode === Phaser.Scale.FIT) {
-      game.scale.scaleMode = Phaser.Scale.FILL;
-      showToast(self, '已切换为：铺满全屏');
+      game.scale.scaleMode = Phaser.Scale.ENVELOP;
+      showToast(self, '已切换为：放大沉浸模式');
     } else {
       game.scale.scaleMode = Phaser.Scale.FIT;
-      showToast(self, '已切换为：等比居中');
+      showToast(self, '已切换为：等比全览模式');
     }
     game.scale.updateScale();
-    // 触发系统全屏
+
+    // 触发系统级全屏
     var el = document.documentElement;
     if (!document.fullscreenElement && !document.webkitFullscreenElement) {
       if (el.requestFullscreen) el.requestFullscreen();
