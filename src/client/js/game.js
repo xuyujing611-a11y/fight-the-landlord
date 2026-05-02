@@ -25,6 +25,10 @@ var GameConfig = {
   backgroundColor: '#1B5E20',
   dom: { createContainer: true },
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+  audio: {
+    disableWebAudio: false,
+    noAudio: false
+  },
   scene: [GameScene]
 };
 
@@ -37,42 +41,68 @@ var SoundManager = {
   scene: null,
   init: function (scene) {
     this.scene = scene;
-    // \u6D17\u724C\u97F3\u6548 - \u5F00\u5C40\u65F6\u64AD\u653E
+    var self = this;
+    function tryResume() {
+      if (self.audioReady) return;
+      var ctx = scene.sound && scene.sound.context;
+      if (ctx && ctx.state === 'suspended') {
+        ctx.resume().then(function () {
+          self.audioReady = true;
+          console.log('AudioContext resumed');
+        }).catch(function () {});
+      } else if (ctx && ctx.state === 'running') {
+        self.audioReady = true;
+      }
+      if (!ctx) self.audioReady = true;
+    }
+    scene.input.on('pointerdown', tryResume);
+    scene.time.delayedCall(500, tryResume);
+  },
+  audioReady: false,
+  _ensureReady: function () {
+    if (this.audioReady) return true;
+    var ctx = this.scene && this.scene.sound && this.scene.sound.context;
+    if (ctx && ctx.state === 'suspended') {
+      ctx.resume();
+      return false;
+    }
+    if (!ctx) this.audioReady = true;
+    return this.audioReady;
   },
   _random: function (base, count) {
     return base + (Math.floor(Math.random() * count) + 1);
   },
   playCard: function () {
-    if (!this.scene) return;
-    this.scene.sound.play(this._random('cardPlace', 3), { volume: 0.6 });
+    if (!this.scene || !this._ensureReady()) return;
+    this.scene.sound.play(this._random('cardPlace', 3), { volume: 0.8 });
   },
   selectCard: function () {
-    if (!this.scene) return;
-    this.scene.sound.play(this._random('cardSlide', 3), { volume: 0.4 });
+    if (!this.scene || !this._ensureReady()) return;
+    this.scene.sound.play(this._random('cardSlide', 3), { volume: 0.6 });
   },
   deselectCard: function () {
-    if (!this.scene) return;
-    this.scene.sound.play(this._random('cardSlide', 3), { volume: 0.3 });
+    if (!this.scene || !this._ensureReady()) return;
+    this.scene.sound.play(this._random('cardSlide', 3), { volume: 0.5 });
   },
   playerTurn: function () {
-    if (!this.scene) return;
-    this.scene.sound.play(this._random('chipsCollide', 3), { volume: 0.5 });
+    if (!this.scene || !this._ensureReady()) return;
+    this.scene.sound.play(this._random('chipsCollide', 3), { volume: 0.7 });
   },
   bid: function () {
-    if (!this.scene) return;
-    this.scene.sound.play(this._random('chipsCollide', 3), { volume: 0.5 });
+    if (!this.scene || !this._ensureReady()) return;
+    this.scene.sound.play(this._random('chipsCollide', 3), { volume: 0.7 });
   },
   passBid: function () {
-    if (!this.scene) return;
-    this.scene.sound.play(this._random('cardSlide', 3), { volume: 0.3 });
+    if (!this.scene || !this._ensureReady()) return;
+    this.scene.sound.play(this._random('cardSlide', 3), { volume: 0.5 });
   },
   win: function () {
-    if (!this.scene) return;
-    this.scene.sound.play('cardPlace3', { volume: 0.7 });
+    if (!this.scene || !this._ensureReady()) return;
+    this.scene.sound.play('cardPlace3', { volume: 0.9 });
   },
   lose: function () {
-    if (!this.scene) return;
-    this.scene.sound.play('cardSlide1', { volume: 0.4 });
+    if (!this.scene || !this._ensureReady()) return;
+    this.scene.sound.play('cardSlide1', { volume: 0.6 });
   },
   aiThink: function () {
     // no specific sound for AI thinking
@@ -1286,7 +1316,7 @@ GameScene.prototype.displayPlay = function (cards, player) {
   for (var pi = 0; pi < n; pi++) {
     var pcx = startX + pi * overlap + pos.w / 2;
     var pkey = getCardImageKey(cards[pi]);
-    var pimg = this.add.image(pcx, pos.y, pkey).setDisplaySize(pos.w, pos.h).setDepth(12);
+    var pimg = this.add.image(pcx, pos.y, pkey).setDisplaySize(pos.w, pos.h).setDepth(21);
     arr.push(pimg);
     // 牌面叠加文字
     var pc = cards[pi];
@@ -1301,7 +1331,7 @@ GameScene.prototype.displayPlay = function (cards, player) {
       color: '#FFFFFF',
       stroke: '#000000',
       strokeThickness: 2
-    }).setOrigin(0, 0).setDepth(13);
+    }).setOrigin(0, 0).setDepth(22);
     arr.push(txtOverlay);
   }
 };

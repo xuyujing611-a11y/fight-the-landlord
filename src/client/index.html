@@ -20,14 +20,14 @@
     #game-container {
       width: 100%; height: 100%;
       display: flex; align-items: center; justify-content: center;
-      background: linear-gradient(135deg, #1B5E20, #2E7D32, #1B5E20);
+      background: #1B5E20;
       overflow: hidden;
+      /* fill viewport, let Phaser Scale.FIT handle aspect ratio within */
     }
     #game-container canvas {
       display: block;
-      max-width: 100vw;
-      max-height: 100vh;
-      object-fit: contain;
+      width: 100vw;
+      height: 100vh;
     }
 
     /* 加载画面 */
