@@ -1798,9 +1798,21 @@ GameScene.prototype._showSwapResult = function (aiId, isCorrect, fbY) {
     return;
   }
 
-  // 答错：AI从玩家手牌随机拿一张
+  // AI从玩家手牌拿一张 → AI给玩家最小牌（双向交换）
   var idx = Math.floor(Math.random() * self.playerHand.length);
   var lostCard = self.playerHand[idx];
+
+  // 找AI手牌中最小的牌（rank最小）
+  var aiMinCard = null;
+  var aiMinIdx = -1;
+  if (aiHand && aiHand.length > 0) {
+    for (var k = 0; k < aiHand.length; k++) {
+      if (aiMinCard === null || aiHand[k].rank < aiMinCard.rank) {
+        aiMinCard = aiHand[k];
+        aiMinIdx = k;
+      }
+    }
+  }
 
   var rankStr = Doudizhu.RANK_NAMES ? Doudizhu.RANK_NAMES[lostCard.rank] : (lostCard.rank || '');
   var suitStr = Doudizhu.SUIT_NAMES ? Doudizhu.SUIT_NAMES[lostCard.suit] : (lostCard.suit || '');
@@ -1843,11 +1855,19 @@ GameScene.prototype._showSwapResult = function (aiId, isCorrect, fbY) {
         // 动画完成后才实际修改数据
         self.playerHand.splice(idx, 1);
         aiHand.push(lostCard);
+        // AI给玩家最小牌（双向交换）
+        if (aiMinIdx >= 0) {
+          aiHand.splice(aiMinIdx, 1);
+          self.playerHand.push(aiMinCard);
+          self.playerHand = Doudizhu.sortCards(self.playerHand);
+        }
         self.renderPlayerHand();
         self.updateAICount(aiId === 'duidui' ? 0 : 1);
 
         // 显示结果文字
-        var swapText = self.add.text(480, 184, '😈 ' + aiName + ' 从你手中拿走了 [' + suitStr + rankStr + ']', {
+        var minSuit = aiMinCard ? (Doudizhu.SUIT_NAMES ? Doudizhu.SUIT_NAMES[aiMinCard.suit] : (aiMinCard.suit || '')) : '';
+        var minRank = aiMinCard ? (Doudizhu.RANK_NAMES ? Doudizhu.RANK_NAMES[aiMinCard.rank] : (aiMinCard.rank || '')) : '';
+        var swapText = self.add.text(480, 184, '😈 ' + aiName + ' 用[' + minSuit + minRank + ']换了你的[' + suitStr + rankStr + ']', {
           fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
           fontSize: '15px', color: '#FF6B35', fontStyle: 'bold',
           stroke: '#000000', strokeThickness: 2
@@ -1960,8 +1980,8 @@ GameScene.prototype._showSwapUI = function (aiId, fbY) {
   var backTotalW = backW + (numBacks - 1) * backOverlap;
   var backStartX = (960 - backTotalW) / 2;
 
-  var aiCardRealIdx = Math.floor(Math.random() * aiHand.length);
-  var realAICard = aiHand[aiCardRealIdx];
+  var aiHandSorted = Doudizhu.sortCards(aiHand.slice());
+  var realAICard = aiHandSorted[0];  // 排序后取最小
   var realAICardSlot = Math.floor(Math.random() * numBacks);
 
   var backCardPositions = [];
