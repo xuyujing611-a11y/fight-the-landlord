@@ -615,7 +615,7 @@ GameScene.prototype.showBiddingUI = function () {
   this.biddingUI.push(promptText);
 
   var bw = 96, bh = 52, gap = 12;
-  var totalW = bw * 5 + gap * 4;
+  var totalW = bw * 4 + gap * 3;
   var startX = (960 - totalW) / 2;
 
   for (var i = 0; i < bids.length; i++) {
