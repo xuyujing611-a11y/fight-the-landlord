@@ -67,15 +67,44 @@ var SoundManager = {
     scene.time.delayedCall(500, tryResume);
   },
   // 播放背景音乐（带容错，找不到文件也不会报错崩溃）
+  bgmNames: ['bgm_sax', 'bgm_steel', 'bgm_8bit', 'bgm'],
+  bgmIndex: 0,
+  currentBgm: null,
   playBGM: function() {
     if (this.bgmPlaying || !this.scene) return;
     try {
-      var bgm = this.scene.sound.add('bgm', { loop: true, volume: 0.25 });
+      var name = this.bgmNames[this.bgmIndex];
+      var bgm = this.scene.sound.add(name, { loop: true, volume: 0.25 });
       bgm.play();
       this.bgmPlaying = true;
+      this.currentBgm = bgm;
     } catch (e) {
-      console.warn('背景音乐(bgm)未找到，已跳过静默处理。');
+      console.warn('BGM未找到，已跳过');
     }
+  },
+  switchBGM: function() {
+    // 停止当前BGM
+    if (this.currentBgm) {
+      this.currentBgm.stop();
+      this.currentBgm.destroy();
+      this.currentBgm = null;
+    }
+    this.bgmPlaying = false;
+    // 切换到下一首
+    this.bgmIndex = (this.bgmIndex + 1) % this.bgmNames.length;
+    var names = ['萨克斯风', '钢鼓', '8-Bit', 'Pizzicato'];
+    console.log('BGM切换为: ' + names[this.bgmIndex]);
+    // 播放新BGM
+    try {
+      var name = this.bgmNames[this.bgmIndex];
+      var bgm = this.scene.sound.add(name, { loop: true, volume: 0.25 });
+      bgm.play();
+      this.bgmPlaying = true;
+      this.currentBgm = bgm;
+    } catch (e) {
+      console.warn('BGM切换失败');
+    }
+    return names[this.bgmIndex];
   },
   // 纯本地动态 TTS 语音引擎
   speak: function(text, aiId) {
@@ -222,6 +251,19 @@ GameScene.prototype.preload = function () {
   }
   this.load.audio('dieShuffle1', 'assets/sounds/dieShuffle1.mp3');
   this.load.audio('bgm', 'assets/sounds/bgm.mp3');
+  // 额外音效
+  this.load.audio('bgm_sax', 'assets/sounds/bgm_sax.mp3');
+  this.load.audio('bgm_steel', 'assets/sounds/bgm_steel.mp3');
+  this.load.audio('bgm_8bit', 'assets/sounds/bgm_8bit.mp3');
+  this.load.audio('cardShuffle', 'assets/sounds/cardShuffle.mp3');
+  this.load.audio('cardFan1', 'assets/sounds/cardFan1.mp3');
+  this.load.audio('packOpen1', 'assets/sounds/packOpen1.mp3');
+  this.load.audio('cardPlace4', 'assets/sounds/cardPlace4.mp3');
+  this.load.audio('cardSlide4', 'assets/sounds/cardSlide4.mp3');
+  this.load.audio('cardShove1', 'assets/sounds/cardShove1.mp3');
+  this.load.audio('chipLay1', 'assets/sounds/chipLay1.mp3');
+  this.load.audio('chipsStack1', 'assets/sounds/chipsStack1.mp3');
+  this.load.audio('chipsHandle1', 'assets/sounds/chipsHandle1.mp3');
 };
 
 GameScene.prototype.create = function () {
@@ -279,6 +321,17 @@ GameScene.prototype.create = function () {
     var el = document.documentElement;
     if (el.requestFullscreen) el.requestFullscreen().catch(function(){});
     else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+  });
+
+  // BGM切换按钮
+  var bgmBtn = self.add.text(900, 56, '🎵', {
+    fontSize: '16px', color: '#FFFFFF',
+    backgroundColor: '#00000066',
+    padding: { x: 6, y: 4 }
+  }).setOrigin(0.5, 0).setInteractive().setDepth(200);
+  bgmBtn.on('pointerdown', function () {
+    var name = SoundManager.switchBGM();
+    showToast(self, 'BGM: ' + name);
   });
 
   // 叫分阶段
