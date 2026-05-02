@@ -1706,21 +1706,24 @@ GameScene.prototype._handleChaosTimeout = function (aiId) {
   var self = this;
   self.chaosQuestionAnswered = true;
   self._clearQuestionArea();
-  // 显示超时反馈：根据手牌情况显示不同消息
+
   if (!self.playerHand || self.playerHand.length === 0) {
+    // 手牌为空：只显示超时消息，不调 _showSwapResult
     var fbIcon = self.add.text(480, 103, '⏱ 超时了！', {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
       fontSize: '17px', color: '#FF5252', fontStyle: 'bold'
     }).setOrigin(0.5).setDepth(305);
     self.chaosElements.push(fbIcon);
-  } else {
-    var fbIcon = self.add.text(480, 103, '⏱ 超时了！AI趁机拿走了你一张牌', {
-      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '17px', color: '#FF5252', fontStyle: 'bold'
-    }).setOrigin(0.5).setDepth(305);
-    self.chaosElements.push(fbIcon);
+    self._showSwapButtons(aiId, 251);
+    return;
   }
-  // 超时 = 答错，直接走答错换牌
+
+  // 有手牌：显示超时消息 + 走抢牌流程
+  var fbIcon = self.add.text(480, 103, '⏱ 超时了！AI趁机拿走了你一张牌', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '17px', color: '#FF5252', fontStyle: 'bold'
+  }).setOrigin(0.5).setDepth(305);
+  self.chaosElements.push(fbIcon);
   self._showSwapResult(aiId, false, 180);
 };
 
