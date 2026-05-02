@@ -1431,9 +1431,9 @@ GameScene.prototype._createChaosOverlay = function (aiId, callback) {
   // \u767D\u8272\u9898\u76EE\u5361\u7247\u80CC\u666F
   var cardBg = self.add.graphics();
   cardBg.fillStyle(0xFFFFFF, 1);
-  cardBg.fillRoundedRect(200, 70, 560, 251, 9);
+  cardBg.fillRoundedRect(150, 55, 660, 320, 12);
   cardBg.fillStyle(0x000000, 0.08);
-  cardBg.fillRoundedRect(204, 73, 560, 251, 9);
+  cardBg.fillRoundedRect(154, 58, 660, 320, 12);
   cardBg.setDepth(301);
   self.chaosElements.push(cardBg);
   self.chaosCardBg = cardBg;
@@ -1455,7 +1455,7 @@ GameScene.prototype._createChaosOverlay = function (aiId, callback) {
   self.chaosScoreText = scoreText;
 
   // AI \u53F0\u8BCD\u6C14\u6CE1
-  self._showAiBubble(aiId, 'easy', 214);
+  self._showAiBubble(aiId, 'easy', 180);
 
   // \u5173\u6389\u6309\u94AE
   var closeBtnBg = self.add.graphics();
@@ -1512,15 +1512,15 @@ GameScene.prototype._renderQuestion = function (q, aiId) {
 
   var tag = self.add.text(220, 97, typeIcon + ' ' + typeLabel, {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '11px', color: '#FF6B35', fontStyle: 'bold'
+    fontSize: '13px', color: '#FF6B35', fontStyle: 'bold'
   }).setDepth(302);
   self.chaosElements.push(tag);
 
   var questionText = q.question || q.text || '暂无题目';
   var qText = self.add.text(220, 114, questionText, {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '12px', color: '#222222',
-    wordWrap: { width: 520 }, lineSpacing: 3
+    fontSize: '14px', color: '#222222',
+    wordWrap: { width: 600 }, lineSpacing: 4
   }).setDepth(302);
   self.chaosElements.push(qText);
 
@@ -1529,10 +1529,10 @@ GameScene.prototype._renderQuestion = function (q, aiId) {
   self.chaosQuestionAnswered = false;
 
   // 2×2 网格布局 — 增大选项框高度防止文字溢出
-  var optH = 54; // 增大到54px支持多行文字
-  var optW = 260;
-  var gridX = [215, 495];
-  var gridY = [165, 200];
+  var optH = 64; // 增大选项框高度
+  var optW = 290;
+  var gridX = [175, 480];
+  var gridY = [155, 230];
 
   for (var oi = 0; oi < optionKeys.length; oi++) {
     var ok = optionKeys[oi];
@@ -1551,17 +1551,17 @@ GameScene.prototype._renderQuestion = function (q, aiId) {
 
     var optMarkBg = self.add.graphics();
     optMarkBg.fillStyle(0x4ECDC4, 1);
-    optMarkBg.fillCircle(gx + 20, gy + optH / 2, 9).setDepth(303);
+    optMarkBg.fillCircle(gx + 20, gy + optH / 2, 11).setDepth(303);
     var optMarkTxt = self.add.text(gx + 20, gy + optH / 2, ok, {
       fontFamily: '"PingFang SC",sans-serif',
-      fontSize: '10px', color: '#FFFFFF', fontStyle: 'bold'
+      fontSize: '12px', color: '#FFFFFF', fontStyle: 'bold'
     }).setOrigin(0.5).setDepth(304);
 
     // 取消18字截断，改用自动换行
     var optTxt = self.add.text(gx + 40, gy + optH / 2, optText, {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '11px', color: '#333333',
-      wordWrap: { width: optW - 52 },
+      fontSize: '13px', color: '#333333',
+      wordWrap: { width: optW - 55 },
       lineSpacing: 1
     }).setOrigin(0, 0.5).setDepth(303);
 
