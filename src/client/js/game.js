@@ -25,7 +25,8 @@ var GameConfig = {
   backgroundColor: '#0D3B0F',
   dom: { createContainer: true },
   // 开启高清 DPI 渲染 + 强制抗锯齿
-  resolution: window.devicePixelRatio || 1,
+  resolution: Math.min(window.devicePixelRatio || 1, 2), // 限制最高2倍，平衡性能
+  roundPixels: false, // 允许亚像素渲染（画面更平滑）
   autoRound: false, // 允许亚像素渲染
   antialias: true,  // 开启抗锯齿
   antialiasGL: true, // WebGL 级别抗锯齿
@@ -296,7 +297,7 @@ GameScene.prototype.preload = function () {
 GameScene.prototype.create = function () {
   var self = this;
   // 将摄像机往左移动，让960x600的核心游玩区永远居中在长屏中央
-  var offsetX = (this.sys.game.config.width - 960) / 2;
+  var offsetX = Math.floor((this.sys.game.config.width - 960) / 2);
   this.cameras.main.setScroll(-offsetX, 0);
   drawTableBackground(this);
   createTopBar(this);
@@ -529,7 +530,7 @@ GameScene.prototype.renderPlayerHand = function () {
     ch = cw * 80 / 56;
     totalW = 960;
   }
-  var startX = (960 - totalW) / 2;
+  var startX = Math.floor((960 - totalW) / 2);
   var baseY = 345;
 
   for (var ii = 0; ii < n; ii++) {
@@ -677,7 +678,7 @@ GameScene.prototype.showBiddingUI = function () {
 
   var bw = 96, bh = 52, gap = 12;
   var totalW = bw * 4 + gap * 3;
-  var startX = (960 - totalW) / 2;
+  var startX = Math.floor((960 - totalW) / 2);
 
   for (var i = 0; i < bids.length; i++) {
     var b = bids[i];
@@ -2003,7 +2004,7 @@ GameScene.prototype._showSwapUI = function (aiId, fbY) {
   var myHandSorted = Doudizhu.sortCards(self.playerHand.slice());
   var myCardW = 44, myCardH = 64, myOverlap = 30;
   var myTotalW = myCardW + (myHandSorted.length - 1) * myOverlap;
-  var myStartX = (960 - myTotalW) / 2;
+  var myStartX = Math.floor((960 - myTotalW) / 2);
 
   for (var mi = 0; mi < myHandSorted.length; mi++) {
     var mcx = myStartX + mi * myOverlap + myCardW / 2;
@@ -2040,7 +2041,7 @@ GameScene.prototype._showSwapUI = function (aiId, fbY) {
   var numBacks = 2 + Math.floor(Math.random() * 2); // 2-3
   var backW = 40, backH = 56, backOverlap = 34;
   var backTotalW = backW + (numBacks - 1) * backOverlap;
-  var backStartX = (960 - backTotalW) / 2;
+  var backStartX = Math.floor((960 - backTotalW) / 2);
 
   var aiHandSorted = Doudizhu.sortCards(aiHand.slice());
   var realAICard = aiHandSorted[0];  // 排序后取最小
@@ -2644,7 +2645,7 @@ GameScene.prototype._destroyChaos = function () {
 function createActionButtons(scene) {
   var bw = 72, bh = 48, gap = 14;
   var totalW = bw * 5 + gap * 4;
-  var startX = (960 - totalW) / 2;
+  var startX = Math.floor((960 - totalW) / 2);
   var btnY = 442;
 
   var buttons = [
