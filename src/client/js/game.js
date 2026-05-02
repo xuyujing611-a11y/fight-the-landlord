@@ -2148,6 +2148,7 @@ GameScene.prototype._showPlayBubble = function (aiId, event, context) {
     self.playBubbleElements = [];
 
     var isDuidui = (aiId === 'duidui');
+    var isEmergency = (event === 'bomb');
     var y = 96;
     var aiDisplayName = isDuidui ? '王怼怼' : '苏甜甜';
     var avatarX = isDuidui ? 80 : 880;
@@ -2158,8 +2159,8 @@ GameScene.prototype._showPlayBubble = function (aiId, event, context) {
     var bubbleX = isDuidui ? 110 : (avatarX - bubbleW - 30);
     var bubbleY = y + 10;
     var cornerRadius = isDuidui ? 12 : 4;
-    var bubbleBgColor = isDuidui ? 0x1B5E20 : 0x311B92;
-    var bubbleBorderColor = isDuidui ? 0x66BB6A : 0xCE93D8;
+    var bubbleBgColor = isEmergency ? 0x500A00 : (isDuidui ? 0x1B5E20 : 0x311B92);
+    var bubbleBorderColor = isEmergency ? 0xFF5252 : (isDuidui ? 0x66BB6A : 0xCE93D8);
 
     // AI 头像圆圈
     var avatar = self.add.graphics();
@@ -2181,19 +2182,25 @@ GameScene.prototype._showPlayBubble = function (aiId, event, context) {
     if (!isDuidui) nameTxt.setOrigin(1, 0);
     self.playBubbleElements.push(nameTxt);
 
-    // 台词气泡背景
-    var bubble = self.add.graphics();
-    bubble.fillStyle(bubbleBgColor, 0.85);
+    // 台词气泡背景（填充+边框分开，炸弹时边框可独立闪烁）
+    var bubbleBg = self.add.graphics();
+    bubbleBg.fillStyle(bubbleBgColor, 0.85);
     if (cornerRadius > 0) {
-      bubble.fillRoundedRect(bubbleX, bubbleY, bubbleW, bubbleH, cornerRadius).setDepth(20);
-      bubble.lineStyle(1.5, bubbleBorderColor, 0.5);
-      bubble.strokeRoundedRect(bubbleX, bubbleY, bubbleW, bubbleH, cornerRadius).setDepth(20);
+      bubbleBg.fillRoundedRect(bubbleX, bubbleY, bubbleW, bubbleH, cornerRadius).setDepth(20);
     } else {
-      bubble.fillRect(bubbleX, bubbleY, bubbleW, bubbleH).setDepth(20);
-      bubble.lineStyle(1.5, bubbleBorderColor, 0.5);
-      bubble.strokeRect(bubbleX, bubbleY, bubbleW, bubbleH).setDepth(20);
+      bubbleBg.fillRect(bubbleX, bubbleY, bubbleW, bubbleH).setDepth(20);
     }
-    self.playBubbleElements.push(bubble);
+    self.playBubbleElements.push(bubbleBg);
+
+    var bubbleBorder = self.add.graphics();
+    bubbleBorder.lineStyle(isEmergency ? 2 : 1.5, bubbleBorderColor, 0.5);
+    if (cornerRadius > 0) {
+      bubbleBorder.strokeRoundedRect(bubbleX, bubbleY, bubbleW, bubbleH, cornerRadius).setDepth(20);
+    } else {
+      bubbleBorder.strokeRect(bubbleX, bubbleY, bubbleW, bubbleH).setDepth(20);
+    }
+    self.playBubbleElements.push(bubbleBorder);
+    self._playBubbleBorder = bubbleBorder;
 
     // 三角形箭头（怼怼朝左、甜甜朝右）
     var arrow = self.add.graphics();
@@ -2215,22 +2222,50 @@ GameScene.prototype._showPlayBubble = function (aiId, event, context) {
     }
     self.playBubbleElements.push(arrow);
 
-    // 台词文本
-    var textX = isDuidui ? (bubbleX + 14) : (bubbleX + 10);
-    var bubbleTxt = self.add.text(textX, bubbleY + bubbleH / 2, line, {
+    // 台词文本（炸弹时加粗+加阴影）
+    var textStyle = isEmergency ? {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '16px', color: '#FFCDD2', fontStyle: 'bold'
+    } : {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
       fontSize: '14px', color: '#FFFFFF'
-    }).setOrigin(0, 0.5).setDepth(21);
+    };
+    var textX = isDuidui ? (bubbleX + 14) : (bubbleX + 10);
+    var bubbleTxt = self.add.text(textX, bubbleY + bubbleH / 2, line, textStyle
+    ).setOrigin(0, 0.5).setDepth(21);
     self.playBubbleElements.push(bubbleTxt);
 
     // 弹入动画: Container 包裹所有元素
     self.playBubbleContainer = self.add.container(0, 0, self.playBubbleElements);
-    self.playBubbleContainer.setScale(0.8).setAlpha(0);
-    self.tweens.add({
-      targets: self.playBubbleContainer,
-      scale: 1.0, alpha: 1,
-      duration: 150, ease: 'Back.easeOut'
-    });
+    if (isEmergency) {
+      self.playBubbleContainer.setScale(0.7).setAlpha(0);
+      self.tweens.add({
+        targets: self.playBubbleContainer,
+        scale: 1.1, alpha: 1, duration: 100, ease: 'Back.easeOut',
+        onComplete: function () {
+          self.tweens.add({
+            targets: self.playBubbleContainer,
+            scale: 1.0, duration: 80, ease: 'Sine.easeOut'
+          });
+        }
+      });
+    } else {
+      self.playBubbleContainer.setScale(0.8).setAlpha(0);
+      self.tweens.add({
+        targets: self.playBubbleContainer,
+        scale: 1.0, alpha: 1,
+        duration: 150, ease: 'Back.easeOut'
+      });
+    }
+
+    // 炸弹边框闪烁
+    if (isEmergency) {
+      self.tweens.add({
+        targets: bubbleBorder,
+        alpha: { from: 0.3, to: 0.9 },
+        duration: 400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut'
+      });
+    }
 
     // 直接替换模式: 定时销毁（含退出动画）
     var displayMs = event === 'bomb' ? 5000 : 4000;
