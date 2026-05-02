@@ -181,11 +181,11 @@ GameScene.prototype.preload = function () {
 
   // \u97F3\u6548
   for (var ai = 1; ai <= 3; ai++) {
-    this.load.audio('cardPlace' + ai, 'assets/sounds/cardPlace' + ai + '.ogg');
-    this.load.audio('cardSlide' + ai, 'assets/sounds/cardSlide' + ai + '.ogg');
-    this.load.audio('chipsCollide' + ai, 'assets/sounds/chipsCollide' + ai + '.ogg');
+    this.load.audio('cardPlace' + ai, ['assets/sounds/cardPlace' + ai + '.mp3', 'assets/sounds/cardPlace' + ai + '.ogg']);
+    this.load.audio('cardSlide' + ai, ['assets/sounds/cardSlide' + ai + '.mp3', 'assets/sounds/cardSlide' + ai + '.ogg']);
+    this.load.audio('chipsCollide' + ai, ['assets/sounds/chipsCollide' + ai + '.mp3', 'assets/sounds/chipsCollide' + ai + '.ogg']);
   }
-  this.load.audio('dieShuffle1', 'assets/sounds/dieShuffle1.ogg');
+  this.load.audio('dieShuffle1', ['assets/sounds/dieShuffle1.mp3', 'assets/sounds/dieShuffle1.ogg']);
 };
 
 GameScene.prototype.create = function () {
