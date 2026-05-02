@@ -26,6 +26,7 @@ var GameConfig = {
   dom: { createContainer: true },
   // 开启高清屏支持，解决分辨率不清晰的问题
   resolution: window.devicePixelRatio || 1,
+  autoRound: false, // 允许亚像素渲染，让文字和卡牌边缘更平滑
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH
@@ -322,44 +323,44 @@ function drawTableBackground(scene) {
 // ================================================================
 function createTopBar(scene) {
   var tb = scene.add.graphics();
-  tb.fillStyle(0x000000, 0.3);
+  tb.fillStyle(0x000000, 0.35);
   tb.fillRect(0, 0, 960, 56).setDepth(10);
 
-  scene.roundText = scene.add.text(12, 9, '\u7B2C 1/10 \u56DE\u5408', {
+  scene.roundText = scene.add.text(12, 18, '第 1/10 回合', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '12px', color: '#E8F5E9', fontStyle: 'bold'
+    fontSize: '14px', color: '#E8F5E9', fontStyle: 'bold'
   }).setDepth(11);
 
-  // AI1 (left)
-  var wAvatar = makeAvatarImage(scene, 'avatar_wang', 176, 20, 0x4FC3F7, '\u738B\u603C\u603C');
-  scene.add.text(176, 9, '\u738B\u603C\u603C', {
+  // AI1 (王怼怼) - 居左排版
+  var wAvatar = makeAvatarImage(scene, 'avatar_wang', 160, 28, 0x4FC3F7);
+  scene.add.text(195, 12, '王怼怼', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '10px', color: '#E8F5E9', fontStyle: 'bold'
+    fontSize: '13px', color: '#E8F5E9', fontStyle: 'bold'
   }).setDepth(11);
-  scene.ai1Count = scene.add.text(176, 22, '\u5269\u4F59 17 \u5F20', {
+  scene.ai1Count = scene.add.text(195, 30, '剩余 17 张', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '10px', color: '#A5D6A7'
-  }).setDepth(11);
-
-  // AI2 (right)
-  var sAvatar = makeAvatarImage(scene, 'avatar_su', 788, 20, 0xFFB74D, '\u82CF\u751C\u751C');
-  scene.add.text(788, 9, '\u82CF\u751C\u751C', {
-    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '10px', color: '#E8F5E9', fontStyle: 'bold'
-  }).setDepth(11);
-  scene.ai2Count = scene.add.text(788, 22, '\u5269\u4F59 17 \u5F20', {
-    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '10px', color: '#A5D6A7'
+    fontSize: '11px', color: '#A5D6A7'
   }).setDepth(11);
 
-  // center status text
-  scene.statusText = scene.add.text(480, 9, '', {
+  // AI2 (苏甜甜) - 居右排版
+  var sAvatar = makeAvatarImage(scene, 'avatar_su', 800, 28, 0xFFB74D);
+  scene.add.text(765, 12, '苏甜甜', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '10px', color: '#A5D6A7', fontStyle: 'bold'
+    fontSize: '13px', color: '#E8F5E9', fontStyle: 'bold'
+  }).setOrigin(1, 0).setDepth(11);
+  scene.ai2Count = scene.add.text(765, 30, '剩余 17 张', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '11px', color: '#A5D6A7'
+  }).setOrigin(1, 0).setDepth(11);
+
+  // 中央状态文字
+  scene.statusText = scene.add.text(480, 18, '', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '14px', color: '#A5D6A7', fontStyle: 'bold'
   }).setOrigin(0.5, 0).setDepth(11);
 
   var sep = scene.add.graphics();
-  sep.lineStyle(1, 0x66BB6A, 0.2);
+  sep.lineStyle(1.5, 0x66BB6A, 0.3);
   sep.lineBetween(0, 56, 960, 56);
   sep.setDepth(11);
 }

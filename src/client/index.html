@@ -2,8 +2,8 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <!-- 核心修复：viewport-fit=cover 适配刘海屏，禁止缩放 -->
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <!-- 核心适配：禁用缩放，适配刘海屏 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>AI斗地主</title>
@@ -16,26 +16,33 @@
       overflow: hidden;
       font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
       -webkit-tap-highlight-color: transparent;
+      overscroll-behavior: none;
     }
     #game-container {
       width: 100vw; height: 100vh;
       display: flex; align-items: center; justify-content: center;
+      position: relative; z-index: 1;
     }
-    /* 核心修复：利用 CSS 强制横屏方案 */
-    @media screen and (orientation: portrait) {
-      #game-container {
-        position: absolute;
-        width: 100vh !important;
-        height: 100vw !important;
-        top: 50%; left: 50%;
-        transform: translate(-50%, -50%) rotate(90deg);
-        transform-origin: center center;
-      }
-    }
-    /* 保证 canvas 始终 100% 填充并由 Phaser 处理比例 */
     #game-container canvas {
-      width: 100% !important; height: 100% !important;
+      max-width: 100%; max-height: 100%;
       object-fit: contain;
+    }
+    #orientation-lock {
+      display: none;
+      position: fixed; top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      background: #1B5E20;
+      z-index: 99999;
+      color: white;
+      justify-content: center; align-items: center;
+      flex-direction: column;
+      text-align: center;
+    }
+    .phone-icon { font-size: 48px; margin-bottom: 20px; animation: rotatePhone 1.5s ease-in-out infinite; }
+    @keyframes rotatePhone { 0% { transform: rotate(0deg); } 100% { transform: rotate(-90deg); } }
+    /* 核心修复：只在移动端且为竖屏时，才显示拦截器！保护电脑端可用 */
+    @media screen and (max-width: 850px) and (orientation: portrait) {
+      #orientation-lock { display: flex; }
     }
     /* 加载画面 */
     #loading-screen {
@@ -69,7 +76,7 @@
   <!-- 竖屏拦截器 -->
   <div id="orientation-lock">
     <div class="phone-icon">📱</div>
-    <h2 style="letter-spacing: 2px;">为了最佳体验，请将手机横屏游玩</h2>
+    <h2 style="letter-spacing: 2px;">为了最佳体验<br><br>请将手机旋转至横屏游玩</h2>
   </div>
 
   <!-- 加载画面 -->
