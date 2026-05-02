@@ -1975,7 +1975,7 @@ GameScene.prototype._showSwapUI = function (aiId, fbY) {
   }).setOrigin(0.5).setDepth(351);
   swapElements.push(backLabel);
 
-  var numBacks = 3 + Math.floor(Math.random() * 3); // 3-5
+  var numBacks = 2 + Math.floor(Math.random() * 2); // 2-3
   var backW = 40, backH = 56, backOverlap = 34;
   var backTotalW = backW + (numBacks - 1) * backOverlap;
   var backStartX = (960 - backTotalW) / 2;
