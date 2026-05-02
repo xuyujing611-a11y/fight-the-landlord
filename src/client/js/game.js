@@ -378,7 +378,7 @@ function createTopBar(scene) {
   }).setDepth(11);
 
   // center status text
-  scene.statusText = scene.add.text(480, 8, '', {
+  scene.statusText = scene.add.text(480, 9, '', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '10px', color: '#A5D6A7', fontStyle: 'bold'
   }).setOrigin(0.5, 0).setDepth(11);
