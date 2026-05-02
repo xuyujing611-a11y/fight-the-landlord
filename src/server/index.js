@@ -25,6 +25,7 @@ const wrongbookRouter = require('./routes/wrongbook');
 const chaosRouter = require('./routes/chaos');
 const dialogueRouter = require('./routes/dialogue');
 const { router: biddingRouter } = require('./routes/bidding');
+const resultRouter = require('./routes/result');
 
 const app = express();
 const PORT = process.env.PORT || 3100;
@@ -86,6 +87,7 @@ app.use('/api/wrong-book', wrongbookRouter);
 app.use('/api/chaos', chaosRouter);
 app.use('/api/bidding', biddingRouter);
 app.use('/api/ai/dialogue', dialogueRouter);
+app.use('/api/game', resultRouter);
 
 // 健康检查
 app.get('/api/health', (req, res) => {
