@@ -1641,11 +1641,231 @@ GameScene.prototype._handleOptionClick = function (self, optBg, optKey, aiId, q)
   }
 
   // AI 反馈气泡
-  self._showAiBubble(aiId, feedbackScene, fbY + 10);
+    self._showAiBubble(aiId, feedbackScene, fbY + 10);
+  if (isCorrect) {
+    // 答对：弹出互换牌界面（玩家选牌交换）
+    self._showSwapUI(aiId, fbY);
+  } else {
+    // 答错：AI随机拿走一张
+    self._showSwapResult(aiId, false, fbY);
+  }
+};
 
-  // 底部按钮行
-  var btnY = Math.max(fbY + 60, 251);
-  // "再来一题" 按钮
+// ================================================================
+// B3: 答完题换牌 — 答对玩家从AI拿牌、答错AI从玩家拿牌
+// ================================================================
+GameScene.prototype._showSwapResult = function (aiId, isCorrect, fbY) {
+  var self = this;
+  if (!self.playerHand || self.playerHand.length === 0) return;
+
+  var aiHand = aiId === 'duidui' ? self.ai1Hand : self.ai2Hand;
+  var aiName = aiId === 'duidui' ? '王怼怼' : '苏甜甜';
+
+  // 答错：AI从玩家手牌随机拿一张
+  if (self.playerHand.length === 0) return;
+  var idx = Math.floor(Math.random() * self.playerHand.length);
+  var lostCard = self.playerHand[idx];
+  self.playerHand.splice(idx, 1);
+  aiHand.push(lostCard);
+
+  var rankStr = Doudizhu.RANK_NAMES ? Doudizhu.RANK_NAMES[lostCard.rank] : (lostCard.rank || '');
+  var suitStr = Doudizhu.SUIT_NAMES ? Doudizhu.SUIT_NAMES[lostCard.suit] : (lostCard.suit || '');
+  var swapText = self.add.text(480, 184, '😈 ' + aiName + ' 从你手中拿走了一张牌！', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '15px', color: '#FF6B35', fontStyle: 'bold',
+    stroke: '#000000', strokeThickness: 2
+  }).setOrigin(0.5).setDepth(310);
+  var cardText = self.add.text(480, 206, '[' + suitStr + rankStr + ']', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '13px', color: '#FFFFFF',
+    stroke: '#000000', strokeThickness: 2
+  }).setOrigin(0.5).setDepth(310);
+  self.chaosElements.push(swapText, cardText);
+  self.time.delayedCall(3000, function () {
+    if (swapText) swapText.destroy();
+    if (cardText) cardText.destroy();
+  });
+
+  self.renderPlayerHand();
+  self.updateAICount(aiId === 'duidui' ? 0 : 1);
+
+  // 显示底部按钮
+  self._showSwapButtons(aiId, Math.max(fbY + 60, 251));
+};
+
+GameScene.prototype._showSwapUI = function (aiId, fbY) {
+  var self = this;
+  var aiHand = aiId === 'duidui' ? self.ai1Hand : self.ai2Hand;
+  var aiName = aiId === 'duidui' ? '王怼怼' : '苏甜甜';
+
+  if (!aiHand || aiHand.length === 0 || !self.playerHand || self.playerHand.length === 0) {
+    self._showSwapResult(aiId, false, fbY);
+    return;
+  }
+
+  var selectedPlayerCard = null;
+  var selectedAICard = null;
+  var playerCardIdx = -1;
+  var aiCardIdx = -1;
+  var swapElements = [];
+
+  // 半透明遮罩
+  var swapOverlay = self.add.graphics();
+  swapOverlay.fillStyle(0x000000, 0.6);
+  swapOverlay.fillRect(0, 0, 960, 600).setDepth(350);
+  swapOverlay.setInteractive(new Phaser.Geom.Rectangle(0, 0, 960, 600), Phaser.Geom.Rectangle.Contains);
+  swapElements.push(swapOverlay);
+
+  // 标题
+  var titleTxt = self.add.text(480, 120, '🔄 交换牌 — 选一张你的牌 + ' + aiName + '的一张牌', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '15px', color: '#FFD700', fontStyle: 'bold',
+    stroke: '#000000', strokeThickness: 2
+  }).setOrigin(0.5).setDepth(351);
+  swapElements.push(titleTxt);
+
+  var hintTxt = self.add.text(480, 142, '点你的牌 → 点' + aiName + '的牌 → 点确认交换', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '11px', color: '#AAAAAA'
+  }).setOrigin(0.5).setDepth(351);
+  swapElements.push(hintTxt);
+
+  // AI的牌（上方）
+  var aiLabel = self.add.text(480, 175, aiName + ' 的手牌（点击选一张）', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '12px', color: '#FFB74D', fontStyle: 'bold'
+  }).setOrigin(0.5).setDepth(351);
+  swapElements.push(aiLabel);
+
+  var aiHandSorted = Doudizhu.sortCards(aiHand.slice());
+  var aiCardW = 38, aiCardH = 54, aiOverlap = 26;
+  var aiTotalW = aiCardW + (aiHandSorted.length - 1) * aiOverlap;
+  var aiStartX = (960 - aiTotalW) / 2;
+
+  for (var ai = 0; ai < aiHandSorted.length; ai++) {
+    var acx = aiStartX + ai * aiOverlap + aiCardW / 2;
+    var akey = getCardImageKey(aiHandSorted[ai]);
+    var acard = self.add.image(acx, 200, akey).setDisplaySize(aiCardW, aiCardH).setDepth(352);
+    acard.setInteractive();
+    swapElements.push(acard);
+    (function (idx, card) {
+      card.on('pointerdown', function () {
+        if (selectedAICard && selectedAICard !== card) {
+          selectedAICard.setDisplaySize(aiCardW, aiCardH).setDepth(352);
+        }
+        selectedAICard = card;
+        aiCardIdx = idx;
+        card.setDisplaySize(aiCardW + 6, aiCardH + 6).setDepth(355);
+        updateBtn();
+      });
+    })(ai, acard);
+  }
+
+  // 玩家的牌（下方）
+  var playerLabel = self.add.text(480, 300, '你的手牌（点击选一张）', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '12px', color: '#4FC3F7', fontStyle: 'bold'
+  }).setOrigin(0.5).setDepth(351);
+  swapElements.push(playerLabel);
+
+  var myHandSorted = Doudizhu.sortCards(self.playerHand.slice());
+  var myCardW = 44, myCardH = 64, myOverlap = 30;
+  var myTotalW = myCardW + (myHandSorted.length - 1) * myOverlap;
+  var myStartX = (960 - myTotalW) / 2;
+
+  for (var mi = 0; mi < myHandSorted.length; mi++) {
+    var mcx = myStartX + mi * myOverlap + myCardW / 2;
+    var mkey = getCardImageKey(myHandSorted[mi]);
+    var mcard = self.add.image(mcx, 330, mkey).setDisplaySize(myCardW, myCardH).setDepth(352);
+    mcard.setInteractive();
+    swapElements.push(mcard);
+    (function (idx, card) {
+      card.on('pointerdown', function () {
+        if (selectedPlayerCard && selectedPlayerCard !== card) {
+          selectedPlayerCard.setDisplaySize(myCardW, myCardH).setDepth(352);
+        }
+        selectedPlayerCard = card;
+        playerCardIdx = idx;
+        card.setDisplaySize(myCardW + 6, myCardH + 6).setDepth(355);
+        updateBtn();
+      });
+    })(mi, mcard);
+  }
+
+  function updateBtn() {
+    if (playerCardIdx >= 0 && aiCardIdx >= 0) {
+      confirmBg.clear().fillStyle(0x4ECDC4, 1).fillRoundedRect(240, 390, 200, 44, 10).setDepth(353);
+    } else {
+      confirmBg.clear().fillStyle(0x4ECDC4, 0.5).fillRoundedRect(240, 390, 200, 44, 10).setDepth(353);
+    }
+  }
+
+  // 确认按钮
+  var confirmBg = self.add.graphics();
+  confirmBg.fillStyle(0x4ECDC4, 0.5);
+  confirmBg.fillRoundedRect(240, 390, 200, 44, 10).setDepth(353);
+  var confirmTxt = self.add.text(340, 412, '✅ 确认交换', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '15px', color: '#FFFFFF', fontStyle: 'bold'
+  }).setOrigin(0.5).setDepth(354);
+  confirmBg.setInteractive(new Phaser.Geom.Rectangle(240, 390, 200, 44), Phaser.Geom.Rectangle.Contains);
+  swapElements.push(confirmBg, confirmTxt);
+
+  confirmBg.on('pointerup', function () {
+    if (playerCardIdx < 0 || aiCardIdx < 0) return;
+    var myCard = myHandSorted[playerCardIdx];
+    var aCard = aiHandSorted[aiCardIdx];
+    var pReal = -1;
+    for (var p = 0; p < self.playerHand.length; p++) {
+      if (self.playerHand[p].suit === myCard.suit && self.playerHand[p].rank === myCard.rank) { pReal = p; break; }
+    }
+    var aReal = -1;
+    for (var a = 0; a < aiHand.length; a++) {
+      if (aiHand[a].suit === aCard.suit && aiHand[a].rank === aCard.rank) { aReal = a; break; }
+    }
+    if (pReal < 0 || aReal < 0) return;
+    var pCard = self.playerHand[pReal];
+    self.playerHand.splice(pReal, 1);
+    aiHand.splice(aReal, 1);
+    self.playerHand.push(aCard);
+    aiHand.push(pCard);
+    self.playerHand = Doudizhu.sortCards(self.playerHand);
+    aiHand.sort(function (a, b) { return a.rank !== b.rank ? b.rank - a.rank : a.suit - b.suit; });
+    for (var ei = 0; ei < swapElements.length; ei++) swapElements[ei].destroy();
+    var pRank = Doudizhu.RANK_NAMES ? Doudizhu.RANK_NAMES[pCard.rank] : (pCard.rank || '');
+    var pSuit = Doudizhu.SUIT_NAMES ? Doudizhu.SUIT_NAMES[pCard.suit] : (pCard.suit || '');
+    var aRank = Doudizhu.RANK_NAMES ? Doudizhu.RANK_NAMES[aCard.rank] : (aCard.rank || '');
+    var aSuit = Doudizhu.SUIT_NAMES ? Doudizhu.SUIT_NAMES[aCard.suit] : (aCard.suit || '');
+    var swapMsg = self.add.text(480, 184, '🔄 交换成功！用[' + pSuit + pRank + ']换了[' + aSuit + aRank + ']', {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '14px', color: '#4CAF50', fontStyle: 'bold', stroke: '#000000', strokeThickness: 2
+    }).setOrigin(0.5).setDepth(310);
+    self.chaosElements.push(swapMsg);
+    self.time.delayedCall(3500, function () { if (swapMsg) swapMsg.destroy(); });
+    self.renderPlayerHand();
+    self.updateAICount(aiId === 'duidui' ? 0 : 1);
+    self._showSwapButtons(aiId, Math.max(fbY + 60, 280));
+  });
+
+  // 取消按钮
+  var cancelBg = self.add.graphics();
+  cancelBg.fillStyle(0x78909C, 1);
+  cancelBg.fillRoundedRect(520, 390, 200, 44, 10).setDepth(353);
+  var cancelTxt = self.add.text(620, 412, '✖ 跳过交换', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '15px', color: '#FFFFFF', fontStyle: 'bold'
+  }).setOrigin(0.5).setDepth(354);
+  cancelBg.setInteractive(new Phaser.Geom.Rectangle(520, 390, 200, 44), Phaser.Geom.Rectangle.Contains);
+  swapElements.push(cancelBg, cancelTxt);
+
+  cancelBg.on('pointerup', function () {
+    for (var ei = 0; ei < swapElements.length; ei++) swapElements[ei].destroy();
+    self._showSwapResult(aiId, false, fbY);
+  });
+};
+
+GameScene.prototype._showSwapButtons = function (aiId, btnY) {
+  var self = this;
   var againBg = self.add.graphics();
   againBg.fillStyle(0x4ECDC4, 1);
   againBg.fillRoundedRect(220, btnY, 220, 40, 10).setDepth(305);
@@ -1658,15 +1878,13 @@ GameScene.prototype._handleOptionClick = function (self, optBg, optKey, aiId, q)
     self.chaosQuestionAnswered = false;
     self._clearQuestionArea();
     var aiId2 = Math.random() < 0.5 ? 'duidui' : 'tiantian';
-    self._showChaosQuestion(aiId2, aiId2 === 'duidui' ? '\u738B\u603C\u603C' : '\u82CF\u751C\u751C');
+    self._showChaosQuestion(aiId2, aiId2 === 'duidui' ? '王怼怼' : '苏甜甜');
   });
   self.chaosElements.push(againBg, againTxt);
-
-  // "关掉" 按钮
   var closeBg = self.add.graphics();
   closeBg.fillStyle(0xFF6B6B, 1);
   closeBg.fillRoundedRect(510, btnY, 220, 40, 10).setDepth(305);
-  var closeTxt = self.add.text(620, btnY + 20, '\u2716 \u5173\u6389\u56DE\u724C', {
+  var closeTxt = self.add.text(620, btnY + 20, '✖ 关掉回牌', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '13px', color: '#FFFFFF', fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(306);
@@ -1675,83 +1893,7 @@ GameScene.prototype._handleOptionClick = function (self, optBg, optKey, aiId, q)
     self._destroyChaos();
   });
   self.chaosElements.push(closeBg, closeTxt);
-
-  // B3: 答完题始终触发换牌（答对玩家从AI赢牌、答错AI从玩家拿牌）
-  self._doCardSwap(aiId, isCorrect);
-};
-
-// ================================================================
-// B3: 答完题换牌 — 答对玩家从AI拿牌、答错AI从玩家拿牌
-// ================================================================
-GameScene.prototype._doCardSwap = function (aiId, isCorrect) {
-  var self = this;
-  if (!self.playerHand || self.playerHand.length === 0) return;
-
-  var aiHand = aiId === 'duidui' ? self.ai1Hand : self.ai2Hand;
-  var aiName = aiId === 'duidui' ? '王怼怼' : '苏甜甜';
-
-  if (isCorrect) {
-    // 答对：玩家从AI手牌随机拿一张
-    if (!aiHand || aiHand.length === 0) return;
-    var aiIdx = Math.floor(Math.random() * aiHand.length);
-    var wonCard = aiHand[aiIdx];
-    aiHand.splice(aiIdx, 1);
-    self.playerHand.push(wonCard);
-    self.playerHand = Doudizhu.sortCards(self.playerHand);
-
-    var rankStr = Doudizhu.RANK_NAMES ? Doudizhu.RANK_NAMES[wonCard.rank] : (wonCard.rank || '');
-    var suitStr = Doudizhu.SUIT_NAMES ? Doudizhu.SUIT_NAMES[wonCard.suit] : (wonCard.suit || '');
-    var swapText = self.add.text(480, 184, '🎉 答对了！从 ' + aiName + ' 赢了一张牌！', {
-      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '15px', color: '#4CAF50', fontStyle: 'bold',
-      stroke: '#000000', strokeThickness: 2
-    }).setOrigin(0.5).setDepth(310);
-    var cardText = self.add.text(480, 206, '[' + suitStr + rankStr + ']', {
-      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '13px', color: '#FFFFFF',
-      stroke: '#000000', strokeThickness: 2
-    }).setOrigin(0.5).setDepth(310);
-    self.chaosElements.push(swapText, cardText);
-    self.time.delayedCall(3000, function () {
-      if (swapText) swapText.destroy();
-      if (cardText) cardText.destroy();
-    });
-  } else {
-    // 答错：AI从玩家手牌随机拿一张
-    var idx = Math.floor(Math.random() * self.playerHand.length);
-    var lostCard = self.playerHand[idx];
-    self.playerHand.splice(idx, 1);
-    aiHand.push(lostCard);
-    aiHand.sort(function (a, b) { return a.rank !== b.rank ? b.rank - a.rank : a.suit - b.suit; });
-
-    var rankStr = Doudizhu.RANK_NAMES ? Doudizhu.RANK_NAMES[lostCard.rank] : (lostCard.rank || '');
-    var suitStr = Doudizhu.SUIT_NAMES ? Doudizhu.SUIT_NAMES[lostCard.suit] : (lostCard.suit || '');
-    var swapText = self.add.text(480, 184, '😈 ' + aiName + ' 从你手中拿走了一张牌！', {
-      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '15px', color: '#FF6B35', fontStyle: 'bold',
-      stroke: '#000000', strokeThickness: 2
-    }).setOrigin(0.5).setDepth(310);
-    var cardText = self.add.text(480, 206, '[' + suitStr + rankStr + ']', {
-      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '13px', color: '#FFFFFF',
-      stroke: '#000000', strokeThickness: 2
-    }).setOrigin(0.5).setDepth(310);
-    self.chaosElements.push(swapText, cardText);
-    self.time.delayedCall(3000, function () {
-      if (swapText) swapText.destroy();
-      if (cardText) cardText.destroy();
-    });
-  }
-
-  // 更新手牌显示
-  self.renderPlayerHand();
-  self.updateAICount(aiId === 'duidui' ? 0 : 1);
-};
-
-// ================================================================
-// 搞事情 - 回退题目（后端不可用时）
-// ================================================================
-GameScene.prototype._renderFallbackQuestion = function (aiId) {
+};GameScene.prototype._renderFallbackQuestion = function (aiId) {
   var self = this;
   var fallbackQuestions = [
     {
