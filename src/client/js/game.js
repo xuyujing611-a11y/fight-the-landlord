@@ -246,32 +246,30 @@ GameScene.prototype.create = function () {
     self.checkAPIConnection();
   });
 
-  // B40: 全屏/缩放填满按钮（右上角）
+  // B40: 全屏/缩放模式切换按钮（右上角）——点击切换 FIT ↔ FILL
   var fsBtn = self.add.text(940, 24, '⛶', {
     fontSize: '22px', color: '#FFFFFF',
     backgroundColor: '#00000066',
     padding: { x: 8, y: 6 }
   }).setOrigin(1, 0.5).setInteractive().setDepth(200);
 
-  function zoomCanvasToFill() {
-    // 坚决删掉 FILL 模式，依靠 Phaser.Scale.FIT + HTML背景色的延伸来适配长屏
-    if (game && game.scale) { game.scale.refresh(); }
-  }
-
   fsBtn.on('pointerdown', function () {
-    var el = document.documentElement;
-    if (document.fullscreenElement || document.webkitFullscreenElement) {
-      if (document.exitFullscreen) document.exitFullscreen();
-      else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+    // 核心修复：动态切换引擎的缩放模式
+    if (game.scale.scaleMode === Phaser.Scale.FIT) {
+      game.scale.scaleMode = Phaser.Scale.FILL;
+      showToast(self, '已切换为：铺满全屏');
     } else {
+      game.scale.scaleMode = Phaser.Scale.FIT;
+      showToast(self, '已切换为：等比居中');
+    }
+    game.scale.updateScale();
+    // 触发系统全屏
+    var el = document.documentElement;
+    if (!document.fullscreenElement && !document.webkitFullscreenElement) {
       if (el.requestFullscreen) el.requestFullscreen();
       else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
     }
   });
-
-  document.addEventListener('fullscreenchange', zoomCanvasToFill);
-  document.addEventListener('webkitfullscreenchange', zoomCanvasToFill);
-  window.addEventListener('resize', zoomCanvasToFill);
 
   // 首次点击自动全屏
   var autoFSdone = false;
@@ -1478,7 +1476,7 @@ GameScene.prototype._createChaosOverlay = function (aiId, callback) {
   self.chaosScoreText = scoreText;
 
   // AI 台词气泡
-  self._showAiBubble(aiId, 'easy', 400);
+  self._showAiBubble(aiId, 'easy', 420);
   self._chaosAiId = aiId;
 
   // 5. 新版圆形关闭按钮（悬浮在卡片右上角边缘，红底白叉）
