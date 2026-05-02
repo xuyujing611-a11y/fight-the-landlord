@@ -1498,7 +1498,7 @@ GameScene.prototype._createChaosOverlay = function (aiId, callback) {
     fontFamily: '"PingFang SC",sans-serif',
     fontSize: '15px', color: '#FFFFFF'
   }).setOrigin(0.5).setDepth(303);
-  closeBtnBg.setInteractive(new Phaser.Geom.Rectangle(720, 72, 20, 20), Phaser.Geom.Rectangle.Contains);
+  closeBtnBg.setInteractive(new Phaser.Geom.Rectangle(720, 72, 20, 28), Phaser.Geom.Rectangle.Contains);
   closeBtnBg.on('pointerup', function () { self._destroyChaos(); });
   self.chaosElements.push(closeBtnBg, closeBtnText);
 
