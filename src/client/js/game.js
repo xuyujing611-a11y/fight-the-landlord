@@ -1487,6 +1487,7 @@ GameScene.prototype._createChaosOverlay = function (aiId, callback) {
 
   // AI \u53F0\u8BCD\u6C14\u6CE1
   self._showAiBubble(aiId, 'easy', 180);
+  self._chaosAiId = aiId;
 
   // \u5173\u6389\u6309\u94AE
   var closeBtnBg = self.add.graphics();
@@ -2440,9 +2441,10 @@ GameScene.prototype._destroyChaos = function () {
 
   // \u6062\u590D\u51FA\u724C\u97F3\u6548
   SoundManager.resumeAll();
+  this.gameState = GAME_STATE.PLAYER_TURN;
 
   // \u6062\u590D\u6E38\u620F\u72B6\u6001
-  this.gameState = GAME_STATE.PLAYER_TURN;
+  this._showAiBubble(this._chaosAiId || "duidui", "close", 180);
   this.setStatusText('\u641E\u4E8B\u60C5\u7ED3\u675F\uFF0C\u7EE7\u7EED\u51FA\u724C');
 };
 // ================================================================
