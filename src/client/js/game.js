@@ -2239,9 +2239,10 @@ GameScene.prototype._showPlayBubble = function (aiId, event, context) {
     var avatarColor = isDuidui ? 0x4FC3F7 : 0xFFB74D;
 
     // 方块形气泡
-    var baseSize = 64;
-    var bubbleW = Math.min(baseSize, 40 + line.length * 6);
-    var bubbleH = Math.max(baseSize, 30 + Math.ceil(line.length / 3) * 14);
+    // C2: 增大气泡尺寸防止长文字溢出
+    var baseSize = 80;
+    var bubbleW = Math.min(200, 60 + line.length * 8);
+    var bubbleH = Math.max(70, 40 + Math.ceil(line.length / 4) * 16);
     bubbleW = Math.max(bubbleW, bubbleH * 0.7);
     bubbleH = Math.max(bubbleH, bubbleW * 0.7);
     var bubbleX = avatarX - bubbleW / 2;
@@ -2407,9 +2408,9 @@ GameScene.prototype._showAiBubble = function (aiId, sceneKey, y) {
 
     var aiDisplayName = aiId === 'duidui' ? '\u738B\u603C\u603C' : '\u82CF\u751C\u751C';
 
-    // \u8BA1\u7B97\u6C14\u6CE1\u5C3A\u5BF8
+    // C2: 气泡自适应高度，防止长文字溢出
     var bubbleW = Math.min(540, 200 + line.length * 10);
-    var bubbleH = 36;
+    var bubbleH = Math.max(44, 36 + Math.ceil(line.length / 20) * 18);
     var bubbleX = 230;
     var bubbleY = y + 10;
 
@@ -2452,7 +2453,9 @@ GameScene.prototype._showAiBubble = function (aiId, sceneKey, y) {
     // 台词文本
   var bubbleTxt = self.add.text(bubbleX + 14, bubbleY + bubbleH / 2, line, {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '14px', color: '#FFFFFF'
+    fontSize: '14px', color: '#FFFFFF',
+    wordWrap: { width: bubbleW - 28 },
+    lineSpacing: 2
   }).setOrigin(0, 0.5).setDepth(303);
   self.chaosBubbleElements.push(bubbleTxt);
 
