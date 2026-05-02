@@ -221,6 +221,7 @@ GameScene.prototype.preload = function () {
     this.load.audio('chipsCollide' + ai, 'assets/sounds/chipsCollide' + ai + '.mp3');
   }
   this.load.audio('dieShuffle1', 'assets/sounds/dieShuffle1.mp3');
+  this.load.audio('bgm', 'assets/sounds/bgm.mp3');
 };
 
 GameScene.prototype.create = function () {
@@ -2338,6 +2339,7 @@ GameScene.prototype._showPlayBubble = function (aiId, event, context) {
     self.playBubbleElements.push(arrow);
     // 文字最后push到底部渲染在上层
     self.playBubbleElements.push(bubbleTxt);
+    SoundManager.speak(line, aiId);
 
     // 弹入动画: Container 包裹所有元素
     self.playBubbleContainer = self.add.container(0, 0, self.playBubbleElements).setDepth(500);
