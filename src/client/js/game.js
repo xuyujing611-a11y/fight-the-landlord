@@ -1812,53 +1812,77 @@ GameScene.prototype._showPlayBubble = function (aiId, event, context) {
     }
     self.playBubbleElements = [];
 
-    var y = aiId === 'duidui' ? 120 : 150;
-    var aiDisplayName = aiId === 'duidui' ? '王怼怼' : '苏甜甜';
-    var avatarColor = aiId === 'duidui' ? 0x4FC3F7 : 0xFFB74D;
+    var isDuidui = (aiId === 'duidui');
+    var y = isDuidui ? 120 : 165;
+    var aiDisplayName = isDuidui ? '王怼怼' : '苏甜甜';
+    var avatarX = isDuidui ? 80 : 880;
+    var avatarColor = isDuidui ? 0x4FC3F7 : 0xFFB74D;
 
-    var bubbleW = Math.min(540, 240 + line.length * 10);
+    var bubbleW = Math.min(280, 140 + line.length * 10);
     var bubbleH = 36;
-    var bubbleX = 230;
+    var bubbleX = isDuidui ? 230 : (avatarX - bubbleW - 30);
     var bubbleY = y + 10;
+    var cornerRadius = isDuidui ? 12 : 4;
+    var bubbleBgColor = isDuidui ? 0x1B5E20 : 0x311B92;
+    var bubbleBorderColor = isDuidui ? 0x66BB6A : 0xCE93D8;
 
     // AI 头像圆圈
     var avatar = self.add.graphics();
     avatar.fillStyle(avatarColor, 1);
-    avatar.fillCircle(80, y + 16, 22).setDepth(20);
+    avatar.fillCircle(avatarX, y + 16, 22).setDepth(20);
     avatar.lineStyle(2, 0xFFFFFF, 0.6);
-    avatar.strokeCircle(80, y + 16, 22).setDepth(20);
-    var avatarTxt = self.add.text(80, y + 16, aiId === 'duidui' ? '😎' : '😊', {
+    avatar.strokeCircle(avatarX, y + 16, 22).setDepth(20);
+    var avatarTxt = self.add.text(avatarX, y + 16, isDuidui ? '😎' : '😊', {
       fontFamily: 'sans-serif', fontSize: '18px'
     }).setOrigin(0.5).setDepth(21);
     self.playBubbleElements.push(avatar, avatarTxt);
 
     // AI 名字
-    var nameTxt = self.add.text(105, y - 4, aiDisplayName, {
+    var nameX = isDuidui ? (avatarX + 25) : (bubbleX - 5);
+    var nameTxt = self.add.text(nameX, y - 4, aiDisplayName, {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
       fontSize: '12px', color: '#FFFFFF', fontStyle: 'bold'
     }).setDepth(21);
+    if (!isDuidui) nameTxt.setOrigin(1, 0);
     self.playBubbleElements.push(nameTxt);
 
     // 台词气泡背景
     var bubble = self.add.graphics();
-    bubble.fillStyle(0x1B5E20, 0.85);
-    bubble.fillRoundedRect(bubbleX, bubbleY, bubbleW, bubbleH, 12).setDepth(20);
-    bubble.lineStyle(1.5, 0x66BB6A, 0.5);
-    bubble.strokeRoundedRect(bubbleX, bubbleY, bubbleW, bubbleH, 12).setDepth(20);
+    bubble.fillStyle(bubbleBgColor, 0.85);
+    if (cornerRadius > 0) {
+      bubble.fillRoundedRect(bubbleX, bubbleY, bubbleW, bubbleH, cornerRadius).setDepth(20);
+      bubble.lineStyle(1.5, bubbleBorderColor, 0.5);
+      bubble.strokeRoundedRect(bubbleX, bubbleY, bubbleW, bubbleH, cornerRadius).setDepth(20);
+    } else {
+      bubble.fillRect(bubbleX, bubbleY, bubbleW, bubbleH).setDepth(20);
+      bubble.lineStyle(1.5, bubbleBorderColor, 0.5);
+      bubble.strokeRect(bubbleX, bubbleY, bubbleW, bubbleH).setDepth(20);
+    }
     self.playBubbleElements.push(bubble);
 
-    // 三角形箭头
+    // 三角形箭头（怼怼朝左、甜甜朝右）
     var arrow = self.add.graphics();
-    arrow.fillStyle(0x1B5E20, 0.85);
-    arrow.fillTriangle(
-      bubbleX, bubbleY + bubbleH / 2,
-      bubbleX - 12, bubbleY + bubbleH / 2 - 6,
-      bubbleX - 12, bubbleY + bubbleH / 2 + 6
-    ).setDepth(20);
+    arrow.fillStyle(bubbleBgColor, 0.85);
+    if (isDuidui) {
+      // 左侧箭头指向左边头像
+      arrow.fillTriangle(
+        bubbleX, bubbleY + bubbleH / 2,
+        bubbleX - 12, bubbleY + bubbleH / 2 - 6,
+        bubbleX - 12, bubbleY + bubbleH / 2 + 6
+      ).setDepth(20);
+    } else {
+      // 右侧箭头指向右边头像
+      arrow.fillTriangle(
+        bubbleX + bubbleW, bubbleY + bubbleH / 2,
+        bubbleX + bubbleW + 12, bubbleY + bubbleH / 2 - 6,
+        bubbleX + bubbleW + 12, bubbleY + bubbleH / 2 + 6
+      ).setDepth(20);
+    }
     self.playBubbleElements.push(arrow);
 
     // 台词文本
-    var bubbleTxt = self.add.text(bubbleX + 14, bubbleY + bubbleH / 2, line, {
+    var textX = isDuidui ? (bubbleX + 14) : (bubbleX + 10);
+    var bubbleTxt = self.add.text(textX, bubbleY + bubbleH / 2, line, {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
       fontSize: '14px', color: '#FFFFFF'
     }).setOrigin(0, 0.5).setDepth(21);
