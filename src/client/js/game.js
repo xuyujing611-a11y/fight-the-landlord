@@ -351,7 +351,7 @@ GameScene.prototype.create = function () {
   });
 
   // BGM切换按钮
-  var bgmBtn = self.add.text(900, 56, '🎵', {
+  var bgmBtn = self.add.text(920, 56, '🎵', {
     fontSize: '16px', color: '#FFFFFF',
     backgroundColor: '#00000066',
     padding: { x: 6, y: 4 }
@@ -1389,9 +1389,9 @@ GameScene.prototype.displayPlay = function (cards, player) {
   // \u786E\u5B9A\u4F4D\u7F6E
   var maxPlayZoneW = 600;
   var positions = {
-    player: { x: 660, y: 195, w: 75, h: 108, origin: 0.5 },
-    ai1:    { x: 360, y: 133, w: 63, h: 90, origin: 0.5 },
-    ai2:    { x: 960, y: 133, w: 63, h: 90, origin: 0.5 }
+    player: { x: 660, y: 195, w: 85, h: 122, origin: 0.5 },
+    ai1:    { x: 360, y: 133, w: 72, h: 103, origin: 0.5 },
+    ai2:    { x: 960, y: 133, w: 72, h: 103, origin: 0.5 }
   };
   var pos = positions[player] || positions.player;
   var n = cards.length;
@@ -1685,7 +1685,7 @@ GameScene.prototype._renderQuestion = function (q, aiId) {
 
   var optH = 85;
   var optW = 340;
-  var gridX = [310, 650];
+  var gridX = [130, 470];
   var gridY = [158, 250];
 
   for (var oi = 0; oi < optionKeys.length; oi++) {
@@ -1872,7 +1872,7 @@ GameScene.prototype._showSwapResult = function (aiId, isCorrect, fbY) {
   if (!self.playerHand || self.playerHand.length === 0) {
     var emptyMsg = self.add.text(660, confirmPanelY + 30, '你的手牌为空，AI无牌可拿', {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '14px', color: '#FFB74D', fontStyle: 'bold'
+      fontSize: '16px', color: '#FFB74D', fontStyle: 'bold'
     }).setOrigin(0.5).setDepth(310);
     self.chaosElements.push(emptyMsg);
     self._showSwapButtons(aiId, confirmPanelY + 80);
@@ -1898,7 +1898,7 @@ GameScene.prototype._showSwapResult = function (aiId, isCorrect, fbY) {
   self.chaosElements.push(panelBg);
   var hintTxt = self.add.text(660, confirmPanelY + 20, '⚠️ 惩罚：' + aiName + ' 决定用它的最小牌换走你的一张牌！', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '14px', color: '#E65100', fontStyle: 'bold'
+    fontSize: '16px', color: '#E65100', fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(309);
   self.chaosElements.push(hintTxt);
   // 绘制展示牌面的通用方法（带阴影）
@@ -1912,20 +1912,20 @@ GameScene.prototype._showSwapResult = function (aiId, isCorrect, fbY) {
     self.chaosElements.push(img);
   };
   var t1 = self.add.text(420, confirmPanelY + 65, '你的牌:', {
-    fontFamily: '"PingFang SC"', fontSize: '13px', color: '#333'
+    fontFamily: '"PingFang SC"', fontSize: '15px', color: '#333'
   }).setOrigin(1, 0.5).setDepth(309);
   drawCardWithShadow(450, confirmPanelY + 65, lostCard);
   var swapIcon = self.add.text(660, confirmPanelY + 65, '🔄', {
     fontSize: '26px'
   }).setOrigin(0.5).setDepth(309);
   var t2 = self.add.text(570, confirmPanelY + 65, 'AI的牌:', {
-    fontFamily: '"PingFang SC"', fontSize: '13px', color: '#333'
+    fontFamily: '"PingFang SC"', fontSize: '15px', color: '#333'
   }).setOrigin(0, 0.5).setDepth(309);
   if (aiMinCard) {
     drawCardWithShadow(590, confirmPanelY + 65, aiMinCard);
   } else {
     self.add.text(590, confirmPanelY + 65, '无牌', {
-      fontSize: '14px', color: '#E65100'
+      fontSize: '16px', color: '#E65100'
     }).setOrigin(0.5).setDepth(309);
   }
   self.chaosElements.push(t1, swapIcon, t2);
@@ -1935,7 +1935,7 @@ GameScene.prototype._showSwapResult = function (aiId, isCorrect, fbY) {
   btnBg.setInteractive(new Phaser.Geom.Rectangle(420, confirmPanelY + 105, 120, 36), Phaser.Geom.Rectangle.Contains);
   var btnTxt = self.add.text(660, confirmPanelY + 123, '接受惩罚', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '15px', color: '#FFF', fontStyle: 'bold'
+    fontSize: '17px', color: '#FFF', fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(311);
   self.chaosElements.push(btnBg, btnTxt);
   btnBg.on('pointerup', function() {
@@ -1956,7 +1956,7 @@ GameScene.prototype._showSwapResult = function (aiId, isCorrect, fbY) {
     var aName = getChineseCardName(aiMinCard);
     var swapText = self.add.text(660, confirmPanelY + 115, '✅ 互换完毕：' + aiName + ' 用 [' + aName + '] 换了你的 [' + pName + ']', {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '14px', color: '#4CAF50', fontStyle: 'bold'
+      fontSize: '16px', color: '#4CAF50', fontStyle: 'bold'
     }).setOrigin(0.5).setDepth(310);
     self.chaosElements.push(swapText);
     self._showSwapButtons(aiId, confirmPanelY + 150);
@@ -1999,7 +1999,7 @@ GameScene.prototype._showSwapUI = function (aiId, fbY) {
 
   var hintTxt = self.add.text(660, 112, '选一张你的牌交出，然后猜AI的牌位置', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '11px', color: '#AAAAAA'
+    fontSize: '13px', color: '#AAAAAA'
   }).setOrigin(0.5).setDepth(351);
   swapElements.push(hintTxt);
 
@@ -2107,7 +2107,7 @@ GameScene.prototype._showSwapUI = function (aiId, fbY) {
   confirmBg.fillRoundedRect(420, 390, 200, 44, 10).setDepth(353);
   var confirmTxt = self.add.text(520, 412, '✅ 确认交换', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '15px', color: '#FFFFFF', fontStyle: 'bold'
+    fontSize: '17px', color: '#FFFFFF', fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(354);
   confirmBg.setInteractive(new Phaser.Geom.Rectangle(220, 390, 200, 44), Phaser.Geom.Rectangle.Contains);
   swapElements.push(confirmBg, confirmTxt);
@@ -2178,7 +2178,7 @@ GameScene.prototype._showSwapUI = function (aiId, fbY) {
         var resultText = isWin ? '🎯 欧皇手气！用' : '🔄 盲抽成功！用';
         var swapMsg = self.add.text(660, fbY + 20, resultText + '[' + pSuitStr + pRankStr + ']换了AI的[' + aSuitStr + aRankStr + ']', {
           fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-          fontSize: '15px', color: isWin ? '#FFD700' : '#4CAF50', fontStyle: 'bold',
+          fontSize: '17px', color: isWin ? '#FFD700' : '#4CAF50', fontStyle: 'bold',
           stroke: '#000000', strokeThickness: 2
         }).setOrigin(0.5).setDepth(310);
         self.chaosElements.push(swapMsg);
@@ -2194,7 +2194,7 @@ GameScene.prototype._showSwapUI = function (aiId, fbY) {
   cancelBg.fillRoundedRect(720, 390, 200, 44, 10).setDepth(353);
   var cancelTxt = self.add.text(820, 412, '✖ 跳过交换', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '15px', color: '#FFFFFF', fontStyle: 'bold'
+    fontSize: '17px', color: '#FFFFFF', fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(354);
   cancelBg.setInteractive(new Phaser.Geom.Rectangle(720, 390, 200, 44), Phaser.Geom.Rectangle.Contains);
   swapElements.push(cancelBg, cancelTxt);
@@ -2220,7 +2220,7 @@ GameScene.prototype._showSwapButtons = function (aiId, btnY) {
   againBg.fillRoundedRect(550, btnY, 220, 40, 10).setDepth(305);
   var againTxt = self.add.text(660, btnY + 20, '🔄 再来一题', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '13px', color: '#FFFFFF', fontStyle: 'bold'
+    fontSize: '15px', color: '#FFFFFF', fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(306);
   againBg.setInteractive(new Phaser.Geom.Rectangle(550, btnY, 220, 40), Phaser.Geom.Rectangle.Contains);
   againBg.on('pointerup', function () {
@@ -2235,7 +2235,7 @@ GameScene.prototype._showSwapButtons = function (aiId, btnY) {
   closeBg.fillRoundedRect(675, btnY, 220, 40, 10).setDepth(305);
   var closeTxt = self.add.text(785, btnY + 20, '✖ 关掉回牌', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '13px', color: '#FFFFFF', fontStyle: 'bold'
+    fontSize: '15px', color: '#FFFFFF', fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(306);
   closeBg.setInteractive(new Phaser.Geom.Rectangle(675, btnY, 220, 40), Phaser.Geom.Rectangle.Contains);
   closeBg.on('pointerup', function () {
@@ -2655,7 +2655,7 @@ function createActionButtons(scene) {
   var bw = 100, bh = 60, gap = 20;
   var totalW = bw * 5 + gap * 4;
   var startX = 660 - totalW / 2;
-  var btnY = 420;
+  var btnY = 450;
 
   var buttons = [
     { label: '\u51FA\u724C', color: 0x4ECDC4, key: 'play' },
@@ -2961,20 +2961,20 @@ function createPlayHistoryArea(scene) {
   var bg = scene.add.graphics();
   // 颜色加深，增加边框质感
   bg.fillStyle(0x000000, 0.45);
-  bg.fillRoundedRect(12, 58, 140, 240, 8).setDepth(200);
+  bg.fillRoundedRect(12, 58, 160, 250, 8).setDepth(200);
   bg.lineStyle(1.5, 0x4CAF50, 0.5);
-  bg.strokeRoundedRect(12, 58, 140, 240, 8).setDepth(200);
+  bg.strokeRoundedRect(12, 58, 160, 250, 8).setDepth(200);
 
   scene.add.text(82, 68, '📜 出牌记录', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '12px', color: '#A5D6A7', fontStyle: 'bold'
+    fontSize: '14px', color: '#A5D6A7', fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(201);
 
   scene.playHistoryText = scene.add.text(18, 85, '', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '11px', color: '#FFFFFF',
-    lineSpacing: 6,
-    wordWrap: { width: 128 }
+    fontSize: '13px', color: '#FFFFFF',
+    lineSpacing: 8,
+    wordWrap: { width: 145 }
   }).setDepth(201);
 }
 
