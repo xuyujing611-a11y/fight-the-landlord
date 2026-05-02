@@ -470,9 +470,14 @@ GameScene.prototype.renderPlayerHand = function () {
   this.handCards = [];
 
   var n = hand.length, cw = 56, ch = 80;
-  // 手牌轻微重叠10%（约5px），保持牌面可读且不挤到边缘
+  // 手牌轻微重叠10%（约5px），保持牌面可读
   var overlap = -5;
   var totalW = cw * n + overlap * (n - 1);
+  if (totalW > 960) {
+    cw = (960 - overlap * (n - 1)) / n;
+    ch = cw * 80 / 56;
+    totalW = 960;
+  }
   var startX = (960 - totalW) / 2;
   var baseY = 345;
 
@@ -2253,10 +2258,6 @@ GameScene.prototype._showPlayBubble = function (aiId, event, context) {
       }
     }
     self.playBubbleElements = [];
-    if (self._playBubbleText) {
-      self._playBubbleText.destroy();
-      self._playBubbleText = null;
-    }
 
     var isDuidui = (aiId === 'duidui');
     var isEmergency = (event === 'bomb');
@@ -2309,13 +2310,10 @@ GameScene.prototype._showPlayBubble = function (aiId, event, context) {
       wordWrap: { width: bubbleW - 28 }
     };
     var textX = isDuidui ? (bubbleX + 14) : (bubbleX + 10);
-    var bubbleTxt = self.add.text(bubbleX + 14, 0, line, textStyle).setDepth(21);
+    var bubbleTxt = self.add.text(bubbleX + 14, 0, line, textStyle);
     var textBounds = bubbleTxt.getBounds();
     bubbleH = Math.max(bubbleH, textBounds.height + 20);
     bubbleTxt.setPosition(textX, bubbleY + bubbleH / 2).setOrigin(0, 0.5);
-    // 文字单独置于Container之上(depth 21)，不被气泡背景遮住
-    if (self._playBubbleText) self._playBubbleText.destroy();
-    self._playBubbleText = bubbleTxt;
 
     // 台词气泡背景（填充+边框分开，炸弹时边框可独立闪烁）
     var bubbleBg = self.add.graphics();
@@ -2356,6 +2354,8 @@ GameScene.prototype._showPlayBubble = function (aiId, event, context) {
       ).setDepth(20);
     }
     self.playBubbleElements.push(arrow);
+    // 文字最后push到底部渲染在上层
+    self.playBubbleElements.push(bubbleTxt);
 
     // 弹入动画: Container 包裹所有元素
     self.playBubbleContainer = self.add.container(0, 0, self.playBubbleElements);
