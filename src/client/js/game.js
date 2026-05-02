@@ -251,21 +251,23 @@ GameScene.prototype.create = function () {
     var container = document.getElementById('game-container');
     if (!container) return;
     if (document.fullscreenElement || document.webkitFullscreenElement) {
-      // 全屏：容器撑满全屏，Phaser.FIT自动缩放，保持清晰
+      // 全屏：容器撑满全屏，Phaser.FILL缩放填满（允许左右裁剪，不裁顶部/底部按钮区域）
       container.style.width = window.innerWidth + 'px';
       container.style.height = window.innerHeight + 'px';
       container.style.position = 'fixed';
       container.style.top = '0';
       container.style.left = '0';
-      // 触发Phaser重新计算FIT缩放（带设备像素比）
+      // 全屏时改为FILL模式填满屏幕（避免两侧绿边）
+      game.scale.mode = Phaser.Scale.FILL;
       if (game && game.scale) game.scale.refresh();
     } else {
-      // 退出全屏：恢复原始样式
+      // 退出全屏：恢复原始样式和FIT模式
       container.style.width = '';
       container.style.height = '';
       container.style.position = '';
       container.style.top = '';
       container.style.left = '';
+      game.scale.mode = Phaser.Scale.FIT;
       if (game && game.scale) game.scale.refresh();
     }
   }
