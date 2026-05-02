@@ -67,7 +67,7 @@ var SoundManager = {
     scene.time.delayedCall(500, tryResume);
   },
   // 播放背景音乐（带容错，找不到文件也不会报错崩溃）
-  bgmNames: ['bgm_sax', 'bgm_steel', 'bgm_8bit', 'bgm'],
+  bgmNames: ['bgm_chinese', 'bgm_jazz', 'bgm_ambient'],
   bgmIndex: 0,
   currentBgm: null,
   playBGM: function() {
@@ -92,7 +92,7 @@ var SoundManager = {
     this.bgmPlaying = false;
     // 切换到下一首
     this.bgmIndex = (this.bgmIndex + 1) % this.bgmNames.length;
-    var names = ['萨克斯风', '钢鼓', '8-Bit', 'Pizzicato'];
+    var names = ['古风', '爵士', '氛围'];
     console.log('BGM切换为: ' + names[this.bgmIndex]);
     // 播放新BGM
     try {
@@ -250,11 +250,10 @@ GameScene.prototype.preload = function () {
     this.load.audio('chipsCollide' + ai, 'assets/sounds/chipsCollide' + ai + '.mp3');
   }
   this.load.audio('dieShuffle1', 'assets/sounds/dieShuffle1.mp3');
-  this.load.audio('bgm', 'assets/sounds/bgm.mp3');
+  this.load.audio('bgm_chinese', 'assets/sounds/bgm_chinese.mp3');
+  this.load.audio('bgm_jazz', 'assets/sounds/bgm_jazz.mp3');
+  this.load.audio('bgm_ambient', 'assets/sounds/bgm_ambient.mp3');
   // 额外音效
-  this.load.audio('bgm_sax', 'assets/sounds/bgm_sax.mp3');
-  this.load.audio('bgm_steel', 'assets/sounds/bgm_steel.mp3');
-  this.load.audio('bgm_8bit', 'assets/sounds/bgm_8bit.mp3');
   this.load.audio('cardShuffle', 'assets/sounds/cardShuffle.mp3');
   this.load.audio('cardFan1', 'assets/sounds/cardFan1.mp3');
   this.load.audio('packOpen1', 'assets/sounds/packOpen1.mp3');
