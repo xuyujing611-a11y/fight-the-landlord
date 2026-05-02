@@ -107,6 +107,10 @@ var SoundManager = {
   aiThink: function () {
     // no specific sound for AI thinking
   },
+  bomb: function () {
+    if (!this.scene || !this._ensureReady()) return;
+    this.scene.sound.play(this._random('cardPlace', 3), { volume: 1.0, detune: -400 });
+  },
   pauseAll: function () {
     if (!this.scene) return;
     this.scene.sound.pauseAll();
@@ -1017,7 +1021,7 @@ GameScene.prototype.confirmPlay = function (playCards, info) {
   // \u51FA\u724C\u8BB0\u5F55+\u97F3\u6548
   this.addPlayHistory('player', playCards);
   SoundManager.playCard();
-  if (info.type === 'BOMB' || info.type === 'ROCKET') this.totalBombs++;
+  if (info.type === 'BOMB' || info.type === 'ROCKET') { this.totalBombs++; SoundManager.bomb(); }
   if (info.type === 'ROCKET') this.rocketCount++;
 
   if (this.playerHand.length === 0) {
@@ -1205,7 +1209,7 @@ GameScene.prototype.handleAIPlay = function (aiIndex, aiName, res) {
   this.addPlayHistory(aiIndex === 0 ? 'ai1' : 'ai2', playCards);
   var bubbleKey = info.type === 'BOMB' || info.type === 'ROCKET' ? 'bomb' : 'play';
   this._showPlayBubble(aiIndex === 0 ? 'duidui' : 'tiantian', bubbleKey, info.type);
-  if (info.type === 'BOMB' || info.type === 'ROCKET') this.totalBombs++;
+  if (info.type === 'BOMB' || info.type === 'ROCKET') { this.totalBombs++; SoundManager.bomb(); }
   if (info.type === 'ROCKET') this.rocketCount++;
   if (hand.length === 0) {
     this.renderRoundEndPanel(aiIndex === 0 ? 'ai1' : 'ai2');
@@ -1290,7 +1294,7 @@ GameScene.prototype.localAIPlay = function (aiIndex, aiName) {
   this.addPlayHistory(aiIndex === 0 ? 'ai1' : 'ai2', chosen);
   var bubbleKey = info.type === 'BOMB' || info.type === 'ROCKET' ? 'bomb' : 'play';
   this._showPlayBubble(aiIndex === 0 ? 'duidui' : 'tiantian', bubbleKey, info.type);
-  if (info.type === 'BOMB' || info.type === 'ROCKET') this.totalBombs++;
+  if (info.type === 'BOMB' || info.type === 'ROCKET') { this.totalBombs++; SoundManager.bomb(); }
   if (info.type === 'ROCKET') this.rocketCount++;
   if (hand.length === 0) {
     this.renderRoundEndPanel(aiIndex === 0 ? 'ai1' : 'ai2');
