@@ -383,43 +383,27 @@ scene.add.text(68, 305, '你的手牌', {
 |:----:|:---:|
 | 牌宽 (cw) | **56 px** |
 | 牌高 (ch) | **80 px** |
+| 牌间距 (gap) | **4 px** — 均匀展开，无重叠 |
 | 底边基础Y (baseY) | **345** |
-| 选中上移 | **16 px** |
+| 选中缩放 | **scale(1.15)** |
 | depth | **110** |
 
-### 6.4 重叠量公式
+### 6.4 排列公式 (均匀展开)
 
 ```javascript
-var overlap = n > 6 ? Math.min(33, (700 - cw) / (n - 1)) : 33;
+var n = hand.length, cw = 56, ch = 80, gap = 4;
+var totalWidth = cw * n + gap * (n - 1);
+var startX = 180 + (700 - totalWidth) / 2;
+var baseY = 345;
+
+for (var ii = 0; ii < n; ii++) {
+  var cx = startX + ii * (cw + gap) + cw / 2;
+  var cy = baseY;  // 直线排列，无弧线
+  var img = self.add.image(cx, cy, key).setDisplaySize(cw, ch).setDepth(110);
+}
 ```
 
-| 手牌数 | overlap 值 | 场景举例 |
-|:------:|:----------:|:--------:|
-| 1~6 | 33 | 初始手牌 17张时 overlap = min(33, 644/16) = 33 |
-| 7 | 33 | 654/6 = 109 → min(33, 109) = 33 |
-| 8 | 33 | 644/7 = 92 → min(33, 92) = 33 |
-| ... | 33 | overlap 始终为 33（因为 700-56=644, 644/(n-1) 远大于33） |
-
-**结论:** 重叠量恒定为 **33px**（除非手牌数大于 19，这在斗地主中不可能）。
-
-### 6.5 弧线公式
-
-```javascript
-var arcOffset = Math.pow((ii / (n - 1)) - 0.5, 2) * 36;
-var cy = baseY - arcOffset;
-```
-
-| 位置 | 相对位置 `t = ii/(n-1)` | `(t-0.5)²` | arcOffset | 实际Y |
-|:----:|:------------------------:|:-----------:|:---------:|:-----:|
-| 最左牌 (ii=0) | 0 | 0.25 | 9 | 336 |
-| 1/4处 | 0.25 | 0.0625 | 2.25 | 343 |
-| 中间牌 (ii≈n/2) | 0.5 | 0 | 0 | 345 |
-| 3/4处 | 0.75 | 0.0625 | 2.25 | 343 |
-| 最右牌 (ii=n-1) | 1.0 | 0.25 | 9 | 336 |
-
-**弧线高度差:** 两端比中间高 **9px**（以画布Y坐标计，值越小越靠上，所以两端Y=336在中间Y=345上方）
-
-### 6.6 选中/取消状态
+### 6.5 选中/取消状态
 
 ```javascript
 img.on('pointerdown', function() {
@@ -430,22 +414,22 @@ img.on('pointerdown', function() {
   var s = this.getData('selected');
   if (s) {
     // 取消选中
-    this.y += 16;
+    this.setScale(1.0);
     this.setData('selected', false);
     // 从 selectedCards 中移除
   } else {
     // 选中
-    this.y -= 16;
+    this.setScale(1.15);
     this.setData('selected', true);
     // 加入 selectedCards
   }
 });
 ```
 
-| 操作 | Y 变化 | 音效 |
-|:----:|:------:|:----:|
-| 选中 | `y = origY - 16` | `SoundManager.selectCard()` (cardSlide1-3, vol 0.6) |
-| 取消选中 | `y = origY + 16` | `SoundManager.deselectCard()` (cardSlide1-3, vol 0.5) |
+| 操作 | 变化 | 音效 |
+|:----:|:----:|:----:|
+| 选中 | `scale(1.15)` 放大突出 | `SoundManager.selectCard()` (cardSlide1-3, vol 0.6) |
+| 取消选中 | `scale(1.0)` 恢复原尺寸 | `SoundManager.deselectCard()` (cardSlide1-3, vol 0.5) |
 
 ---
 
@@ -591,24 +575,24 @@ bg.on('pointerup', function() {
 function createPlayHistoryArea(scene) {
   var bg = scene.add.graphics();
   bg.fillStyle(0x000000, 0.2);
-  bg.fillRoundedRect(800, 60, 150, 140, 6).setDepth(200);
+  bg.fillRoundedRect(12, 58, 140, 240, 6).setDepth(200);
 
-  scene.add.text(808, 65, '出牌', {
+  scene.add.text(20, 63, '出牌', {
     fontSize: '9px', color: '#81C784'
   }).setDepth(201);
 
-  scene.playHistoryText = scene.add.text(808, 76, '', {
+  scene.playHistoryText = scene.add.text(20, 74, '', {
     fontSize: '9px', color: '#C8E6C9',
-    lineSpacing: 3, wordWrap: { width: 135 }
+    lineSpacing: 3, wordWrap: { width: 124 }
   }).setDepth(201);
 }
 ```
 
 | 元素 | X | Y | W | H | 圆角 | fontSize | color | depth |
 |:----:|:-:|:-:|:-:|:-:|:----:|:--------:|:-----:|:-----:|
-| 面板背景 | 800 | 60 | 150 | 140 | 6 | — | 黑0.2 | 200 |
-| 标题 | 808 | 65 | — | — | — | 9px | `#81C784` | 201 |
-| 内容 | 808 | 76 | 135(wordWrap) | — | — | 9px | `#C8E6C9` | 201 |
+| 面板背景 | 12 | 58 | 140 | 240 | 6 | — | 黑0.2 | 200 |
+| 标题 | 20 | 63 | — | — | — | 9px | `#81C784` | 201 |
+| 内容 | 20 | 74 | 124(wordWrap) | — | — | 9px | `#C8E6C9` | 201 |
 
 ### 10.2 记录格式
 

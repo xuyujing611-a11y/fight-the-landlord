@@ -506,14 +506,12 @@ GameScene.prototype.renderPlayerHand = function () {
       var s = this.getData('selected');
       if (s) {
         this.y += 16;
-        this.setScale(1.0);
         this.setData('selected', false);
         var pos = self.selectedCards.indexOf(idx2);
         if (pos >= 0) self.selectedCards.splice(pos, 1);
         SoundManager.deselectCard();
       } else {
         this.y -= 16;
-        this.setScale(1.15);
         this.setData('selected', true);
         self.selectedCards.push(idx2);
         SoundManager.selectCard();
@@ -534,7 +532,6 @@ GameScene.prototype._clearCardSelection = function () {
     if (s) {
       var origY = el.getData('origY');
       if (origY !== undefined) { el.y = origY; }
-      if (el.setScale) el.setScale(1.0);
       el.setData('selected', false);
     }
   }
@@ -544,7 +541,6 @@ GameScene.prototype._highlightCard = function (el) {
   el.setData('selected', true);
   var origY = el.getData('origY');
   if (origY !== undefined) { el.y = origY - 16; }
-  if (el.setScale) el.setScale(1.15);
 };
 
 // ================================================================
@@ -2272,7 +2268,7 @@ GameScene.prototype._showPlayBubble = function (aiId, event, context) {
 
     // 方块形气泡
     // C2: 增大气泡尺寸防止长文字溢出
-    var baseSize = 80;
+    var baseSize = 64;
     var bubbleW = Math.min(200, 60 + line.length * 8);
     var bubbleH = Math.max(70, 40 + Math.ceil(line.length / 4) * 16);
     bubbleW = Math.max(bubbleW, bubbleH * 0.7);

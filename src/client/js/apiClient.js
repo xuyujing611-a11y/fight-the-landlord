@@ -5,7 +5,7 @@
 
 var API_BASE = (typeof window !== 'undefined' && window.__API_BASE__) ||
   (typeof process !== 'undefined' && process.env && process.env.API_BASE) ||
-  'http://localhost:3100';
+  (typeof window !== 'undefined' ? (window.location.protocol + '//' + window.location.host) : 'http://localhost:3100');
 
 var ApiClient = {
   // ============================================================
