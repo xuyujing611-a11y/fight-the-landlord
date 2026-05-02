@@ -8,20 +8,49 @@ PROJECT_DIR = "/home/xu_yujing/openclaw/workspaces/fight-the-landlord"
 OUTPUT_FILE = os.path.join(PROJECT_DIR, "docs", "ALL_FILES.md")
 
 # 排除的目录和文件
-EXCLUDE_DIRS = {"node_modules", ".git", "__pycache__", ".gitlab", "assets"}
-EXCLUDE_FILES = {".gitignore", ".gitattributes", "package-lock.json", "yarn.lock"}
+EXCLUDE_DIRS = {"node_modules", ".git", "__pycache__", ".gitlab", "assets",
+                  "memory"}  # memory 目录排除
+EXCLUDE_FILES = {".gitignore", ".gitattributes", "package-lock.json", "yarn.lock", "ALL_FILES.md"}
+
+# MD 白名单：只保留架构设计文档
+MD_WHITELIST = {
+    "PROJECT_CONTEXT.md",          # 项目架构总览
+    "AIBubble-detailed.md",        # UI 气泡系统
+    "AIBubble.md",                 # UI 气泡系统（旧版）
+    "Bidding-detailed.md",         # 叫分系统
+    "Bidding.md",
+    "CardEngine-detailed.md",      # 牌引擎
+    "CardEngine.md",
+    "CardSwap.md",                 # 换牌逻辑
+    "ChaoShiQing-detailed.md",     # 搞事情系统
+    "ChaoShiQing.md",
+    "Gameplay-detailed.md",        # 出牌系统
+    "Gameplay.md",
+    "Layout-detailed.md",          # 布局规范
+    "Layout.md",
+    "PRD-赢牌反馈+AI气泡系统-v1.md",
+    "Scoring-detailed.md",         # 计分系统
+    "Scoring.md",
+    "SoundAnimation-detailed.md",  # 音效动效
+    "SoundAnimation.md",
+}
 
 def collect_files(root):
     files = []
     for dirpath, dirnames, filenames in os.walk(root):
-        # 跳过排除目录
         dirnames[:] = [d for d in dirnames if d not in EXCLUDE_DIRS]
         for f in filenames:
             if f in EXCLUDE_FILES:
                 continue
             ext = os.path.splitext(f)[1].lower()
-            if ext in (".md", ".js"):
+            if ext == ".js":
                 files.append(os.path.join(dirpath, f))
+            elif ext == ".md":
+                # 只包含白名单中的 md 文件
+                rel = os.path.relpath(os.path.join(dirpath, f), root)
+                basename = os.path.basename(f)
+                if basename in MD_WHITELIST and not rel.startswith(".git"):
+                    files.append(os.path.join(dirpath, f))
     return sorted(files)
 
 def main():

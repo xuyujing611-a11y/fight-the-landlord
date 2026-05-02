@@ -19,17 +19,16 @@ var GAME_STATE = {
 
 var GameConfig = {
   type: Phaser.AUTO,
-  width: 960,
+  width: 1320,
   height: 600,
   parent: 'game-container',
   backgroundColor: '#0D3B0F',
   dom: { createContainer: true },
-  // 开启高清 DPI 渲染 + 强制抗锯齿
-  resolution: Math.min(window.devicePixelRatio || 1, 2), // 限制最高2倍，平衡性能
-  roundPixels: false, // 允许亚像素渲染（画面更平滑）
-  autoRound: false, // 允许亚像素渲染
-  antialias: true,  // 开启抗锯齿
-  antialiasGL: true, // WebGL 级别抗锯齿
+  resolution: window.devicePixelRatio || 2,
+  roundPixels: false,
+  autoRound: false,
+  antialias: true,
+  antialiasGL: true,
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH
@@ -374,30 +373,41 @@ GameScene.prototype.create = function () {
 // 背景
 // ================================================================
 function drawTableBackground(scene) {
-  var W = 960, H = 600;
+  var W = 1320, H = 600;
+  var cx = 660, cy = 260;
+
   var bg = scene.add.graphics();
-  // 更平滑高级的中心径向渐变感（通过叠加半透明图形模拟）
-  bg.fillGradientStyle(0x2E7D32, 0x2E7D32, 0x0D3B0F, 0x0D3B0F, 1);
-  bg.fillRect(-1000, -500, 3000, 2000);
-  // 桌面高光（模拟吊灯打在牌桌上的质感）
-  var glow = scene.add.graphics();
-  glow.fillStyle(0x4CAF50, 0.12);
-  glow.fillEllipse(W / 2, H / 2 - 40, 680, 420);
-  glow.fillStyle(0x66BB6A, 0.08);
-  glow.fillEllipse(W / 2, H / 2 - 40, 450, 280);
-  // 牌桌内嵌金线边框，提升高级感
-  var border = scene.add.graphics();
-  border.lineStyle(2, 0xFFD700, 0.15); // 微弱的金色描边
-  border.strokeRoundedRect(16, 56, W - 32, H - 136, 12);
-  // 弱化原有的出牌框提示线
-  var diamond = scene.add.graphics();
-  diamond.lineStyle(1, 0x66BB6A, 0.08);
-  var cx = W / 2, cy = H / 2 - 40;
-  diamond.strokeRect(cx - 80, cy - 83, 118, 166);
-  diamond.strokeRect(cx - 48, cy - 59, 96, 118);
-  // 中心弱化装饰
-  diamond.strokeCircle(cx, cy - 10, 67);
-  diamond.strokeCircle(cx, cy - 10, 93);
+  bg.fillGradientStyle(0x1B5E20, 0x1B5E20, 0x0D3B0F, 0x0D3B0F, 1);
+  bg.fillRect(0, 0, W, H);
+
+  // 中心光晕
+  bg.fillStyle(0x2E7D32, 0.15);
+  bg.fillEllipse(cx, cy, 320, 354);
+  bg.fillStyle(0x388E3C, 0.1);
+  bg.fillEllipse(cx, cy, 240, 360);
+
+  // 外圈圆角边框
+  bg.lineStyle(2, 0x4CAF50, 0.3);
+  bg.strokeRoundedRect(13, 52, W - 26, 470, 9);
+
+  // 四角装饰圆
+  var corners = [[35, 63], [W - 35, 63], [35, 543], [W - 35, 543]];
+  corners.forEach(function (pos) {
+    bg.lineStyle(1, 0x4CAF50, 0.18);
+    bg.strokeCircle(pos[0], pos[1], 9);
+    bg.strokeCircle(pos[0], pos[1], 10);
+    bg.strokeCircle(pos[0], pos[1], 5);
+  });
+
+  // 中心装饰矩形
+  bg.lineStyle(1, 0x66BB6A, 0.15);
+  bg.strokeRect(cx - 59, cy - 83, 118, 166);
+  bg.strokeRect(cx - 48, cy - 59, 96, 118);
+
+  // 中心装饰圆
+  bg.lineStyle(1, 0x66BB6A, 0.08);
+  bg.strokeCircle(cx, cy - 10, 67);
+  bg.strokeCircle(cx, cy - 10, 93);
 }
 
 // ================================================================
@@ -521,25 +531,19 @@ GameScene.prototype.renderPlayerHand = function () {
   this.cardDomElements = [];
   this.handCards = [];
 
-  var n = hand.length, cw = 84, ch = 110;
-  // 牌少时重叠多(放大间距)，牌多时自动压缩
-  var overlap;
-  if (n <= 6) overlap = 20;
-  else if (n <= 10) overlap = 10;
-  else overlap = 2;
-  var totalW = cw * n + overlap * (n - 1);
-  if (totalW > 960) {
-    cw = (960 - overlap * (n - 1)) / n;
-    ch = cw * 110 / 84;
-    totalW = 960;
-  }
-  var startX = Math.floor((960 - totalW) / 2);
-  var baseY = 345;
+  var n = hand.length;
+  var cw = 84, ch = 120;
+  var maxHandZoneW = 1000;
+  var overlap = n > 1 ? Math.min(45, (maxHandZoneW - cw) / (n - 1)) : 45;
+  var totalWidth = cw + (n - 1) * overlap;
+  var startX = (1320 - totalWidth) / 2;
+  var baseY = 370;
 
   for (var ii = 0; ii < n; ii++) {
     var card = hand[ii];
-    var cx = startX + ii * (cw + overlap) + cw / 2;
-    var cy = baseY;
+    var cx = startX + ii * overlap + cw / 2;
+    var arcOffset = Math.pow((ii / (n - 1)) - 0.5, 2) * 36;
+    var cy = baseY - arcOffset;
     var key = getCardImageKey(card);
 
     var img = self.add.image(cx, cy, key).setDisplaySize(cw, ch).setDepth(110);
@@ -559,13 +563,13 @@ GameScene.prototype.renderPlayerHand = function () {
       var idx2 = this.getData('cardIdx');
       var s = this.getData('selected');
       if (s) {
-        this.y += 16;
+        this.y += 24;
         this.setData('selected', false);
         var pos = self.selectedCards.indexOf(idx2);
         if (pos >= 0) self.selectedCards.splice(pos, 1);
         SoundManager.deselectCard();
       } else {
-        this.y -= 16;
+        this.y -= 24;
         this.setData('selected', true);
         self.selectedCards.push(idx2);
         SoundManager.selectCard();
@@ -594,7 +598,7 @@ GameScene.prototype._highlightCard = function (el) {
   if (!el) return;
   el.setData('selected', true);
   var origY = el.getData('origY');
-  if (origY !== undefined) { el.y = origY - 16; }
+  if (origY !== undefined) { el.y = origY - 24; }
 };
 
 // ================================================================
@@ -1383,14 +1387,15 @@ GameScene.prototype.displayPlay = function (cards, player) {
   if (!cards || cards.length === 0) return;
 
   // \u786E\u5B9A\u4F4D\u7F6E
+  var maxPlayZoneW = 600;
   var positions = {
-    player: { x: 360, y: 195, w: 50, h: 72, origin: 0.5 },
-    ai1:    { x: 280, y: 133, w: 42, h: 60, origin: 0.5 },
-    ai2:    { x: 680, y: 133, w: 42, h: 60, origin: 0.5 }
+    player: { x: 660, y: 195, w: 75, h: 108, origin: 0.5 },
+    ai1:    { x: 360, y: 133, w: 63, h: 90, origin: 0.5 },
+    ai2:    { x: 960, y: 133, w: 63, h: 90, origin: 0.5 }
   };
   var pos = positions[player] || positions.player;
   var n = cards.length;
-  var overlap = Math.min(pos.w * 0.6, (480 - pos.w) / Math.max(n - 1, 1));
+  var overlap = Math.min(pos.w * 0.6, (maxPlayZoneW - pos.w) / Math.max(n - 1, 1));
   var totalW = pos.w + (n - 1) * overlap;
   var startX = pos.x - totalW / 2;
   var arr = this[gfxKey];
