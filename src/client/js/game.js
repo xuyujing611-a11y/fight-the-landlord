@@ -2136,6 +2136,10 @@ GameScene.prototype._showPlayBubble = function (aiId, event, context) {
       self.playBubbleTimer.remove();
       self.playBubbleTimer = null;
     }
+    if (self.playBubbleContainer) {
+      self.playBubbleContainer.destroy();
+      self.playBubbleContainer = null;
+    }
     if (self.playBubbleElements) {
       for (var bi = 0; bi < self.playBubbleElements.length; bi++) {
         if (self.playBubbleElements[bi]) self.playBubbleElements[bi].destroy();
@@ -2219,16 +2223,30 @@ GameScene.prototype._showPlayBubble = function (aiId, event, context) {
     }).setOrigin(0, 0.5).setDepth(21);
     self.playBubbleElements.push(bubbleTxt);
 
-    // 直接替换模式: 定时销毁
+    // 弹入动画: Container 包裹所有元素
+    self.playBubbleContainer = self.add.container(0, 0, self.playBubbleElements);
+    self.playBubbleContainer.setScale(0.8).setAlpha(0);
+    self.tweens.add({
+      targets: self.playBubbleContainer,
+      scale: 1.0, alpha: 1,
+      duration: 150, ease: 'Back.easeOut'
+    });
+
+    // 直接替换模式: 定时销毁（含退出动画）
     var displayMs = event === 'bomb' ? 5000 : 4000;
     self.playBubbleTimer = self.time.delayedCall(displayMs, function () {
-      if (self.playBubbleElements) {
-        for (var i = 0; i < self.playBubbleElements.length; i++) {
-          if (self.playBubbleElements[i]) self.playBubbleElements[i].destroy();
+      self.tweens.add({
+        targets: self.playBubbleContainer,
+        alpha: 0, duration: 200, ease: 'Linear',
+        onComplete: function () {
+          if (self.playBubbleContainer) {
+            self.playBubbleContainer.destroy();
+            self.playBubbleContainer = null;
+          }
+          self.playBubbleElements = [];
+          self.playBubbleTimer = null;
         }
-        self.playBubbleElements = [];
-      }
-      self.playBubbleTimer = null;
+      });
     });
   };
 
