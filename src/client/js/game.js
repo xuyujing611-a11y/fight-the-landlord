@@ -285,6 +285,16 @@ GameScene.prototype.create = function () {
   document.addEventListener('webkitfullscreenchange', zoomCanvasToFill);
   window.addEventListener('resize', zoomCanvasToFill);
 
+  // 首次点击自动全屏
+  var autoFSdone = false;
+  self.input.once('pointerdown', function () {
+    if (autoFSdone) return;
+    autoFSdone = true;
+    var el = document.documentElement;
+    if (el.requestFullscreen) el.requestFullscreen().catch(function(){});
+    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+  });
+
   // 叫分阶段
   this.time.delayedCall(800, function () {
     self.startBiddingPhase();
@@ -2536,20 +2546,21 @@ GameScene.prototype.renderRoundEndPanel = function (winner) {
 // 出牌记录区域
 // ================================================================
 function createPlayHistoryArea(scene) {
+  // 紧凑的历史记录：右上角小面板，不遮挡手牌
   var bg = scene.add.graphics();
-  bg.fillStyle(0x000000, 0.25);
-  bg.fillRoundedRect(12, 390, 936, 92, 6).setDepth(200);
+  bg.fillStyle(0x000000, 0.2);
+  bg.fillRoundedRect(800, 60, 150, 140, 6).setDepth(200);
 
-  scene.add.text(20, 400, '最近出牌', {
+  scene.add.text(808, 65, '出牌', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '10px', color: '#81C784'
+    fontSize: '9px', color: '#81C784'
   }).setDepth(201);
 
-  scene.playHistoryText = scene.add.text(20, 406, '', {
+  scene.playHistoryText = scene.add.text(808, 76, '', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '11px', color: '#C8E6C9',
-    lineSpacing: 2,
-    wordWrap: { width: 920 }
+    fontSize: '9px', color: '#C8E6C9',
+    lineSpacing: 3,
+    wordWrap: { width: 135 }
   }).setDepth(201);
 }
 
@@ -2579,7 +2590,8 @@ GameScene.prototype.addPlayHistory = function (player, cardsOrPass) {
 GameScene.prototype.renderPlayHistory = function () {
   if (!this.playHistoryText) return;
   var lines = [];
-  for (var i = 0; i < this.playHistory.length; i++) {
+  var start = Math.max(0, this.playHistory.length - 6);
+  for (var i = start; i < this.playHistory.length; i++) {
     var entry = this.playHistory[i];
     lines.push(entry.text);
   }
