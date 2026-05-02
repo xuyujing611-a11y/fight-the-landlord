@@ -410,35 +410,35 @@ function createTopBar(scene) {
 
   scene.roundText = scene.add.text(12, 18, '第 1/10 回合', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '14px', color: '#E8F5E9', fontStyle: 'bold'
+    fontSize: '18px', color: '#E8F5E9', fontStyle: 'bold'
   }).setDepth(11);
 
   // AI1 (王怼怼) - 居左排版
   var wAvatar = makeAvatarImage(scene, 'avatar_wang', 160, 28, 0x4FC3F7);
   scene.add.text(195, 12, '王怼怼', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '13px', color: '#E8F5E9', fontStyle: 'bold'
+    fontSize: '17px', color: '#E8F5E9', fontStyle: 'bold'
   }).setDepth(11);
   scene.ai1Count = scene.add.text(195, 30, '剩余 17 张', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '11px', color: '#A5D6A7'
-  }).setDepth(11);
+    fontSize: '30px', color: '#A5D6A7'
+  }).setDepth(11).setScale(0.5);
 
   // AI2 (苏甜甜) - 居右排版
   var sAvatar = makeAvatarImage(scene, 'avatar_su', 800, 28, 0xFFB74D);
   scene.add.text(765, 12, '苏甜甜', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '13px', color: '#E8F5E9', fontStyle: 'bold'
+    fontSize: '17px', color: '#E8F5E9', fontStyle: 'bold'
   }).setOrigin(1, 0).setDepth(11);
   scene.ai2Count = scene.add.text(765, 30, '剩余 17 张', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '11px', color: '#A5D6A7'
-  }).setOrigin(1, 0).setDepth(11);
+    fontSize: '30px', color: '#A5D6A7'
+  }).setOrigin(1, 0).setDepth(11).setScale(0.5);
 
   // 中央状态文字
   scene.statusText = scene.add.text(480, 18, '', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '14px', color: '#A5D6A7', fontStyle: 'bold'
+    fontSize: '18px', color: '#A5D6A7', fontStyle: 'bold'
   }).setOrigin(0.5, 0).setDepth(11);
 
   var sep = scene.add.graphics();
@@ -465,31 +465,31 @@ function createPlayArea(scene) {
 
   scene.add.text(cx, 218, '\u51FA\u724C\u533A', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '10px', color: '#66BB6A', alpha: 0.4
-  }).setOrigin(0.5).setDepth(11);
+    fontSize: '28px', color: '#66BB6A', alpha: 0.4
+  }).setOrigin(0.5).setDepth(11).setScale(0.5);
 
   scene.ai1PlayLabel = scene.add.text(182, 65, '\u738B\u603C\u603C\uFF1A', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '10px', color: '#A5D6A7'
-  }).setDepth(11);
+    fontSize: '28px', color: '#A5D6A7'
+  }).setDepth(11).setScale(0.5);
   scene.ai1PlayCardsGraphics = scene.add.graphics().setDepth(11);
 
   scene.ai2PlayLabel = scene.add.text(690, 65, '\u82CF\u751C\u751C\uFF1A', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '10px', color: '#A5D6A7'
-  }).setDepth(11);
+    fontSize: '28px', color: '#A5D6A7'
+  }).setDepth(11).setScale(0.5);
   scene.ai2PlayCardsGraphics = scene.add.graphics().setDepth(11);
 
   scene.myPlayLabel = scene.add.text(cx, 270, '\u4F60\u51FA\uFF1A', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '10px', color: '#A5D6A7'
-  }).setOrigin(0.5).setDepth(11);
+    fontSize: '28px', color: '#A5D6A7'
+  }).setOrigin(0.5).setDepth(11).setScale(0.5);
   scene.myPlayCardsGraphics = scene.add.graphics().setDepth(11);
 
   scene.add.text(460, 60, '\u5E95\u724C: ? ? ?', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '8px', color: '#66BB6A', alpha: 0.4
-  }).setDepth(11);
+    fontSize: '24px', color: '#66BB6A', alpha: 0.4
+  }).setDepth(11).setScale(0.5);
 }
 
 // ================================================================
@@ -501,8 +501,8 @@ function createHandArea(scene) {
   handBg.fillRoundedRect(20, 300, 920, 115, 10).setDepth(10);
   scene.add.text(68, 305, '\u4F60\u7684\u624B\u724C', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '11px', color: '#A5D6A7'
-  }).setDepth(11);
+    fontSize: '22px', color: '#A5D6A7'
+  }).setDepth(11).setScale(0.5);
 }
 
 GameScene.prototype.renderPlayerHand = function () {
@@ -521,13 +521,16 @@ GameScene.prototype.renderPlayerHand = function () {
   this.cardDomElements = [];
   this.handCards = [];
 
-  var n = hand.length, cw = 56, ch = 80;
-  // 手牌轻微重叠10%（约5px），保持牌面可读
-  var overlap = -5;
+  var n = hand.length, cw = 84, ch = 110;
+  // 牌少时重叠多(放大间距)，牌多时自动压缩
+  var overlap;
+  if (n <= 6) overlap = 20;
+  else if (n <= 10) overlap = 10;
+  else overlap = 2;
   var totalW = cw * n + overlap * (n - 1);
   if (totalW > 960) {
     cw = (960 - overlap * (n - 1)) / n;
-    ch = cw * 80 / 56;
+    ch = cw * 110 / 84;
     totalW = 960;
   }
   var startX = Math.floor((960 - totalW) / 2);
@@ -711,8 +714,8 @@ GameScene.prototype.showBiddingUI = function () {
     var label = strength >= 20 ? '\u624B\u724C\u5F88\u5F3A' : (strength >= 14 ? '\u624B\u724C\u4E0D\u9519' : (strength >= 9 ? '\u624B\u724C\u4E00\u822C' : '\u624B\u724C\u8F83\u5F31'));
     var infoText = this.add.text(cx, 260, '\u2605 ' + label + ' (\u5F3A\u5EA6\u5206: ' + strength + ')', {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '10px', color: '#A5D6A7'
-    }).setOrigin(0.5).setDepth(200);
+      fontSize: '20px', color: '#A5D6A7'
+    }).setOrigin(0.5).setDepth(200).setScale(0.5);
     this.biddingUI.push(infoText);
   }
 };
@@ -841,11 +844,11 @@ GameScene.prototype.updateLandlordUI = function() {
   if (this.landlordIndex === 0) {
     this.landlordBadgePlayer = this.add.text(68, 385, '👑 地主', {
       fontFamily: '"PingFang SC",sans-serif',
-      fontSize: '12px', color: '#000000',
+      fontSize: '24px', color: '#000000',
       backgroundColor: '#FFD700',
       padding: {x: 4, y: 2},
       fontStyle: 'bold'
-    }).setDepth(11);
+    }).setDepth(11).setScale(0.5);
   } else if (this.landlordIndex === 1) {
     this.landlordBadgeAi1 = this.add.text(145, 9, '👑', {
       fontSize: '16px'
@@ -919,8 +922,8 @@ GameScene.prototype.showBottomCards = function (cards) {
     // \u6CA1\u6709\u5E95\u724C\u65F6\u663E\u793A\u95EE\u53F7
     this.bottomCardText = this.add.text(480, 72, '\u5E95\u724C: ? ? ?', {
       fontFamily: '\u201CPingFang SC\u201D,\u201CMicrosoft YaHei\u201D,sans-serif',
-      fontSize: '8px', color: '#66BB6A', alpha: 0.4
-    }).setOrigin(0.5).setDepth(20);
+      fontSize: '24px', color: '#66BB6A', alpha: 0.4
+    }).setOrigin(0.5).setDepth(20).setScale(0.5);
     return;
   }
   // B38: \u53D6\u6D88\u663E\u793A\u5E95\u724C\u724C\u80CC\u56FE\u7247\uFF0C\u5E95\u724C\u76F4\u63A5\u878D\u5165\u5730\u4E3B\u624B\u724C
@@ -1470,8 +1473,8 @@ GameScene.prototype._showTypeSelection = function (aiId, aiName) {
 
     var descTxt = self.add.text(-cardW / 2 + 60, -cardH / 2 + 44, t.desc, {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '11px', color: '#888888'
-    });
+      fontSize: '22px', color: '#888888'
+    }).setScale(0.5);
 
     cardGroup.add([cardBg, iconTxt, labelTxt, descTxt]);
     cardGroup.setSize(cardW, cardH);
@@ -1522,15 +1525,15 @@ GameScene.prototype._createChaosOverlay = function (aiId, callback) {
   // 2. 白色题目卡片背景（增加阴影与层次感）
   var cardShadow = self.add.graphics();
   cardShadow.fillStyle(0x000000, 0.4);
-  cardShadow.fillRoundedRect(155, 60, 660, 320, 16).setDepth(300);
+  cardShadow.fillRoundedRect(90, 55, 800, 380, 16).setDepth(300);
   self.chaosElements.push(cardShadow);
 
   var cardBg = self.add.graphics();
   cardBg.fillStyle(0xFFFFFF, 1);
-  cardBg.fillRoundedRect(150, 55, 660, 320, 16);
+  cardBg.fillRoundedRect(85, 50, 800, 380, 16);
   // 内发光 / 主题紫色边框
   cardBg.lineStyle(3, 0x7C4DFF, 0.8);
-  cardBg.strokeRoundedRect(150, 55, 660, 320, 16);
+  cardBg.strokeRoundedRect(85, 50, 800, 380, 16);
   cardBg.setDepth(301);
   self.chaosElements.push(cardBg);
   self.chaosCardBg = cardBg;
@@ -1550,8 +1553,8 @@ GameScene.prototype._createChaosOverlay = function (aiId, callback) {
   // 4. 分数显示（变为胶囊样式）
   var scoreBg = self.add.graphics();
   scoreBg.fillStyle(0xFFD700, 0.2);
-  scoreBg.fillRoundedRect(630, 75, 85, 28, 14).setDepth(302);
-  var scoreText = self.add.text(672, 89, "得分: " + (self.chaosScore || 0), {
+  scoreBg.fillRoundedRect(680, 75, 85, 28, 14).setDepth(302);
+  var scoreText = self.add.text(722, 89, "得分: " + (self.chaosScore || 0), {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '13px',
     color: '#D84315',
@@ -1567,12 +1570,12 @@ GameScene.prototype._createChaosOverlay = function (aiId, callback) {
   // 5. 新版圆形关闭按钮（悬浮在卡片右上角边缘，红底白叉）
   var closeBtnBg = self.add.graphics();
   closeBtnBg.fillStyle(0xFF4757, 1);
-  closeBtnBg.fillCircle(810, 55, 18).setDepth(304);
+  closeBtnBg.fillCircle(875, 50, 18).setDepth(304);
   closeBtnBg.lineStyle(3, 0xFFFFFF, 1);
-  closeBtnBg.strokeCircle(810, 55, 18).setDepth(304);
-  closeBtnBg.setInteractive(new Phaser.Geom.Circle(810, 55, 18), Phaser.Geom.Circle.Contains);
+  closeBtnBg.strokeCircle(875, 50, 18).setDepth(304);
+  closeBtnBg.setInteractive(new Phaser.Geom.Circle(875, 50, 18), Phaser.Geom.Circle.Contains);
   closeBtnBg.on('pointerup', function () { self._destroyChaos(); });
-  var closeBtnText = self.add.text(810, 55, "✖", {
+  var closeBtnText = self.add.text(875, 50, "✖", {
     fontFamily: 'sans-serif',
     fontSize: '18px',
     color: '#FFFFFF',
@@ -1645,13 +1648,14 @@ GameScene.prototype._renderQuestion = function (q, aiId) {
   self._clearQuestionArea();
 
   var typeLabel = q.questionType || q.type || '知识题';
+  console.log('[Chaos] typeLabel:', typeLabel, 'q:', JSON.stringify(q));
   var typeIcon = '🧠';
   if (typeLabel.indexOf('voc') >= 0 || typeLabel.indexOf('word') >= 0) typeIcon = '📚';
   if (typeLabel.indexOf('expr') >= 0) typeIcon = '💬';
   if (typeLabel.indexOf('trivia') >= 0) typeIcon = '💡';
   if (typeLabel.indexOf('life') >= 0) typeIcon = '🏠';
 
-  var tag = self.add.text(220, 97, typeIcon + ' ' + typeLabel, {
+  var tag = self.add.text(170, 97, typeIcon + ' ' + typeLabel, {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '13px', color: '#FF6B35', fontStyle: 'bold'
   }).setDepth(302);
@@ -1663,10 +1667,10 @@ GameScene.prototype._renderQuestion = function (q, aiId) {
     questionText = '场景：' + q.scene + '\n对话：' + (q.dialogue || '');
   }
   if (!questionText) questionText = '【题目解析降级，请直接根据选项推理】';
-  var qText = self.add.text(220, 114, questionText, {
+  var qText = self.add.text(170, 114, questionText, {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '15px', color: '#222222', fontStyle: 'bold',
-    wordWrap: { width: 580, useAdvancedWrap: true }, lineSpacing: 4
+    wordWrap: { width: 720, useAdvancedWrap: true }, lineSpacing: 4
   }).setDepth(302);
   self.chaosElements.push(qText);
 
@@ -1674,10 +1678,10 @@ GameScene.prototype._renderQuestion = function (q, aiId) {
   var optionKeys = ['A', 'B', 'C', 'D'];
   self.chaosQuestionAnswered = false;
 
-  var optH = 76;
-  var optW = 290;
-  var gridX = [175, 480];
-  var gridY = [160, 245];
+  var optH = 85;
+  var optW = 340;
+  var gridX = [130, 470];
+  var gridY = [158, 250];
 
   for (var oi = 0; oi < optionKeys.length; oi++) {
     var ok = optionKeys[oi];
@@ -2643,7 +2647,7 @@ GameScene.prototype._destroyChaos = function () {
 // 功能按钮
 // ================================================================
 function createActionButtons(scene) {
-  var bw = 72, bh = 48, gap = 14;
+  var bw = 108, bh = 68, gap = 14;
   var totalW = bw * 5 + gap * 4;
   var startX = Math.floor((960 - totalW) / 2);
   var btnY = 442;
@@ -2669,7 +2673,7 @@ function createActionButtons(scene) {
 
     var txt = scene.add.text(bx + bw / 2, btnY + bh / 2 - 1, b.label, {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '13px', color: '#FFFFFF', fontStyle: 'bold'
+      fontSize: '20px', color: '#FFFFFF', fontStyle: 'bold'
     }).setOrigin(0.5).setDepth(101);
     scene.actionButtons.push(txt);
 
