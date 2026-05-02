@@ -1703,9 +1703,9 @@ GameScene.prototype._handleChaosTimeout = function (aiId) {
   self.chaosQuestionAnswered = true;
   self._clearQuestionArea();
   // 显示超时反馈
-  var fbIcon = self.add.text(480, 103, '⏰ 超时了！+0', {
+  var fbIcon = self.add.text(480, 103, '⏱ 超时了！AI趁机拿走了你一张牌', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '20px', color: '#FF5252', fontStyle: 'bold'
+    fontSize: '17px', color: '#FF5252', fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(305);
   self.chaosElements.push(fbIcon);
   // 超时 = 答错，直接走答错换牌
