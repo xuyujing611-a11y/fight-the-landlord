@@ -1328,21 +1328,7 @@ GameScene.prototype.displayPlay = function (cards, player) {
     var pkey = getCardImageKey(cards[pi]);
     var pimg = this.add.image(pcx, pos.y, pkey).setDisplaySize(pos.w, pos.h).setDepth(21);
     arr.push(pimg);
-    // 牌面叠加文字
-    var pc = cards[pi];
-    var rankNames = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'];
-    var suitSymbols = { spade:'♠', heart:'♥', club:'♣', diamond:'♦' };
-    var cardLabel = pc.suit === 'joker'
-      ? (Doudizhu.RANK_NAME_MAP[pc.rank] || 'Joker')
-      : (rankNames[pc.rank] || '') + (suitSymbols[pc.suit] || '');
-    var txtOverlay = this.add.text(pcx - pos.w/2 + 2, pos.y - pos.h/2 + 2, cardLabel, {
-      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: (player === 'player' ? '11px' : '9px'),
-      color: '#FFFFFF',
-      stroke: '#000000',
-      strokeThickness: 2
-    }).setOrigin(0, 0).setDepth(22);
-    arr.push(txtOverlay);
+    // 移除旧的牌面叠加文字 — 卡片图片已显示完整牌面，多余文字覆盖导致看不清
   }
 };
 GameScene.prototype.doAction = function () {
