@@ -49,7 +49,7 @@ const PROMPTS = {
         normal: '四级核心 (4000词)，句子12-18词，干扰项有一定混淆',
         hard: '六级核心 (6000词)，句子15-25词，干扰项容易混淆',
         extreme: '六级+考研 (8000+词)，句子20-30词，干扰项极易混淆' };
-      return `请生成一道${difficulty}难度的四六级词汇选择题。\n${labels[difficulty] || labels.normal}\n按指定的JSON格式输出，不要多余文字。`;
+      return `请生成一道${difficulty}难度的四六级词汇选择题。\n${labels[difficulty] || labels.normal}\n按指定的JSON格式输出，不要多余文字。【重要指令】为了保证游戏趣味性，请从极其冷门、罕见或意想不到的角度切入，绝不重复！[随机噪声种子：${Date.now()}_${Math.random()}]`;
     }
   },
 
@@ -80,7 +80,7 @@ const PROMPTS = {
         normal: '日常习语，如 "hit the sack", "under the weather"',
         hard: '隐喻表达，如 "ballpark figure", "the elephant in the room"',
         extreme: '冷门地道，如 "throw someone under the bus"' };
-      return `请生成一道${difficulty}难度的口语表达选择题。\n${desc[difficulty] || desc.normal}\n按指定的JSON格式输出。`;
+      return `请生成一道${difficulty}难度的口语表达选择题。\n${desc[difficulty] || desc.normal}\n按指定的JSON格式输出。【重要指令】为了保证游戏趣味性，请从极其冷门、罕见或意想不到的角度切入，绝不重复！[随机噪声种子：${Date.now()}_${Math.random()}]`;
     }
   },
 
@@ -111,7 +111,7 @@ const PROMPTS = {
         normal: '20-50% 人知道，所有选项都看着像真的',
         hard: '5-20% 人知道，正确答案是最不像真的那个',
         extreme: '<5% 人知道，全是没听过的冷事实' };
-      return `请生成一道${difficulty}难度的冷知识选择题。\n${desc[difficulty] || desc.normal}\n按指定的JSON格式输出。`;
+      return `请生成一道${difficulty}难度的冷知识选择题。\n${desc[difficulty] || desc.normal}\n按指定的JSON格式输出。【重要指令】为了保证游戏趣味性，请从极其冷门、罕见或意想不到的角度切入，绝不重复！[随机噪声种子：${Date.now()}_${Math.random()}]`;
     }
   },
 
@@ -142,7 +142,7 @@ const PROMPTS = {
         normal: '多数人半懂，有一个好像听过的伪选项',
         hard: '生活达人级别，每个选项都有人试过',
         extreme: '颠覆常识，正确答案和大多数人认为的相反' };
-      return `请生成一道${difficulty}难度的生活常识选择题。\n${desc[difficulty] || desc.normal}\n按指定的JSON格式输出。`;
+      return `请生成一道${difficulty}难度的生活常识选择题。\n${desc[difficulty] || desc.normal}\n按指定的JSON格式输出。【重要指令】为了保证游戏趣味性，请从极其冷门、罕见或意想不到的角度切入，绝不重复！[随机噪声种子：${Date.now()}_${Math.random()}]`;
     }
   },
 

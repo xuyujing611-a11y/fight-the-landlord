@@ -1018,26 +1018,10 @@ GameScene.prototype.doPlayerPass = function () {
 };
 
 GameScene.prototype.doHint = function () {
-  var self = this;
   if (this.gameState !== GAME_STATE.PLAYER_TURN) return;
   this.setStatusText('\u8BA1\u7B97\u53EF\u51FA\u724C\u578B...');
-
-  if (this.isAPIMode && typeof ApiClient !== 'undefined') {
-    ApiClient.findPlays(this.playerHand, this.lastPlay)
-      .then(function (res) {
-        if (res.total === 0) {
-          showToast(self, '\u6CA1\u6709\u80FD\u51FA\u7684\u724C');
-          self.setStatusText('\u6CA1\u6709\u80FD\u51FA\u7684\u724C');
-          return;
-        }
-        var hint = res.plays[0];
-        self.highlightHint(hint);
-        self.setStatusText('\u63D0\u793A: ' + hint.typeName + ' (\u5171' + res.total + '\u79CD)');
-      })
-      .catch(function () { self.localHint(); });
-  } else {
-    this.localHint();
-  }
+  // \u6838\u5FC3\u4F18\u5316\uFF1A\u4F7F\u7528 CardEngine \u672C\u5730\u5F15\u64CE\uFF0C\u5B9E\u73B0 0 \u5EF6\u8FDF\u79D2\u51FA\u63D0\u793A
+  this.localHint();
 };
 
 GameScene.prototype.localHint = function () {
@@ -1354,61 +1338,56 @@ GameScene.prototype._showTypeSelection = function (aiId, aiName) {
     var cx = cardX[ti % 2];
     var cy = cardY[Math.floor(ti / 2)];
 
-    var card = self.add.graphics();
-    card.fillStyle(0xF0F4FF, 1);
-    card.fillRoundedRect(cx, cy, cardW, cardH, 10).setDepth(302);
-    card.lineStyle(1.5, 0xCCD8FF, 1);
-    card.strokeRoundedRect(cx, cy, cardW, cardH, 10);
-    card.setInteractive(new Phaser.Geom.Rectangle(cx, cy, cardW, cardH), Phaser.Geom.Rectangle.Contains);
+    // 采用 Container 方案实现中心点完美的呼吸缩放动效
+    var cardGroup = self.add.container(cx + cardW / 2, cy + cardH / 2).setDepth(302);
+    var cardBg = self.add.graphics();
+    cardBg.fillStyle(0xF8FAFF, 1);
+    cardBg.fillRoundedRect(-cardW / 2, -cardH / 2, cardW, cardH, 12);
+    cardBg.lineStyle(1.5, 0xCCD8FF, 1);
+    cardBg.strokeRoundedRect(-cardW / 2, -cardH / 2, cardW, cardH, 12);
 
-    var iconTxt = self.add.text(cx + 12, cy + 12, t.icon, {
-      fontFamily: 'sans-serif', fontSize: '26px'
-    }).setDepth(303);
+    var iconTxt = self.add.text(-cardW / 2 + 16, -cardH / 2 + 16, t.icon, {
+      fontFamily: 'sans-serif', fontSize: '28px'
+    });
 
-    var labelTxt = self.add.text(cx + 58, cy + 14, t.label, {
+    var labelTxt = self.add.text(-cardW / 2 + 60, -cardH / 2 + 18, t.label, {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '14px', color: '#222222', fontStyle: 'bold'
-    }).setDepth(303);
+      fontSize: '15px', color: '#222222', fontStyle: 'bold'
+    });
 
-    var descTxt = self.add.text(cx + 58, cy + 40, t.desc, {
+    var descTxt = self.add.text(-cardW / 2 + 60, -cardH / 2 + 44, t.desc, {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '10px', color: '#888888'
-    }).setDepth(303);
+      fontSize: '11px', color: '#888888'
+    });
 
-    self.chaosElements.push(card, iconTxt, labelTxt, descTxt);
+    cardGroup.add([cardBg, iconTxt, labelTxt, descTxt]);
+    cardGroup.setSize(cardW, cardH);
+    cardGroup.setInteractive();
+    self.chaosElements.push(cardGroup);
 
-    card.setData('typeId', t.id);
-    (function (typeId) {
-      card.on('pointerover', function () {
-        this.clear();
-        this.fillStyle(0xE0EAFF, 1);
-        this.fillRoundedRect(cx, cy, cardW, cardH, 10);
-        this.lineStyle(2, 0x7C4DFF, 1);
-        this.strokeRoundedRect(cx, cy, cardW, cardH, 10);
+    (function (typeId, group, bg) {
+      group.on('pointerover', function () {
+        self.tweens.add({ targets: group, scale: 1.05, duration: 150, ease: 'Power2' });
+        bg.clear().fillStyle(0xE8EEFF, 1).fillRoundedRect(-cardW / 2, -cardH / 2, cardW, cardH, 12)
+          .lineStyle(2, 0x7C4DFF, 1).strokeRoundedRect(-cardW / 2, -cardH / 2, cardW, cardH, 12);
       });
-      card.on('pointerout', function () {
-        this.clear();
-        this.fillStyle(0xF0F4FF, 1);
-        this.fillRoundedRect(cx, cy, cardW, cardH, 10);
-        this.lineStyle(1.5, 0xCCD8FF, 1);
-        this.strokeRoundedRect(cx, cy, cardW, cardH, 10);
+      group.on('pointerout', function () {
+        self.tweens.add({ targets: group, scale: 1.0, duration: 150, ease: 'Power2' });
+        bg.clear().fillStyle(0xF8FAFF, 1).fillRoundedRect(-cardW / 2, -cardH / 2, cardW, cardH, 12)
+          .lineStyle(1.5, 0xCCD8FF, 1).strokeRoundedRect(-cardW / 2, -cardH / 2, cardW, cardH, 12);
       });
-      card.on('pointerdown', function () {
+      group.on('pointerdown', function () {
         if (self.chaosTypeSelection) {
           self.chaosTypeSelection = false;
-          // B34: 选完题型恢复主标题显示
           if (self.chaosTitle) self.chaosTitle.setVisible(true);
-          // 销毁类型选择UI（保留基础元素：遮罩、卡片阴影、卡片背景、标题栏、得分胶囊、分数文字、关闭按钮、关闭文字）
-          // 保留[0..7]: overlay, cardShadow, cardBg, title, scoreBg, scoreText, closeBtnBg, closeBtnText
           for (var di = self.chaosElements.length - 1; di >= 8; di--) {
             if (self.chaosElements[di]) self.chaosElements[di].destroy();
           }
           self.chaosElements = self.chaosElements.slice(0, 8);
-          // 开始出题
           self._showChaosQuestion(aiId, aiName, typeId);
         }
       });
-    })(t.id);
+    })(t.id, cardGroup, cardBg);
   }
 };
 
@@ -2032,7 +2011,7 @@ GameScene.prototype._showSwapUI = function (aiId, fbY) {
       var revealCard = self.add.image(selectedBackPos.x, selectedBackPos.y, getCardImageKey(realAICard))
         .setDisplaySize(backW, backH).setDepth(400);
 
-      var swapMsg = self.add.text(480, 155, '🔄 用[' + pSuit + pRank + ']换了AI的[' + aSuit + aRank + ']', {
+      var swapMsg = self.add.text(480, fbY + 20, '🔄 用[' + pSuit + pRank + ']换了AI的[' + aSuit + aRank + ']', {
         fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
         fontSize: '14px', color: '#4CAF50', fontStyle: 'bold',
         stroke: '#000000', strokeThickness: 2
@@ -2261,12 +2240,11 @@ GameScene.prototype._showPlayBubble = function (aiId, event, context) {
     }).setOrigin(0.5).setDepth(21);
     self.playBubbleElements.push(avatar, avatarTxt);
 
-    // AI 名字
-    var nameX = avatarX;
-    var nameTxt = self.add.text(nameX, y, aiDisplayName, {
+    // AI 名字 - 名字放在头像正下方，不再与气泡顶部对齐
+    var nameTxt = self.add.text(avatarX, avatarY + 30, aiDisplayName, {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '12px', color: '#FFFFFF', fontStyle: 'bold'
-    }).setOrigin(0.5, 0).setDepth(21);
+      fontSize: '11px', color: '#A5D6A7', fontStyle: 'bold'
+    }).setOrigin(0.5, 0);
     self.playBubbleElements.push(nameTxt);
 
     // 气泡高度自适应: 先创建文字获取高度，再用高度绘制气泡
@@ -2288,7 +2266,7 @@ GameScene.prototype._showPlayBubble = function (aiId, event, context) {
 
     // 台词气泡背景（填充+边框分开，炸弹时边框可独立闪烁）
     var bubbleBg = self.add.graphics();
-    bubbleBg.fillStyle(bubbleBgColor, 0.85);
+    bubbleBg.fillStyle(0x000000, 0.8);
     if (cornerRadius > 0) {
       bubbleBg.fillRoundedRect(bubbleX, bubbleY, bubbleW, bubbleH, cornerRadius).setDepth(20);
     } else {
@@ -2308,29 +2286,28 @@ GameScene.prototype._showPlayBubble = function (aiId, event, context) {
 
     // 三角形箭头（怼怼朝左、甜甜朝右）
     var arrow = self.add.graphics();
-    arrow.fillStyle(bubbleBgColor, 0.85);
+    arrow.fillStyle(0x000000, 0.8);
     if (isDuidui) {
       // 左侧箭头指向左边头像
       arrow.fillTriangle(
         bubbleX, bubbleY + bubbleH / 2,
-        bubbleX - 12, bubbleY + bubbleH / 2 - 6,
-        bubbleX - 12, bubbleY + bubbleH / 2 + 6
+        bubbleX - 10, bubbleY + bubbleH / 2 - 6,
+        bubbleX - 10, bubbleY + bubbleH / 2 + 6
       ).setDepth(20);
     } else {
       // 右侧箭头指向右边头像
       arrow.fillTriangle(
         bubbleX + bubbleW, bubbleY + bubbleH / 2,
-        bubbleX + bubbleW + 12, bubbleY + bubbleH / 2 - 6,
-        bubbleX + bubbleW + 12, bubbleY + bubbleH / 2 + 6
+        bubbleX + bubbleW + 10, bubbleY + bubbleH / 2 - 6,
+        bubbleX + bubbleW + 10, bubbleY + bubbleH / 2 + 6
       ).setDepth(20);
     }
     self.playBubbleElements.push(arrow);
     // 文字最后push到底部渲染在上层
     self.playBubbleElements.push(bubbleTxt);
-    SoundManager.speak(line, aiId);
 
     // 弹入动画: Container 包裹所有元素
-    self.playBubbleContainer = self.add.container(0, 0, self.playBubbleElements);
+    self.playBubbleContainer = self.add.container(0, 0, self.playBubbleElements).setDepth(500);
     if (isEmergency) {
       self.playBubbleContainer.setScale(0.7).setAlpha(0);
       self.tweens.add({
