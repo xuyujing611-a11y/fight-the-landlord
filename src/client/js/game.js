@@ -998,7 +998,7 @@ GameScene.prototype.doPlayerPass = function () {
       var selfB1 = this;
       this.setStatusText('\u4E24\u5BB6\u90FD\u8FC7\uFF0C\u8F6E\u5230' + aiName);
       this.gameState = GAME_STATE.WAITING_AI;
-      this.time.delayedCall(500, function () { selfB1.doAITurn(aiIdx); });
+      this.time.delayedCall(800, function () { selfB1.doAITurn(aiIdx); });
     } else {
       this.gameState = GAME_STATE.PLAYER_TURN;
       this.setStatusText('\u4E24\u5BB6\u90FD\u8FC7\uFF0C\u8F6E\u5230\u4F60\u81EA\u7531\u51FA\u724C');
@@ -1007,7 +1007,7 @@ GameScene.prototype.doPlayerPass = function () {
   }
   var self = this;
   this.gameState = GAME_STATE.WAITING_AI;
-  this.time.delayedCall(500, function () { self.doAITurn(1); });
+  this.time.delayedCall(800, function () { self.doAITurn(1); });
 };
 
 GameScene.prototype.doHint = function () {
@@ -1161,7 +1161,7 @@ GameScene.prototype.handleAIPlay = function (aiIndex, aiName, res) {
     // AI1 played, now AI2's turn
     var self = this;
     this.setStatusText(aiName + ' \u51FA\u4E86 ' + (Doudizhu.HAND_TYPE_NAMES[info.type] || info.type) + '\uFF0C\u8F6E\u5230\u82CF\u751C\u751C');
-    this.time.delayedCall(900, function () { self.doAITurn(1); });
+    this.time.delayedCall(1200, function () { self.doAITurn(1); });
   } else {
     this.gameState = GAME_STATE.PLAYER_TURN;
     SoundManager.playerTurn();
@@ -1188,7 +1188,7 @@ GameScene.prototype.handleAIPass = function (aiIndex, aiName) {
       var lastAiName = this.lastPlayPlayer === 'ai1' ? '\u738B\u603C\u603C' : '\u82CF\u751C\u751C';
       this.setStatusText('\u4E24\u5BB6\u90FD\u8FC7\uFF0C\u8F6E\u5230' + lastAiName);
       var selfB1b = this;
-      this.time.delayedCall(800, function () { selfB1b.doAITurn(lastAiIdx); });
+      this.time.delayedCall(1200, function () { selfB1b.doAITurn(lastAiIdx); });
     }
     return;
   }
@@ -1196,7 +1196,7 @@ GameScene.prototype.handleAIPass = function (aiIndex, aiName) {
     // AI1 passed, now AI2's turn
     var self = this;
     this.setStatusText(aiName + ' \u4E0D\u51FA\uFF0C\u8F6E\u5230\u82CF\u751C\u751C');
-    this.time.delayedCall(900, function () { self.doAITurn(1); });
+    this.time.delayedCall(1200, function () { self.doAITurn(1); });
   } else {
     this.gameState = GAME_STATE.PLAYER_TURN;
     this.setStatusText('\u8F6E\u5230\u4F60\u51FA\u724C');
@@ -1244,7 +1244,7 @@ GameScene.prototype.localAIPlay = function (aiIndex, aiName) {
   if (aiIndex === 0) {
     // AI1 played (local), now AI2's turn
     var self = this;
-    this.time.delayedCall(900, function () { self.doAITurn(1); });
+    this.time.delayedCall(1200, function () { self.doAITurn(1); });
   } else {
     this.gameState = GAME_STATE.PLAYER_TURN;
     SoundManager.playerTurn();
