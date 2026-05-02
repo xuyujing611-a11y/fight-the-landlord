@@ -465,18 +465,23 @@ GameScene.prototype.renderPlayerHand = function () {
   this.cardDomElements = [];
   this.handCards = [];
 
-  // B4: 增大手牌尺寸以适配600px画布
+  // A2: 均匀展开不重叠，选中缩放突出
   var n = hand.length, cw = 56, ch = 80;
-  var overlap = n > 6 ? Math.min(33, (700 - cw) / (n - 1)) : 33;
-  var totalWidth = cw + (n - 1) * overlap;
-  var startX = 180 + (700 - totalWidth) / 2;
+  var gap = 4;
+  var totalW = cw * n + gap * (n - 1);
+  var available = 900;
+  if (totalW > available) {
+    cw = (available - gap * (n - 1)) / n;
+    ch = cw * 80 / 56;
+    totalW = available;
+  }
+  var startX = (960 - totalW) / 2;
   var baseY = 345;
 
   for (var ii = 0; ii < n; ii++) {
     var card = hand[ii];
-    var cx = startX + ii * overlap + cw / 2;
-    var arcOffset = Math.pow((ii / (n - 1)) - 0.5, 2) * 36;
-    var cy = baseY - arcOffset;
+    var cx = startX + ii * (cw + gap) + cw / 2;
+    var cy = baseY;
     var key = getCardImageKey(card);
 
     var img = self.add.image(cx, cy, key).setDisplaySize(cw, ch).setDepth(110);
@@ -497,12 +502,14 @@ GameScene.prototype.renderPlayerHand = function () {
       var s = this.getData('selected');
       if (s) {
         this.y += 16;
+        this.setScale(1.0);
         this.setData('selected', false);
         var pos = self.selectedCards.indexOf(idx2);
         if (pos >= 0) self.selectedCards.splice(pos, 1);
         SoundManager.deselectCard();
       } else {
         this.y -= 16;
+        this.setScale(1.15);
         this.setData('selected', true);
         self.selectedCards.push(idx2);
         SoundManager.selectCard();
@@ -522,7 +529,8 @@ GameScene.prototype._clearCardSelection = function () {
     var s = el.getData('selected');
     if (s) {
       var origY = el.getData('origY');
-      if (origY !== undefined) el.y = origY;
+      if (origY !== undefined) { el.y = origY; }
+      if (el.setScale) el.setScale(1.0);
       el.setData('selected', false);
     }
   }
@@ -531,7 +539,8 @@ GameScene.prototype._highlightCard = function (el) {
   if (!el) return;
   el.setData('selected', true);
   var origY = el.getData('origY');
-  if (origY !== undefined) el.y = origY - 16;
+  if (origY !== undefined) { el.y = origY - 16; }
+  if (el.setScale) el.setScale(1.15);
 };
 
 // ================================================================
