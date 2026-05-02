@@ -2131,7 +2131,11 @@ GameScene.prototype._showPlayBubble = function (aiId, event, context) {
   var self = this;
 
   var renderBubble = function (line) {
-    // 清除旧气泡
+    // 直接替换: 杀掉旧气泡和旧定时器
+    if (self.playBubbleTimer) {
+      self.playBubbleTimer.remove();
+      self.playBubbleTimer = null;
+    }
     if (self.playBubbleElements) {
       for (var bi = 0; bi < self.playBubbleElements.length; bi++) {
         if (self.playBubbleElements[bi]) self.playBubbleElements[bi].destroy();
@@ -2215,38 +2219,31 @@ GameScene.prototype._showPlayBubble = function (aiId, event, context) {
     }).setOrigin(0, 0.5).setDepth(21);
     self.playBubbleElements.push(bubbleTxt);
 
-    // 显示时长后自动消失，然后处理下一个队列
+    // 直接替换模式: 定时销毁
     var displayMs = event === 'bomb' ? 5000 : 4000;
-    self.time.delayedCall(displayMs, function () {
+    self.playBubbleTimer = self.time.delayedCall(displayMs, function () {
       if (self.playBubbleElements) {
         for (var i = 0; i < self.playBubbleElements.length; i++) {
           if (self.playBubbleElements[i]) self.playBubbleElements[i].destroy();
         }
         self.playBubbleElements = [];
       }
-      processBubbleQueue();
+      self.playBubbleTimer = null;
     });
   };
 
-  // 构造可入队的渲染任务
-  var queuedTask = function() {
-    if (self.isAPIMode && typeof ApiClient !== 'undefined' && ApiClient.generateDialogue) {
-      ApiClient.generateDialogue(aiId, event, context)
-        .then(function (res) {
-          renderBubble(res.line || pickAiLine(aiId, event));
-        })
-        .catch(function () {
-          renderBubble(pickAiLine(aiId, event));
-        });
-    } else {
-      renderBubble(pickAiLine(aiId, event));
-    }
-  };
-
-  // 入队并尝试处理
-  bubbleQueue.push({ render: queuedTask });
-  if (bubbleQueue.length > BUBBLE_QUEUE_MAX) bubbleQueue.shift();
-  if (!bubbleShowing) processBubbleQueue();
+  // 直接替换: 立即执行，不入队列
+  if (self.isAPIMode && typeof ApiClient !== 'undefined' && ApiClient.generateDialogue) {
+    ApiClient.generateDialogue(aiId, event, context)
+      .then(function (res) {
+        renderBubble(res.line || pickAiLine(aiId, event));
+      })
+      .catch(function () {
+        renderBubble(pickAiLine(aiId, event));
+      });
+  } else {
+    renderBubble(pickAiLine(aiId, event));
+  }
 };
 
 // ================================================================
