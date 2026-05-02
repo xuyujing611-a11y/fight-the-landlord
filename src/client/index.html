@@ -21,8 +21,14 @@
       width: 100%; height: 100%;
       display: flex; align-items: center; justify-content: center;
       background: linear-gradient(135deg, #1B5E20, #2E7D32, #1B5E20);
+      overflow: hidden;
     }
-    #game-container canvas { display: block; }
+    #game-container canvas {
+      display: block;
+      min-width: 100%;
+      min-height: 100%;
+      object-fit: cover;
+    }
 
     /* 加载画面 */
     #loading-screen {
