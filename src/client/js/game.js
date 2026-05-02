@@ -2339,7 +2339,6 @@ GameScene.prototype._showPlayBubble = function (aiId, event, context) {
     self.playBubbleElements.push(arrow);
     // 文字最后push到底部渲染在上层
     self.playBubbleElements.push(bubbleTxt);
-    SoundManager.speak(line, aiId);
 
     // 弹入动画: Container 包裹所有元素
     self.playBubbleContainer = self.add.container(0, 0, self.playBubbleElements).setDepth(500);
