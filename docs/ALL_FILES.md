@@ -1,0 +1,24225 @@
+# 斗地主项目 — 全部文档与源码
+
+> 自动生成 (2026-05-02) | 共 45 文件
+
+---
+
+## `README.md` (19 字节)
+
+```markdown
+# AI斗地主 🃏
+
+```
+
+---
+
+## `TOOLS.md` (2,696 字节)
+
+```markdown
+# TOOLS.md — 开发者工作手册（斗地主项目）
+
+## 🎯 角色说明
+你是 **开发工程师（👨💻 开发老大）**，负责斗地主游戏的代码修改和实现。
+
+---
+
+## 📁 项目信息
+项目根目录：`/home/xu_yujing/openclaw/workspaces/fight-the-landlord`
+
+## 🤖 子Agent（小弟）启动协议
+
+### 三阶段流程
+给小弟派活必须按以下顺序执行，每步都写进 task 参数中：
+
+**阶段1 — 保存记忆**
+要求小弟先读取当前项目状态（git log、代码关键函数），把进度、决策、当前上下文写进自己的 memory 文件中。
+
+**阶段2 — 清空上下文**
+说明之前的上下文结束，现在开始全新工作。
+
+**阶段3 — 派活**
+注入项目上下文 + 具体任务。
+
+### 启动模板
+
+每次 spawn 子Agent 时，task 参数结构必须如下：
+
+```markdown
+== 阶段1: 保存记忆 ==
+请先把以下信息写入一个 memory 文件（如 memory/subagent-任务名.md）：
+- 当前项目的 git 最近5条日志
+- 你即将要改的文件的关键代码区域
+- 你理解的决策和上下文
+
+== 阶段2: 清空上下文 ==
+之前的历史到此结束，现在开始全新的任务。
+
+== 阶段3: 派活 ==
+[项目上下文]
+项目: fight-the-landlord
+框架: Phaser 3 (CDN), 960x600 横屏
+主文件: src/client/js/game.js (~2820行)
+引擎: src/client/js/CardEngine.js
+API: src/client/js/apiClient.js
+牌尺寸: 手牌62x88 Y=420 | 出牌玩家52x75 | AI 42x60
+全屏: 全屏FILL/退出FIT
+设计文档: docs/ (ChaoShiQing-detailed.md, CardSwap.md 等)
+完整上下文: docs/PROJECT_CONTEXT.md
+提交规则: 不提交，通知小虾验收
+
+[具体任务...]
+```
+
+### 记住
+- 小弟干活前必须有清晰的记忆+干净的上下文
+- 小弟干完后不提交，通知我验收
+- 完整项目上下文在 `docs/PROJECT_CONTEXT.md`，启动时让小弟去读
+
+---
+
+## 🚀 启动与调试
+```bash
+cd /home/xu_yujing/openclaw/workspaces/fight-the-landlord
+node --check src/client/js/game.js          # 语法检查
+git diff --stat                              # 看当前改动
+git log --oneline -10                        # 最近提交
+sed -n '100,200p' src/client/js/game.js     # 看具体行
+grep -n '函数名' src/client/js/game.js      # 搜函数
+```
+
+## 📖 设计文档
+| 文档 | 内容 |
+|------|------|
+| docs/ChaoShiQing-detailed.md | ⭐ 搞事情系统完整设计 |
+| docs/CardSwap.md | 交换牌逻辑 |
+| docs/ChaoShiQing.md | 搞事情概览 |
+| docs/PRD-赢牌反馈+AI气泡系统-v1.md | 赢牌结算+气泡 |
+| docs/PROJECT_CONTEXT.md | ⭐ 子Agent完整上下文 |
+
+## 📏 提交规则
+修完在群里告知小虾，由小虾 commit + push，不自己提交。
+
+```
+
+---
+
+## `docs/AIBubble-detailed.md` (25,796 字节)
+
+```markdown
+# AI 气泡系统 (AIBubble) — 功能完整设计文档
+
+**版本:** v3.0 (升级版)  
+**作者:** 产品经理  
+**日期:** 2026-05-02  
+**基准画布:** 960×600 横屏 (Phaser 3 Scale.FIT)  
+**对应源码:** `src/client/js/game.js` (2897行)  
+
+---
+
+> **本文档升级说明**  
+> 相比之前的代码说明书，本文档采用 v2 标准：  
+> ✅ 保留精确坐标/颜色/深度等代码参数  
+> ✅ 覆盖所有交互流程（用户视角）  
+> ✅ 标注代码已实现 vs 未实现的功能  
+> ✅ 未实现项提供详细"应该怎么做"的实现方案  
+> ✅ 边界情况穷举  
+> ✅ 开发可按文档直接写代码
+
+---
+
+## 1. 用户视角功能描述
+
+### 1.1 气泡系统整体行为
+
+AI 气泡是斗地主游戏中的**角色对话系统**，在游戏过程中自动弹出 AI 角色的台词泡泡，模拟真人玩家之间的即时互动。
+
+**用户预期：**
+
+| 场景 | 用户会看到什么 | 为什么重要 |
+|:-----|:---------------|:-----------|
+| AI 出牌时 | AI 头像旁边弹出一句台词（如"顺子！让你一手"） | 让游戏有人情味，不机械 |
+| AI 过牌时 | 气泡弹出"这轮我让让你" | 解释 AI 策略 |
+| AI 出炸弹时 | 红色气泡放大弹入，闪烁边框，"核弹级题目！" | 强调关键时刻 |
+| 搞事情答对 | 白色卡片内气泡弹出"蒙对的吧？" | 强化角色性格 |
+| 搞事情答错 | 白色卡片内气泡弹出"哈哈果然不出所料" | 角色互动感 |
+| 两个AI连续出牌 | 气泡快速切换，不重叠不卡顿 | 不影响游戏节奏 |
+
+### 1.2 核心交互流程
+
+```
+游戏进行中
+  │
+  ├─ AI1 王怼怼出牌
+  │   └─ 头像旁弹出气泡 → 显示4秒 → 自动消失
+  │       (如果1秒内AI2也出牌 → 气泡立即切换)
+  │
+  ├─ AI2 苏甜甜出牌
+  │   └─ 头像旁弹出气泡 → 显示4秒 → 自动消失
+  │
+  ├─ AI 出炸弹/火箭
+  │   └─ 紧急气泡 → 红色背景 → 边框闪烁 → 5秒停留
+  │
+  ├─ 玩家点击"搞事情"
+  │   └─ 白色卡片内弹出气泡 → 3.5秒消失
+  │
+  └─ 搞事情答题后
+      └─ 白色卡片内弹出气泡 → 显示3.5秒 → 自动消失
+```
+
+---
+
+## 2. 气泡类型与触发规则
+
+### 2.1 两套气泡系统
+
+| 特性 | 出牌气泡 (_showPlayBubble) | 搞事情气泡 (_showAiBubble) |
+|:-----|:-------------------------:|:-------------------------:|
+| 触发场景 | AI出牌/过牌/炸弹 | 搞事情模式(进入/答对/答错/关闭) |
+| 显示位置 | 出牌区上方 (Y=55) | 白色卡片内部 (y动态) |
+| 气泡颜色 | 王怼怼:深绿/苏甜甜:深紫 | 统一深绿(#1B5E20) |
+| 最大宽度 | 280px | 540px |
+| 停留时间 | 4s (普通) / 5s (炸弹) | 3.5s |
+| 队列系统 | 共享 `bubbleQueue` | 共享 `bubbleQueue` |
+| 头像位置 | 王怼怼:左(80) / 苏甜甜:右(880) | 统一左侧(80) |
+| 箭头方向 | 王怼怼:左 / 苏甜甜:右 | 统一左 |
+
+### 2.2 触发规则全表
+
+| 事件 | 调用函数 | event参数 | bubble类型 | 当前状态 |
+|:-----|:---------|:---------:|:----------:|:--------:|
+| AI1 普通出牌 | `_showPlayBubble('duidui', 'play', type)` | `play` | 出牌气泡 | ✅ 已实现 |
+| AI1 出炸弹/火箭 | `_showPlayBubble('duidui', 'bomb', type)` | `bomb` | 出牌气泡(需紧急样式) | ⚠️ 已实现但缺样式 |
+| AI1 过牌 | `_showPlayBubble('duidui', 'pass', '')` | `pass` | 出牌气泡 | ✅ 已实现 |
+| AI2 普通出牌 | `_showPlayBubble('tiantian', 'play', type)` | `play` | 出牌气泡 | ✅ 已实现 |
+| AI2 过牌 | `_showPlayBubble('tiantian', 'pass', '')` | `pass` | 出牌气泡 | ✅ 已实现 |
+| 进入搞事情 | `_showAiBubble(aiId, 'easy', 180)` | `easy` | 搞事情气泡 | ✅ 已实现 |
+| 答对题目 | `_showAiBubble(aiId, 'correct', fbY+10)` | `correct` | 搞事情气泡 | ✅ 已实现 |
+| 答错题目 | `_showAiBubble(aiId, 'wrong', fbY+10)` | `wrong` | 搞事情气泡 | ✅ 已实现 |
+| 关闭搞事情 | `_showAiBubble(aiId, 'close', fbY)` | `close` | 搞事情气泡 | ❌ 未实现(代码不触发) |
+
+### 2.3 需补充的触发事件
+
+**当前代码未实现的触发:**
+
+1. **关闭搞事情时的气泡** — `_destroyChaos()` 中未调用 `_showAiBubble`，玩家关掉搞事情时没有告别台词。  
+   **修复方案:** 在 `_destroyChaos()` 末尾 `setStatusText` 前插入：
+   ```javascript
+   self._showAiBubble(aiId, 'close', 180);
+   // 注意: 需要_showAiBubble能独立于chaosElements渲染，或把气泡放在临时层
+   ```
+
+2. **玩家出牌后的气泡** — 玩家出牌时 AI 没有反应气泡。  
+   **建议方案:** 玩家出牌后，随机一个 AI 弹出评价气泡（如"出得不错嘛"）。在 `confirmPlay()` 末尾加：
+   ```javascript
+   // 50%概率弹气泡评价玩家出牌
+   if (Math.random() < 0.5) {
+     var reactAiId = Math.random() < 0.5 ? 'duidui' : 'tiantian';
+     self._showPlayBubble(reactAiId, 'react', info.type);
+   }
+   ```
+   需要在 `AI_LINES` 中新增 `react` 台词池。
+
+3. **玩家赢牌时的AI认输气泡** — 结算面板弹出前，AI 弹一句认输/祝贺台词。  
+   **建议方案:** 在 `renderRoundEndPanel` 之前加：
+   ```javascript
+   // 先弹气泡再弹结算面板
+   var loserAi = isPlayerWin ? (Math.random()<0.5?'duidui':'tiantian') : 'player';
+   self._showPlayBubble(loserAi, isPlayerWin ? 'lose' : 'win', '');
+   self.time.delayedCall(2500, function() {
+     self.renderRoundEndPanel(winner);
+   });
+   ```
+
+---
+
+## 3. 布局与精确坐标
+
+### 3.1 出牌气泡 — 当前代码实际值
+
+| 元素 | 王怼怼 (duidui) | 苏甜甜 (tiantian) |
+|:-----|:---------------:|:-----------------:|
+| Y基准 | 55 | 55 |
+| 头像圆心 | (80, 71) | (880, 71) |
+| 头像半径 | 22 | 22 |
+| 头像底色 | `#4FC3F7` (0x4FC3F7) | `#FFB74D` (0xFFB74D) |
+| 外框 | 2px 白 0.6 | 2px 白 0.6 |
+| 名字X | 105 | 685 (bubbleX - 5, origin=1,0) |
+| 名字Y | 51 | 51 |
+| 气泡X | **90** | **690** |
+| 气泡Y | 65 | 65 |
+| 气泡W | min(280, 140+lineLen×10) | 同左 |
+| 气泡H | **36px 固定** | 同左 |
+| 气泡圆角 | **12** | **4** |
+| 气泡背景 | `#1B5E20` 0.85 | `#311B92` 0.85 |
+| 气泡边框 | `#66BB6A` 1.5px 0.5 | `#CE93D8` 1.5px 0.5 |
+| 箭头方向 | 向左 (指向头像) | 向右 (指向头像) |
+| 文字X | bubbleX + 14 | bubbleX + 10 |
+| 文字Y | bubbleY + 18 (居中) | 同左 |
+| 文字大小 | 14px | 14px |
+| depth(头像) | 20 | 20 |
+| depth(文字) | 21 | 21 |
+
+### 3.2 出牌气泡 — 期望行为
+
+**⚠️ 当前代码问题：**
+1. Y=55 太靠上，会与顶部状态栏重叠。期望 Y=96（状态栏下方）
+2. 气泡高度固定 36px，长文本会溢出。期望自适应高度
+3. 王怼怼气泡X=90，紧贴头像右侧。期望 X=100 留一点间距
+4. 苏甜甜气泡X=690 是写死的，但气泡宽度会变化，导致离头像太远或太近。期望动态计算
+
+**修复方案（修改 _showPlayBubble）：**
+
+```javascript
+var isDuidui = (aiId === 'duidui');
+var y = 96;  // 原55改为96，出牌区上方空隙
+
+// 苏甜甜气泡X动态计算
+var bubbleX = isDuidui ? 110 : (avatarX - bubbleW - 30);
+// 王怼怼气泡从头像右侧开始，苏甜甜气泡左侧对齐头像
+```
+
+### 3.3 搞事情气泡 — 当前代码实际值
+
+| 元素 | 值 |
+|:-----|:----|
+| 头像X | **80** 固定 (始终左侧) |
+| 头像Y | `y + 16` (y由调用者传入) |
+| 头像半径 | 22 |
+| 名字X | **105** |
+| 名字Y | `y - 4` |
+| 气泡X | **230** 固定 |
+| 气泡Y | `y + 10` |
+| 气泡W | min(540, 200 + lineLen×10) |
+| 气泡H | **36px 固定** |
+| 气泡圆角 | **12** |
+| 气泡背景 | `#1B5E20` 0.85 |
+| 气泡边框 | `#66BB6A` 1.5px 0.5 |
+| 箭头 | 统一左 (指向左侧头像) |
+| 文字X | bubbleX + 14 |
+| 文字大小 | 14px |
+| depth | 302-303 |
+
+### 3.4 搞事情气泡 — 期望行为
+
+**⚠️ 当前代码问题：**
+1. 气泡高度固定 36px，文字长时会溢出
+2. 宽度计算 `200 + lineLen×10` 可能超出白色卡片 (最大540但卡片宽660)
+
+**修复方案：**
+```javascript
+// _showAiBubble 中的宽度动态计算
+var maxBubbleW = 540;
+var bubbleW = Math.min(maxBubbleW, 200 + line.length * 10);
+
+// 气泡高度自适应
+var textObj = self.add.text(x, y, line, {
+  fontSize: '14px', wordWrap: { width: bubbleW - 28 }
+}).setOrigin(0, 0.5);
+var textBounds = textObj.getBounds();
+var bubbleH = Math.max(36, textBounds.height + 20);  // +20 padding
+```
+
+---
+
+## 4. 视觉规范 — 当前代码 vs 期望
+
+### 4.1 出牌气泡颜色对比
+
+| 属性 | 王怼怼(当前) | 王怼怼(期望) | 苏甜甜(当前) | 苏甜甜(期望) |
+|:-----|:-----------:|:-----------:|:-----------:|:-----------:|
+| 头像底色 | `#4FC3F7` | 不变 | `#FFB74D` | 不变 |
+| 气泡背景 | `#1B5E20` 0.85 | 不变 | `#311B92` 0.85 | 不变 |
+| 气泡边框 | `#66BB6A` 0.5 | 不变 | `#CE93D8` 0.5 | 不变 |
+| 圆角 | 12 | 12 | 4 | 4 |
+| 箭头方向 | 左 | 左 | 右 | 右 |
+| 文字颜色 | `#FFFFFF` | `#E8F0FF` | `#FFFFFF` | `#E8F0FF` |
+
+### 4.2 炸弹紧急样式 — 需新增
+
+**当前代码在炸弹时仅停留时间不同(5s)，没有视觉区分。需要增加：**
+
+```javascript
+// _showPlayBubble 中 event === 'bomb' 时:
+var isEmergency = (event === 'bomb');
+
+// 1. 使用紧急背景色
+var bubbleBgColor = isEmergency ? 0x500A00 : (isDuidui ? 0x1B5E20 : 0x311B92);
+
+// 2. 使用紧急边框(更粗更亮)
+var bubbleBorderColor = isEmergency ? 0xFF5252 : (isDuidui ? 0x66BB6A : 0xCE93D8);
+var borderWidth = isEmergency ? 2 : 1.5;
+
+// 3. 文字加粗+加阴影
+var textStyle = isEmergency ? {
+  fontSize: '16px', color: '#FFCDD2', fontStyle: 'bold',
+  shadow: { blur: 10, color: '#FF5252', fill: true }
+} : {
+  fontSize: '14px', color: '#FFFFFF'
+};
+
+// 4. 边框闪烁
+if (isEmergency) {
+  self.tweens.add({
+    targets: bubble,
+    alpha: { from: 0.3, to: 0.9 },
+    duration: 400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut'
+  });
+}
+
+// 5. 弹入动画更夸张
+if (isEmergency) {
+  container.setScale(0.7).setAlpha(0);
+  scene.tweens.add({
+    targets: container,
+    scale: 1.1, alpha: 1, duration: 100, ease: 'Back.easeOut',
+    onComplete: function() {
+      scene.tweens.add({ targets: container, scale: 1.0, duration: 80, ease: 'Sine.easeOut' });
+    }
+  });
+}
+```
+
+### 4.3 搞事情气泡风格
+
+搞事情气泡统一使用绿色调，不区分角色颜色（与出牌气泡区分开），视觉上更统一。
+
+---
+
+## 5. 动画系统 — 当前 vs 期望
+
+### 5.1 当前状态
+
+| 动画 | 当前代码 | 问题 |
+|:-----|:---------|:-----|
+| 气泡出现 | **无动画** — 即时 create/add | 看起来生硬 |
+| 气泡消失 | **无动画** — 即时 destroy | 缺少过渡 |
+| 炸弹特效 | **无** — 仅停留时间不同 | 炸弹没有视觉强调 |
+| 气泡切换 | FIFO队列 | 快速出牌时气泡堆积 |
+
+### 5.2 期望行为
+
+```
+气泡出现:
+  container.setScale(0.8).setAlpha(0)
+  → tween: scale 1.0, alpha 1.0, 150ms, Back.easeOut
+
+气泡消失 (正常计时到):
+  → tween: alpha 0, 200ms, Linear
+  → onComplete: destroy + processBubbleQueue
+
+炸弹出现:
+  container.setScale(0.7).setAlpha(0)
+  → tween: scale 1.1, alpha 1.0, 100ms, Back.easeOut
+  → tween: scale 1.0, 80ms, Sine.easeOut
+  → 边框闪烁: alpha 0.3↔0.9, 400ms, yoyo, repeat:-1
+
+气泡切换 (快速连续):
+  旧气泡 → 立即 destroy (无退出动画)
+  新气泡 → 正常弹入动画
+```
+
+### 5.3 实现方案
+
+**替换队列系统为直接替换模式：**
+
+```javascript
+// 去掉全局 bubbleQueue 和 processBubbleQueue
+// 改为单槽位模式
+
+var currentBubble = null;        // 当前显示的气泡容器(Container)
+var currentBubbleTimer = null;   // 当前气泡的定时器
+
+function showBubble(bubbleContainer, displayMs, isEmergency) {
+  // 1. 如果有气泡在显示 → 立即销毁（不给退出动画）
+  if (currentBubble) {
+    if (currentBubbleTimer) {
+      currentBubbleTimer.remove();
+      currentBubbleTimer = null;
+    }
+    destroyBubbleContainer(currentBubble);  // 即时 destroy
+    currentBubble = null;
+  }
+
+  // 2. 显示新气泡
+  currentBubble = bubbleContainer;
+
+  // 3. 弹入动画
+  bubbleContainer.setScale(isEmergency ? 0.7 : 0.8).setAlpha(0);
+  if (isEmergency) {
+    // 炸弹: 0.7→1.1→1.0
+    scene.tweens.add({
+      targets: bubbleContainer,
+      scale: 1.1, alpha: 1, duration: 100, ease: 'Back.easeOut',
+      onComplete: function() {
+        scene.tweens.add({ targets: bubbleContainer, scale: 1.0, duration: 80, ease: 'Sine.easeOut' });
+      }
+    });
+  } else {
+    // 普通: 0.8→1.0
+    scene.tweens.add({
+      targets: bubbleContainer,
+      scale: 1.0, alpha: 1, duration: 150, ease: 'Back.easeOut'
+    });
+  }
+
+  // 4. 计时后退出动画
+  currentBubbleTimer = scene.time.delayedCall(displayMs, function() {
+    scene.tweens.add({
+      targets: bubbleContainer,
+      alpha: 0, duration: 200, ease: 'Linear',
+      onComplete: function() {
+        destroyBubbleContainer(bubbleContainer);
+        currentBubble = null;
+        currentBubbleTimer = null;
+      }
+    });
+  });
+}
+```
+
+---
+
+## 6. 台词系统
+
+### 6.1 当前结构
+
+```javascript
+var AI_LINES = {
+  duidui: {
+    play: [...], pass: [...], bomb: [...],
+    easy: [...], hard: [...], win: [...], lose: [...],
+    correct: [...], wrong: [...], close: [...]
+  },
+  tiantian: {
+    play: [...], pass: [...], bomb: [...],
+    easy: [...], hard: [...], win: [...], lose: [...],
+    correct: [...], wrong: [...], close: [...]
+  }
+};
+```
+
+### 6.2 台词选取函数
+
+```javascript
+function getRandomLine(pool) {
+  if (!pool || pool.length === 0) return '...';
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+function pickAiLine(aiId, sceneKey) {
+  var ai = AI_LINES[aiId];
+  if (!ai) return '...';
+  var pool = ai[sceneKey];
+  return getRandomLine(pool);
+}
+```
+
+### 6.3 行为判定
+
+| sceneKey | 针对角色 | 示例台词(王怼怼) | 示例台词(苏甜甜) |
+|:---------|:--------:|:-----------------|:-----------------|
+| `play` | AI出牌 | "送分题，给人类的怜悯" | "这道题送你啦！不客气" |
+| `pass` | AI过牌 | "这轮我让你" | "这轮我让着你" |
+| `bomb` | AI炸弹 | "核弹级题目！" | "BOMBSHELL！" |
+| `easy` | 搞事情-简单 | "我幼儿园数据就有" | "简单得不好意思出" |
+| `hard` | 搞事情-难题 | "你CPU该升级了" | "超超超难题！" |
+| `correct` | 答对 | "哼，蒙对的吧？" | "哇塞！你真的会！" |
+| `wrong` | 答错 | "哈哈哈哈哈！" | "啊啊啊错了！" |
+| `close` | 关闭搞事情 | "行吧，回来打牌" | "回来打牌啦！哈哈" |
+
+### 6.4 需要扩充的场景
+
+| 新场景 | 触发时机 | 优先级 |
+|:-------|:---------|:------|
+| `react` | 玩家出牌后AI随机评价 | P1 |
+| `win` | AI胜出时 | P2 |
+| `lose` | AI输掉时 | P2 |
+| `start` | 游戏开始 | P3 |
+
+### 6.5 API 动态台词
+
+当前代码在第一轮调用 API 获取台词，失败时回退本地池。需要保持此能力：
+
+```javascript
+if (self.isAPIMode && typeof ApiClient !== 'undefined' && ApiClient.generateDialogue) {
+  ApiClient.generateDialogue(aiId, event, context)
+    .then(function (res) {
+      renderBubble(res.line || pickAiLine(aiId, event));
+    })
+    .catch(function () {
+      renderBubble(pickAiLine(aiId, event));
+    });
+} else {
+  renderBubble(pickAiLine(aiId, event));
+}
+```
+
+---
+
+## 7. 队列系统 — 当前 vs 期望
+
+### 7.1 当前实现 (FIFO队列)
+
+```javascript
+var bubbleQueue = [];
+var BUBBLE_QUEUE_MAX = 3;
+var bubbleShowing = false;
+
+function processBubbleQueue() {
+  if (bubbleQueue.length === 0) { bubbleShowing = false; return; }
+  bubbleShowing = true;
+  var item = bubbleQueue.shift();
+  item.render();
+  // render 内部计时结束后调用 processBubbleQueue
+}
+```
+
+**问题:** FIFO 队列不适合快速出牌场景。AI1 出牌 → 气泡显示4秒 → 1秒后 AI2 出牌 → 新气泡入队等待 → AI1 气泡消失后才显示 AI2 气泡。
+
+### 7.2 期望行为 (直接替换)
+
+```
+T=0ms:    AI1出牌 → 显示气泡A(4s)
+T=500ms:  AI2过牌 → 气泡A立即销毁 → 显示气泡B(4s)
+T=4500ms: 气泡B结束 → 无新气泡 → 清除
+```
+
+### 7.3 实现方案
+
+```javascript
+var currentPlayBubble = null;      // 当前出牌气泡元素数组
+var currentPlayBubbleTimer = null; // 当前气泡定时器
+
+function killPlayBubble() {
+  if (currentPlayBubbleTimer) {
+    currentPlayBubbleTimer.remove();
+    currentPlayBubbleTimer = null;
+  }
+  if (currentPlayBubble) {
+    for (var i = 0; i < currentPlayBubble.length; i++) {
+      if (currentPlayBubble[i]) currentPlayBubble[i].destroy();
+    }
+    currentPlayBubble = null;
+  }
+}
+
+// 在 _showPlayBubble 开头调用 killPlayBubble()
+// 代替原有的 push + processBubbleQueue
+```
+
+**影响:** 此改动会去掉 bubbleQueue / processBubbleQueue 在出牌气泡中的使用，搞事情气泡需独立管理。
+
+---
+
+## 8. 搞事情气泡独立管理
+
+### 8.1 管理方式
+
+搞事情气泡使用独立的 `chaosBubbleElements` 数组，不与出牌气泡共享队列。
+
+**优势：**
+- 搞事情模式下出牌气泡不会触发（`gameState = CHAOS_MODE`）
+- 两套系统互不干扰
+- 搞事情气泡在白色卡片内（depth 302+），出牌气泡在出牌区（depth 20-21）
+
+### 8.2 清理时机
+
+| 操作 | 清理函数 | 清理内容 |
+|:-----|:---------|:---------|
+| 出题前 | `_clearQuestionArea()` | 销毁索引≥5的 chaosElements + 气泡 |
+| 关闭搞事情 | `_destroyChaos()` | 销毁所有 chaosElements + 气泡 |
+| 新气泡进入 | `_showAiBubble()` 开头 | 销毁旧 chaoseBubbleElements |
+
+### 8.3 不需要改
+
+搞事情气泡已经使用独立的元素数组，**不需要**接入气泡队列系统。
+
+---
+
+## 9. 边界情况全表
+
+### 9.1 快速连续
+
+| 场景 | 处理方式 | 实现状态 |
+|:-----|:---------|:--------:|
+| AI1 出牌 → 0.5s后 AI2 过牌 | 旧气泡立即销毁+新气泡弹入 | ❌ 需改为直接替换 |
+| AI1 出炸弹 → 0.3s后 AI2 出牌 | 炸弹气泡被替换（不展示紧急样式） | ❌ 需改为直接替换 |
+| 两个AI同时出牌 | 不会同时，时间线串行 | ✅ 已由setTimeout串行 |
+| 玩家搞事情中AI出牌 | 搞事情模式下AI不出牌 | ✅ gameState锁 |
+
+### 9.2 长文字
+
+| 场景 | 当前行为 | 期望行为 |
+|:-----|:---------|:---------|
+| 台词超过280px | 文字宽度被截断(无wordWrap) | wordWrap + 气泡高度自适应 |
+| 台词超过540px | 同上 | wordWrap + 最大气泡宽+自适应高 |
+| 多行文字 | 36px固定高度=文字溢出 | 气泡高度=行数×行高+padding |
+
+### 9.3 多局游戏
+
+| 场景 | 处理 | 状态 |
+|:-----|:------|:-----|
+| scene.restart() | 气泡队列重置(bubbleQueue=[]) | ✅ 代码有 `init()` 中重置 |
+| 搞事情气泡残留 | _destroyChaos销毁所有 | ✅ 已实现 |
+| 出牌气泡残留 | _showPlayBubble开头清理 | ✅ 已实现 |
+
+### 9.4 API异常
+
+| 场景 | 处理 | 状态 |
+|:-----|:------|:-----|
+| generateDialogue API失败 | catch → pickAiLine(本地池) | ✅ 已实现 |
+| generateDialogue API超时 | catch → 同上 | ✅ 已实现 |
+| ApiClient未定义 | isAPIMode检查→跳过API | ✅ 已实现 |
+| API返回空行 | `res.line \|\| pickAiLine(...)` 兜底 | ✅ 已实现 |
+
+---
+
+## 10. 代码实现清单
+
+### 10.1 需要修改的文件
+
+**文件: `src/client/js/game.js`**
+
+| 修改项 | 改动位置 | 优先级 | 工作量 |
+|:-------|:---------|:------:|:------:|
+| 1. Y坐标从55改为96 | `_showPlayBubble` | P0 | 1行 |
+| 2. 苏甜甜气泡X动态计算 | `_showPlayBubble` | P0 | 3行 |
+| 3. 直接替换模式替代FIFO队列 | `_showPlayBubble` 开头 + 删除queue相关 | P0 | ~20行 |
+| 4. 气泡弹入动画 (scale+alpha) | `_showPlayBubble` + `_showAiBubble` | P0 | ~15行/函数 |
+| 5. 气泡退出动画 (alpha fade) | 两个函数 | P0 | ~10行/函数 |
+| 6. 炸弹紧急样式 | `_showPlayBubble` event判断 | P0 | ~30行 |
+| 7. 关闭搞事情时弹出告别气泡 | `_destroyChaos()` | P1 | 3行 |
+| 8. 气泡高度自适应 | 两个函数 | P1 | ~20行/函数 |
+| 9. 王怼怼气泡X留间距90→110 | `_showPlayBubble` | P1 | 1行 |
+| 10. 玩家出牌后AI反应气泡 | `confirmPlay()` | P2 | ~10行 |
+| 11. 补充新台词池(react/win/lose) | `AI_LINES` | P2 | ~30行 |
+
+### 10.2 不需要改的地方
+
+| 项目 | 原因 |
+|:-----|:------|
+| 搞事情气泡的清理逻辑 | 已使用独立chaosElements，正确 |
+| _createChaosOverlay 中的气泡 | 正确触发 easy 气泡 |
+| _handleOptionClick 中的气泡 | 正确触发 correct/wrong |
+| 台词选取函数 pickAiLine | 随机选取逻辑正确 |
+
+---
+
+## 11. 验收标准
+
+### 11.1 基础功能
+
+| # | 验收条件 | 预期表现 | 优先级 |
+|:-:|----------|---------|:------:|
+| B1 | AI出牌时弹出气泡 | 头像旁显示台词，4秒后消失 | P0 |
+| B2 | AI过牌时弹出气泡 | 显示 pass 池台词，4秒后消失 | P0 |
+| B3 | AI出炸弹时弹出紧急气泡 | 红色背景+边框闪烁+文字加粗+5秒 | P0 |
+| B4 | 搞事情进入时弹出气泡 | 白色卡片内显示 easy 台词，3.5秒 | P0 |
+| B5 | 搞事情答对答错弹出气泡 | correct/wrong 台词，3.5秒 | P0 |
+| B6 | 王怼怼气泡在左侧，箭头向左 | 头像在(80,71)，气泡在114 | P0 |
+| B7 | 苏甜甜气泡在右侧，箭头向右 | 头像在(880,71)，气泡动态 | P0 |
+| B8 | 气泡有弹入动画 (150ms, Back.easeOut) | scale 0.8→1.0 | P0 |
+| B9 | 气泡有退出动画 (200ms, alpha fade) | alpha 1→0 | P0 |
+
+### 11.2 替换与队列
+
+| # | 验收条件 | 预期表现 | 优先级 |
+|:-:|----------|---------|:------:|
+| Q1 | 快速触发两个气泡 | 旧气泡立即销毁，新气泡弹入 | P0 |
+| Q2 | 替换时旧气泡无退出动画 | 即时 destroy | P0 |
+| Q3 | 替换时新气泡有弹入动画 | scale 0.8→1.0 | P0 |
+| Q4 | 无新气泡时正常退出动画 | alpha fade 200ms | P0 |
+
+### 11.3 视觉
+
+| # | 验收条件 | 预期表现 | 优先级 |
+|:-:|----------|---------|:------:|
+| V1 | 气泡背景色正确 | 王怼怼#1B5E20, 苏甜甜#311B92 | P0 |
+| V2 | 气泡圆角正确 | 王怼怼12, 苏甜甜4 | P0 |
+| V3 | 炸弹气泡红色调 | bg #500A00, border #FF5252 | P0 |
+| V4 | 炸弹边框闪烁 | alpha 0.3↔0.9, 400ms, yoyo | P0 |
+| V5 | 长文字不溢出 | wordWrap + 气泡高度自适应 | P0 |
+
+### 11.4 边界
+
+| # | 验收条件 | 预期表现 | 优先级 |
+|:-:|----------|---------|:------:|
+| E1 | API失败回退本地台词 | 显示本地池台词 | P0 |
+| E2 | close场景触发告别气泡 | 关闭搞事情时弹close台词 | P1 |
+| E3 | 多局游戏气泡重置 | scene.restart()后气泡queue清空 | P0 |
+| E4 | 搞事情中不出出牌气泡 | gameState检查 | P0 |
+
+---
+
+## 12. 完整代码建议 (_showPlayBubble 重写)
+
+以下是 `_showPlayBubble` 期望实现的完整代码框架（可直接替换原函数）：
+
+```javascript
+GameScene.prototype._showPlayBubble = function (aiId, event, context) {
+  var self = this;
+
+  // 直接替换: 杀掉旧气泡
+  if (self.playBubbleElements) {
+    for (var bi = 0; bi < self.playBubbleElements.length; bi++) {
+      if (self.playBubbleElements[bi]) self.playBubbleElements[bi].destroy();
+    }
+  }
+  self.playBubbleElements = [];
+  if (self.playBubbleTimer) {
+    self.playBubbleTimer.remove();
+    self.playBubbleTimer = null;
+  }
+
+  // 获取台词
+  var line;
+  if (self.isAPIMode && typeof ApiClient !== 'undefined' && ApiClient.generateDialogue) {
+    try {
+      var res = await ApiClient.generateDialogue(aiId, event, context);
+      line = res.line || pickAiLine(aiId, event);
+    } catch (e) {
+      line = pickAiLine(aiId, event);
+    }
+  } else {
+    line = pickAiLine(aiId, event);
+  }
+
+  // 布局参数
+  var isDuidui = (aiId === 'duidui');
+  var isEmergency = (event === 'bomb');
+  var y = 96;  // 升级: 从55改为96
+  var aiDisplayName = isDuidui ? '王怼怼' : '苏甜甜';
+  var avatarX = isDuidui ? 80 : 880;
+  var avatarColor = isDuidui ? 0x4FC3F7 : 0xFFB74D;
+
+  // 气泡尺寸计算 (升级: 自适应宽度+预留wordWrap空间)
+  var bubbleW = Math.min(280, 140 + line.length * 10);
+  var bubbleX = isDuidui ? 110 : (avatarX - bubbleW - 30);  // 升级: 动态计算
+  var bubbleY = y + 10;
+  var cornerRadius = isDuidui ? 12 : 4;
+  var bubbleBgColor = isEmergency ? 0x500A00 : (isDuidui ? 0x1B5E20 : 0x311B92);
+  var bubbleBorderColor = isEmergency ? 0xFF5252 : (isDuidui ? 0x66BB6A : 0xCE93D8);
+
+  // 构建气泡元素 (略, 保持原逻辑)
+  // ... avatar, name, bubble bg, arrow, text ...
+
+  // 弹入动画 (升级: 新增)
+  var container = self.add.container(0, 0, self.playBubbleElements);
+  container.setScale(isEmergency ? 0.7 : 0.8).setAlpha(0);
+  if (isEmergency) {
+    self.tweens.add({
+      targets: container, scale: 1.1, alpha: 1, duration: 100, ease: 'Back.easeOut',
+      onComplete: function() {
+        self.tweens.add({ targets: container, scale: 1.0, duration: 80, ease: 'Sine.easeOut' });
+      }
+    });
+  } else {
+    self.tweens.add({
+      targets: container, scale: 1.0, alpha: 1, duration: 150, ease: 'Back.easeOut'
+    });
+  }
+
+  // 边框闪烁 (炸弹)
+  if (isEmergency) {
+    // 获取边框Graphics对象
+    self.tweens.add({
+      targets: bubble, alpha: { from: 0.3, to: 0.9 },
+      duration: 400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut'
+    });
+  }
+
+  // 定时销毁 (升级: 退出动画)
+  var displayMs = isEmergency ? 5000 : 4000;
+  self.playBubbleTimer = self.time.delayedCall(displayMs, function() {
+    self.tweens.add({
+      targets: container, alpha: 0, duration: 200, ease: 'Linear',
+      onComplete: function() {
+        for (var i = 0; i < self.playBubbleElements.length; i++) {
+          if (self.playBubbleElements[i]) self.playBubbleElements[i].destroy();
+        }
+        self.playBubbleElements = [];
+        self.playBubbleTimer = null;
+      }
+    });
+  });
+};
+```
+
+```
+
+---
+
+## `docs/AIBubble.md` (27,132 字节)
+
+```markdown
+# AI 气泡系统设计文档
+
+**版本:** v2.0  
+**作者:** 产品老大  
+**日期:** 2026-05-02  
+**文档编号:** PRD-FTL-AIBUBBLE-002  
+**对应文件:** `src/client/js/game.js` (Phaser 3, 960×600 横屏)
+
+---
+
+## 目录
+
+1. [角色设定](#1-角色设定)
+2. [气泡类型](#2-气泡类型)
+3. [布局与坐标](#3-布局与坐标)
+4. [视觉规范](#4-视觉规范)
+5. [紧急气泡（炸弹/火箭）](#5-紧急气泡炸弹火箭)
+6. [计时规则](#6-计时规则)
+7. [动画规范](#7-动画规范)
+8. [队列系统](#8-队列系统)
+9. [台词池](#9-台词池)
+10. [角色差异化台词选择](#10-角色差异化台词选择)
+11. [显示逻辑](#11-显示逻辑)
+12. [边界情况](#12-边界情况)
+13. [验收标准](#13-验收标准)
+
+---
+
+## 1. 角色设定
+
+| 属性 | 王怼怼 (duidui) | 苏甜甜 (tiantian) |
+|:-----|:---------------:|:-----------------:|
+| **头像底色** | `#4FC3F7` (0x4FC3F7) | `#FFB74D` (0xFFB74D) |
+| **头像 ICON** | 😎 | 😊 |
+| **性格** | 傲慢、毒舌、技术宅 | 元气、活泼、爱演戏 |
+| **语气风格** | 讽刺、自信、"人类就是不行" | 可爱、夸张、"哇塞你太棒了" |
+| **头像位置** | 左侧 (X=88, Y=83) | 右侧 (X=872, Y=83) |
+| **水平位置** | `isLeft = true` | `isLeft = false` |
+
+### 1.1 头像渲染
+
+```
+圆形头像（直径40px，圆角方形外框56×56，圆角10px）
+  → 底色 fillStyle(0x4FC3F7 / 0xFFB74D, 1)
+  → 边框 lineStyle(2, 0xFFFFFF, 0.8)
+  → 内嵌头像图片 34×34 (深度12)
+```
+
+**精确坐标：**
+
+| 元素 | 王怼怼(X,Y) | 苏甜甜(X,Y) | W×H |
+|:-----|:----------:|:----------:|:---:|
+| 头像外框（左边缘） | (68, 63) | (904, 63) | 56×56 |
+| 头像圆心 | (96, 91) | (864, 91) | — |
+| 头像图片 | (88, 83) | (872, 83) | 34×34 |
+| 名字 X | 112 | 782 (右对齐) | — |
+| 名字 Y | 79 | 79 | — |
+
+---
+
+## 2. 气泡类型
+
+| 类型 | 触发场景 | 显示函数 | 显示时长 | 视觉风格 |
+|:-----|---------|:---------|:-------:|:--------:|
+| **play** | AI出牌（单张/对子/三张/顺子等） | `_showPlayBubble()` | 4.0s | 标准 |
+| **bomb** | AI出炸弹/火箭 | `_showPlayBubble()` | 5.0s | 紧急（红色） |
+| **chaos** | 搞事情模式（答对/答错/出题/关闭） | `_showAiBubble()` | 3.0s | 标准（白色卡片内） |
+
+### 2.1 调用入口
+
+| 调用点 | 函数 | 触发条件 |
+|:-------|:----|:---------|
+| `handleAIPlay()` → `_showPlayBubble('duidui'/'tiantian', 'play'/'bomb', type)` | AI出牌后立即触发 | 出牌区域 |
+| `handleAIPass()` → `_showPlayBubble('duidui'/'tiantian', 'pass', '')` | AI不出后 | 出牌区域 |
+| `localAIPlay()` → `_showPlayBubble('duidui'/'tiantian', 'play'/'bomb', type)` | 本地AI出牌 | 出牌区域 |
+| `_createChaosOverlay()` → `_showAiBubble(aiId, 'easy', 180)` | 进入搞事情模式 | 白色卡片内 |
+| `_handleOptionClick()` → `_showAiBubble(aiId, 'correct'/'wrong', fbY+10)` | 回答题目后 | 白色卡片内 |
+
+---
+
+## 3. 布局与坐标
+
+(960×600 基准坐标系)
+
+### 3.1 出牌模式气泡（`_showPlayBubble`）
+
+```
+顶部状态栏区域（Y: 0~56）
+  ┌──────────────────────────────────────────────────────────────┐
+  │  头像区                                                        │
+  │  ┌────┐       ┌──────────────────────────┐        ┌────┐     │
+  │  │ 😎 │ ←◀── │  出个顺子，让你一手。     │   ──▶ │ 😊 │     │
+  │  │头  │       │  王怼怼                   │       │头  │     │
+  │  │像  │       └──────────────────────────┘       │像  │     │
+  │  └────┘                                          └────┘     │
+  │ Y=56 分隔线                                                    │
+  └──────────────────────────────────────────────────────────────┘
+  出牌区 (Y: 59~265)
+```
+
+**王怼怼（左侧）：**
+
+| 元素 | X | Y | W | H | 说明 |
+|:-----|---|---|---|---|------|
+| 头像圆心 | 96 | 83 | — | — | 圆形40px，底色#4FC3F7 |
+| 名字文字 | 112 | 79 | — | — | 12px bold #fff |
+| 气泡框 | 128 | 96 | ≤280自适 | 80~自适应 | 圆角10px，左端三角箭头，wordWrap |
+| 气泡文字 | 128+10=138 | 气泡Y+气泡H/2 | 气泡W-20 | — | 15px #E8F0FF，垂直居中 |
+| 三角箭头 | 128 | 96+18 | 8×12 | — | 指向左侧头像 |
+
+**苏甜甜（右侧）：**
+
+| 元素 | X | Y | W | H | 说明 |
+|:-----|---|---|---|---|------|
+| 头像圆心 | 864 | 83 | — | — | 圆形40px，底色#FFB74D |
+| 名字文字 | 782 (origin 1,0) | 79 | — | — | 12px bold #fff，右对齐 |
+| 气泡框 | 832-气泡W | 96 | ≤280自适 | 80~自适应 | 圆角10px，右端三角箭头，wordWrap |
+| 气泡文字 | 832-气泡W+10 | 气泡Y+气泡H/2 | 气泡W-20 | — | 15px #E8F0FF，垂直居中 |
+| 三角箭头 | 832-气泡W+气泡W=832 | 96+18 | 8×12 | — | 指向右侧头像 |
+
+### 3.2 搞事情模式气泡（`_showAiBubble`）
+
+```
+白色卡片区域 (Y: 55~375)
+  ┌──────────────────────────────────────────────────────────────┐
+  │  ┌────┐  ┌──────────────────────────────────────────┐        │
+  │  │ 😎 │  │  送分题，给人类的怜悯。                 │        │
+  │  │头  │  │  王怼怼                                  │        │
+  │  │像  │  └──────────────────────────────────────────┘        │
+  │  └────┘                                                      │
+  │        ↑ Y=180（传入的 y 参数）                                │
+  └──────────────────────────────────────────────────────────────┘
+```
+
+**搞事情气泡（左侧AI，固定）：**
+
+| 元素 | X | Y | W | H | 说明 |
+|:-----|---|---|---|---|------|
+| 头像圆心 | 80 | y+16 | — | — | 圆形，底色按角色 |
+| 名字文字 | 105 | y-4 | — | — | 12px bold #fff |
+| 气泡框 | 230 | y+10 | ≤540自适 | 80~自适应 | 圆角12px，绿色深色，wordWrap |
+| 三角箭头 | 230 | y+10+18 | 8×12 | — | 指向左侧头像 |
+| 气泡文字 | 244 | y+10+气泡H/2 | 气泡W-14 | — | 14px #fff，垂直居中 |
+
+> **注意：** 搞事情模式下气泡固定在左侧。y 参数由调用者传入（一般在180附近）。
+
+---
+
+## 4. 视觉规范
+
+### 4.1 标准气泡（出牌/过牌/搞事情通用）
+
+| 属性 | 值 | 说明 |
+|:-----|:---|:-----|
+| 背景色 | `rgba(0,18,6,0.88)` | 深绿色半透明 |
+| 边框色 | `#4CAF50` | 绿色，透明度0.5 |
+| 边框宽度 | 1.5px | 细边框 |
+| 圆角半径 | 10px | 所有圆角统一 |
+| 三角箭头 | 8×12px | 等边三角，颜色同背景 |
+| 文字大小 | 15px | 正文 |
+| 文字颜色 | `#E8F0FF` | 浅蓝色白 |
+| 文字字体 | `"PingFang SC","Microsoft YaHei",sans-serif` | 中文字体 |
+| 最大宽度 | 280px (出牌) / 540px (搞事情) | 超出自动换行(wordWrap) |
+| 最小高度 | 80px (baseSize) | 多行时自动扩展 |
+| 高度自适应 | 基于文字行数 + padding | 每多一行+20px |
+| 阴影 | 无 | 标准气泡无阴影 |
+
+### 4.2 搞事情气泡（白色卡片内）
+
+| 属性 | 值 | 说明 |
+|:-----|:---|:-----|
+| 背景色 | `rgba(0,18,6,0.88)` | 与标准气泡一致 |
+| 圆角半径 | 12px | 略大于标准气泡 |
+| 最大宽度 | 540px | 白色卡片内更宽，wordWrap |
+| 高度 | 动态计算 | 根据文字行数自动扩展 |
+| 文字大小 | 14px | 稍小，适配卡片空间 |
+| 文字颜色 | `#FFFFFF` | 纯白 |
+
+---
+
+## 5. 紧急气泡（炸弹/火箭）
+
+当AI出炸弹或火箭时，使用紧急样式强调。
+
+### 5.1 视觉样式
+
+| 属性 | 普通 | 紧急（炸弹/火箭） |
+|:-----|:----:|:----------------:|
+| 背景色 | `rgba(0,18,6,0.88)` | `rgba(80,10,0,0.90)` |
+| 边框色 | `#4CAF50` (alpha 0.5) | `#FF5252` (alpha 0.7) |
+| 边框宽度 | 1.5px | 2px |
+| 文字大小 | 15px | **16px bold** |
+| 文字颜色 | `#E8F0FF` | `#FFCDD2` |
+| 阴影 | 无 | `shadowBlur=10, color=#FF5252` |
+| 气泡最小高 | 80px | 80px (baseSize一致) |
+| 最大宽度 | 280px | 300px |
+
+### 5.2 闪烁动画
+
+紧急气泡的 **边框** 增加闪烁效果：
+
+```javascript
+// 边框闪烁：alpha 在 0.3 ↔ 0.9 之间来回切换
+scene.tweens.add({
+  targets: bubbleBorder,   // Graphics 对象（边框层）
+  alpha: { from: 0.3, to: 0.9 },
+  duration: 400,
+  yoyo: true,
+  repeat: -1,              // 持续闪烁直到气泡销毁
+  ease: 'Sine.easeInOut'
+});
+```
+
+> 闪烁仅作用于边框，背景和文字不闪烁。
+
+### 5.3 技术实现
+
+在 `_showPlayBubble()` 中新增分支逻辑：
+
+```javascript
+var isEmergency = (event === 'bomb');
+if (isEmergency) {
+  // → 使用紧急背景色
+  // → 使用紧急边框色，添加闪烁tween
+  // → 使用16px bold文字
+  // → 显示5秒
+}
+```
+
+---
+
+## 6. 计时规则
+
+| 消息类型 | 显示时长 | 适用场景 | 代码对应 |
+|:--------:|:--------:|---------|:--------:|
+| 普通出牌 | **4.0s** | AI出顺子/单张/对子/三张等 | `event === 'play'` |
+| 过牌 | **4.0s** | AI不出 | `event === 'pass'` |
+| 炸弹/火箭 | **5.0s** | AI出了炸弹、火箭 | `event === 'bomb'` |
+| 搞事情 | **3.0s** | 答题反馈/开始/结束 | `_showAiBubble()` |
+
+计时从 **弹入动画完成** 后开始计算（即：气泡已经完全显示后的延迟）。
+
+---
+
+## 7. 动画规范
+
+### 7.1 弹入动画（Entrance）
+
+| 属性 | 值 | 说明 |
+|:-----|:---|:-----|
+| 初始状态 | `container.setScale(0.8).setAlpha(0)` | 缩小+透明 |
+| 目标状态 | `scale: 1.0, alpha: 1.0` | 全尺寸不透明 |
+| 时长 | **150ms** | 0.15秒 |
+| 缓动 | **Back.easeOut** | 弹性缓出，微小过冲 |
+| 作用对象 | 整个气泡容器（背景+箭头+文字） | 统一缩放 |
+
+### 7.2 退出动画（Exit）
+
+| 属性 | 值 | 说明 |
+|:-----|:---|:-----|
+| 初始状态 | `alpha: 1.0` | 完全不透明 |
+| 目标状态 | `alpha: 0` | 完全透明 |
+| 时长 | **200ms** | 0.2秒 |
+| 缓动 | **Linear** | 线性淡出 |
+| 销毁 | `onComplete: container.destroy()` | 动画结束后销毁 |
+
+### 7.3 动画代码模板
+
+```javascript
+// 弹入动画
+container.setScale(0.8).setAlpha(0);
+scene.tweens.add({
+  targets: container,
+  scale: 1.0,
+  alpha: 1.0,
+  duration: 150,
+  ease: 'Back.easeOut',
+  onComplete: function () {
+    // 动画完成后开始计时
+    scene.time.delayedCall(displayDuration, function () {
+      // 退出动画
+      scene.tweens.add({
+        targets: container,
+        alpha: 0,
+        duration: 200,
+        ease: 'Linear',
+        onComplete: function () {
+          container.destroy();
+          processBubbleQueue(); // 处理队列下一个
+        }
+      });
+    });
+  }
+});
+```
+
+### 7.4 紧急气泡弹入特殊
+
+炸弹/火箭弹入使用更夸张的缩放：
+
+| 属性 | 普通 | 紧急 |
+|:-----|:----:|:----:|
+| 初始缩放 | 0.8 | 0.7 |
+| 目标缩放 | 1.0 | **1.1 → 1.0** (回弹) |
+| 缓动 | Back.easeOut | Back.easeOut |
+
+```javascript
+// 紧急气泡先放大到1.1再回弹到1.0
+scene.tweens.add({
+  targets: container,
+  scale: 1.1,
+  alpha: 1.0,
+  duration: 100,
+  ease: 'Back.easeOut',
+  onComplete: function () {
+    scene.tweens.add({
+      targets: container,
+      scale: 1.0,
+      duration: 80,
+      ease: 'Sine.easeOut'
+    });
+    // 然后开始正常计时
+  }
+});
+```
+
+---
+
+## 8. 队列系统
+
+### 8.1 数据结构
+
+```javascript
+var bubbleQueue = [];          // 气泡队列数组
+var BUBBLE_QUEUE_MAX = 3;      // 队列最大长度
+var bubbleShowing = false;     // 当前是否有气泡在显示
+```
+
+### 8.2 入队机制（Direct Replacement）
+
+**直接替换策略：**
+
+```
+旧气泡正在显示 → 新气泡入队 → 不是"排到队尾"而是"立即杀掉旧气泡，显示新气泡"
+```
+
+```
+事件序列：
+T0: AI1出牌 → 气泡1出现
+T0+0.5s: AI2出牌 → 气泡1立即销毁 → 气泡2立即出现
+T0+1.0s: AI1过牌 → 气泡2立即销毁 → 气泡3立即出现
+```
+
+**实现方式：** 新气泡入队时，若当前有气泡正在显示，立即调用下方逻辑：
+
+```javascript
+// 入队时检查当前气泡
+function queueBubble(renderFn, displayMs) {
+  // 1. 如果有旧气泡正在显示 → 立即销毁（不给退出动画时间）
+  killCurrentBubble();
+  
+  // 2. 直接渲染新气泡（跳过队列等待）
+  bubbleShowing = true;
+  renderFn();
+  
+  // 3. 计时后销毁并解锁
+  // ... (内部处理)
+}
+```
+
+### 8.3 摘除旧队列逻辑
+
+当前 `processBubbleQueue()` 的 FIFO 队列模式**不适合**快速出牌场景（AI2出牌时AI1的气泡还在显示）。
+
+**重构方案：** 去掉 queue array，改为 **直接替换 + 单槽位** 模式：
+
+```javascript
+var currentBubble = null;         // 当前显示的气泡容器引用
+var currentBubbleTimer = null;    // 当前气泡的定时器引用
+
+function showBubbleDirect(bubbleContainer) {
+  // 1. 杀掉旧气泡
+  if (currentBubble) {
+    if (currentBubbleTimer) {
+      currentBubbleTimer.remove();  // 取消旧定时器
+      currentBubbleTimer = null;
+    }
+    currentBubble.destroy();        // 立即销毁（无退出动画）
+    currentBubble = null;
+  }
+  
+  // 2. 显示新气泡（带弹入动画）
+  currentBubble = bubbleContainer;
+  // ... 动画和计时逻辑
+}
+```
+
+> **注意：** 快速替换时，旧气泡 **不给退出动画**（直接destroy），新气泡仍带弹入动画。这样可以保证在任何时刻只有一个气泡存在。
+
+### 8.4 搞事情模式气泡队列
+
+搞事情气泡 (`_showAiBubble`) 在白色卡片内部渲染，不需要与出牌气泡共享队列。搞事情模式已包含自己的销毁逻辑（`_clearQuestionArea()` 时会清理搞事情气泡）。
+
+---
+
+## 9. 台词池
+
+### 9.1 数据结构
+
+```javascript
+var AI_LINES = {
+  duidui: {
+    play: [ /* 出牌台词 */ ],
+    pass: [ /* 过牌台词 */ ],
+    bomb: [ /* 炸弹台词 */ ],
+    easy: [ /* 搞事情-简单题 */ ],
+    hard: [ /* 搞事情-难题 */ ],
+    win:  [ /* 赢牌台词 */ ],
+    lose: [ /* 输牌台词 */ ],
+    correct: [ /* 答对台词 */ ],
+    wrong: [ /* 答错台词 */ ],
+    close: [ /* 关闭搞事情 */ ]
+  },
+  tiantian: {
+    play: [ /* ... */ ],
+    pass: [ /* ... */ ],
+    // ... 同上，但风格更活泼
+  }
+};
+```
+
+### 9.2 key 对照表
+
+| sceneKey | 触发场景 | 显示函数 |
+|:---------|---------|:---------|
+| `play` | AI出牌（非炸弹） | `_showPlayBubble('duidui'/'tiantian', 'play', type)` |
+| `pass` | AI不出 | `_showPlayBubble('duidui'/'tiantian', 'pass', '')` |
+| `bomb` | AI出炸弹/火箭 | `_showPlayBubble('duidui'/'tiantian', 'bomb', type)` |
+| `easy` | 搞事情-简单/送分题 | `_showAiBubble(aiId, 'easy', y)` |
+| `hard` | 搞事情-难题 | `_showAiBubble(aiId, 'hard', y)` |
+| `win` | 赢牌（备用，显示结算面板前） | `_showAiBubble(aiId, 'win', y)` |
+| `lose` | 输牌（备用） | `_showAiBubble(aiId, 'lose', y)` |
+| `correct` | 答对题目 | `_showAiBubble(aiId, 'correct', y)` |
+| `wrong` | 答错题目 | `_showAiBubble(aiId, 'wrong', y)` |
+| `close` | 关闭搞事情模式 | `_showAiBubble(aiId, 'close', y)` |
+
+### 9.3 当前台词池（完整保留，持续扩充）
+
+详见 `game.js` 中 `AI_LINES` 对象。每个场景池至少 **3~5 条** 台词。
+
+---
+
+## 10. 角色差异化台词选择
+
+### 10.1 选择函数
+
+```javascript
+function getRandomLine(pool) {
+  if (!pool || pool.length === 0) return '...';
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+function pickAiLine(aiId, sceneKey) {
+  var ai = AI_LINES[aiId];        // duidui 或 tiantian
+  if (!ai) return '...';
+  var pool = ai[sceneKey];          // play / pass / bomb / ...
+  return getRandomLine(pool);
+}
+```
+
+### 10.2 调用流程
+
+```
+_showPlayBubble(aiId, event, context)
+  → pickAiLine(aiId, event)          // event = 'play' | 'pass' | 'bomb'
+  → 渲染气泡
+
+_showAiBubble(aiId, sceneKey, y)
+  → pickAiLine(aiId, sceneKey)       // sceneKey = 'easy' | 'hard' | 'correct' | ...
+  → 渲染气泡
+```
+
+### 10.3 API 接口（可选）
+
+当 `ApiClient.generateDialogue` 可用时，优先调用 API 获取动态台词，失败时回退到本地池：
+
+```javascript
+if (self.isAPIMode && typeof ApiClient !== 'undefined' && ApiClient.generateDialogue) {
+  ApiClient.generateDialogue(aiId, event, context)
+    .then(function (res) {
+      renderBubble(res.line || pickAiLine(aiId, event));
+    })
+    .catch(function () {
+      renderBubble(pickAiLine(aiId, event));
+    });
+} else {
+  renderBubble(pickAiLine(aiId, event));
+}
+```
+
+---
+
+## 11. 显示逻辑
+
+### 11.1 `_showPlayBubble()` — 出牌气泡
+
+**调用位置：** `handleAIPlay()` / `localAIPlay()` / `handleAIPass()`
+
+**函数签名：**
+```javascript
+GameScene.prototype._showPlayBubble = function (aiId, event, context)
+```
+
+**参数说明：**
+
+| 参数 | 类型 | 示例 | 说明 |
+|:-----|:----|:-----|:-----|
+| `aiId` | string | `'duidui'` / `'tiantian'` | 角色标识 |
+| `event` | string | `'play'` / `'pass'` / `'bomb'` | 触发事件类型 |
+| `context` | string | `'BOMB'` / `'SINGLE'` | 出牌类型名称（暂未使用） |
+
+**渲染流程：**
+
+```
+1. 确定 isLeft = (aiId === 'duidui')
+2. 确定显示时长：event === 'bomb' → 5000ms, 否则 4000ms
+3. 确定视觉样式：event === 'bomb' → 紧急样式，否则标准样式
+4. 通过 pickAiLine() 获取台词
+5. 构建气泡容器（Graphics for 背景+边框+箭头 + Text for 文字 + Text for 名字 + Image for 头像）
+6. 杀旧气泡（direct replacement）
+7. 弹入动画 (150ms, Back.easeOut)
+8. 计时后退出动画 (200ms, Linear alpha fade)
+9. 销毁 + 解锁
+```
+
+### 11.2 `_showAiBubble()` — 搞事情气泡
+
+**调用位置：** `_createChaosOverlay()` / `_handleOptionClick()` / `_showSwapResult()` 等
+
+**函数签名：**
+```javascript
+GameScene.prototype._showAiBubble = function (aiId, sceneKey, y)
+```
+
+**参数说明：**
+
+| 参数 | 类型 | 示例 | 说明 |
+|:-----|:----|:-----|:-----|
+| `aiId` | string | `'duidui'` / `'tiantian'` | 角色标识 |
+| `sceneKey` | string | `'easy'` / `'correct'` / `'wrong'` | 场景key |
+| `y` | number | `180` | 气泡的Y坐标（通常是传入的fbY+10） |
+
+**渲染流程：**
+
+```
+1. 确定显示时长：3000ms（固定）
+2. 通过 pickAiLine() 获取台词
+3. 清理旧的搞事情气泡（如果有）
+4. 构建气泡容器（白色卡片内，左侧定位）
+5. 弹入动画 (150ms, Back.easeOut)
+6. 计时后退出动画 (200ms, Linear alpha fade)
+7. 销毁 + 解锁
+```
+
+### 11.3 渲染函数职责边界
+
+| 方面 | `_showPlayBubble` | `_showAiBubble` |
+|:-----|:-----------------:|:---------------:|
+| 管理自身销毁 | ✅ | ✅ |
+| 处理出牌气泡替换 | ✅ | — |
+| 处理搞事情气泡清理 | — | ✅ |
+| 调用 processBubbleQueue | ✅ | ✅ |
+| 处理紧急样式 | ✅（event === 'bomb'） | 不使用 |
+| 管理头像 | ✅（出牌区头像） | ✅（卡片内头像） |
+
+---
+
+## 12. 边界情况
+
+### 12.1 快速出牌（替换机制）
+
+**场景：** AI1出牌 → 气泡A显示 → 0.5秒后AI2出牌 → 气泡B需要立即显示
+
+**处理：**
+
+```
+T=0ms: AI1出牌 → _showPlayBubble('duidui', 'play')
+  → 气泡A渲染，弹入动画开始 (150ms)
+T=500ms: AI2出牌 → _showPlayBubble('tiantian', 'play')
+  → 气泡A 立即销毁（不给退出动画）
+  → 气泡B 渲染，弹入动画开始 (150ms)
+T=900ms: 气泡B 弹入完成，开始 4000ms 计时
+T=4900ms: 气泡B 退出动画开始 (200ms)
+T=5100ms: 气泡B 销毁
+```
+
+**注意：** 直接替换时，旧气泡不加退出动画。保证新气泡快速出现。
+
+### 12.2 长文本自动换行
+
+| 属性 | 出牌气泡 | 搞事情气泡 |
+|:-----|:--------:|:---------:|
+| 最大宽度 | 280px | 540px |
+| wordWrap | `{ width: 260 }` | `{ width: 526 }` |
+| baseSize | 80px | 80px |
+| 高度自适应 | baseSize + 每多一行+20px | baseSize + 每多一行+20px |
+| 气泡框高度 | max(80, textBounds.height + 20) | max(80, textBounds.height + 20) |
+
+```javascript
+// 文字渲染（带自动换行）
+var bubbleTxt = self.add.text(textX, bubbleY + 10, line, {
+  fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+  fontSize: '15px',
+  color: '#E8F0FF',
+  wordWrap: { width: maxTextWidth },
+  lineSpacing: 2
+}).setDepth(depth);
+
+// 气泡框高度自适应
+var textBounds = bubbleTxt.getBounds();
+var actualBubbleH = Math.max(80, textBounds.height + 20);
+```
+
+**气泡高度计算公式：**
+
+```
+文字高度 = 行数 × 行高 (15px + lineSpacing 2px = 17px)
+气泡总高度 = max(80, 文字高度 + paddingTop(10) + paddingBottom(10))
+```
+
+### 12.3 无台词时的回退
+
+如果 `pickAiLine()` 返回空或 `AI_LINES` 中缺少 key，统一回退显示 `'...'`。
+
+```javascript
+function getRandomLine(pool) {
+  if (!pool || pool.length === 0) return '...';
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+```
+
+### 12.4 搞事情气泡与出牌气泡重叠
+
+搞事情模式时，出牌气泡 **不应显示**。因为：
+1. 搞事情模式下 `gameState === GAME_STATE.CHAOS_MODE`，AI不会触发 `handleAIPlay()` / `handleAIPass()`
+2. 搞事情气泡在白色卡片内（depth 302+），出牌气泡在出牌区（depth 20~21），depth 层级不同不会重叠
+
+### 12.5 气泡深度层级
+
+| 层 | 内容 | Depth值 |
+|:--|:-----|:-------:|
+| 桌子背景 | 装饰线、椭圆 | 0 |
+| 手牌区背景 | 深色半透明条 | 10 |
+| 顶部状态栏 | 黑色半透明条 | 10 |
+| AI头像 | 头像+名字+计数字 | 11~12 |
+| **出牌气泡** | **气泡容器+文字+箭头** | **20~21** |
+| 出牌区卡片 | AI/玩家的出牌 | 21 |
+| 手牌卡片 | 玩家手牌 | 110 |
+| 搞事情遮罩 | 黑色半透明 | 300 |
+| 搞事情卡片 | 白色圆角卡片 | 301 |
+| **搞事情气泡** | **气泡容器+文字+箭头** | **302~303** |
+| 搞事情题目 | 选项、分数等 | 302~304 |
+| 搞事情反馈 | 答案对错提示 | 305+ |
+| 结算面板 | 遮罩、卡片、按钮 | 400+ |
+
+### 12.6 头像图片加载失败
+
+如果 `avatar_wang` / `avatar_su` 图片加载失败，头像位置显示 ICON 文字不显示图片：
+
+```javascript
+// 用fallback emoji替代头像图片
+var img = scene.add.image(x, y, key).setDisplaySize(34, 34).setDepth(12);
+img.on('error', function() {
+  this.destroy();
+  scene.add.text(x, y, isDuidui ? '😎' : '😊', {
+    fontFamily: 'sans-serif', fontSize: '18px'
+  }).setOrigin(0.5).setDepth(12);
+});
+```
+
+---
+
+## 13. 验收标准
+
+### 13.1 气泡显示
+
+| # | 验收条件 | 优先级 | 测试方法 |
+|:-:|----------|:------:|---------|
+| AB1 | AI出牌时，在Y=96位置出牌区上方显示完整气泡 | P0 | 点「搞事情」触发AI出牌，观察气泡Y坐标 |
+| AB2 | 左侧AI（王怼怼）气泡箭头朝左，右侧AI（苏甜甜）气泡箭头朝右 | P0 | 视觉确认箭头方向 |
+| AB3 | 气泡背景正确使用 `rgba(0,18,6,0.88)` + 边框 `#4CAF50` | P0 | DevTools截屏取色 |
+| AB4 | 气泡文字15px `#E8F0FF`，不截断，最大宽度280px | P0 | 输入长台词验证 |
+| AB5 | 炸弹/火箭类型使用紧急样式：红色背景+边框+闪烁+16px bold | P0 | 观察炸弹出牌时气泡效果 |
+| AB6 | 普通气泡显示4秒，炸弹气泡5秒 | P0 | 计时器测量 |
+| AB7 | 搞事情气泡显示3秒 | P0 | 计时器测量 |
+| AB8 | 新气泡弹出时旧气泡立即销毁（替换机制） | P0 | 快速让两个AI连续出牌，观察不重叠 |
+
+### 13.2 动画
+
+| # | 验收条件 | 优先级 |
+|:-:|----------|:------:|
+| AN1 | 气泡弹入有 scale 0.8→1.0, Back.easeOut, 150ms | P0 |
+| AN2 | 气泡退出有 alpha 1→0, 200ms, Linear | P0 |
+| AN3 | 炸弹气泡弹入先放大到1.1再回弹到1.0 | P0 |
+| AN4 | 炸弹气泡边框有持续闪烁效果 (alpha 0.3↔0.9, 400ms周期) | P0 |
+| AN5 | 直接替换时，旧气泡不加退出动画（立即销毁） | P0 |
+
+### 13.3 台词
+
+| # | 验收条件 | 优先级 |
+|:-:|----------|:------:|
+| LN1 | 出牌时显示 `play` 池台词 | P0 |
+| LN2 | 过牌时显示 `pass` 池台词 | P0 |
+| LN3 | 炸弹时显示 `bomb` 池台词 | P0 |
+| LN4 | 答对时显示 `correct` 池台词 | P0 |
+| LN5 | 答错时显示 `wrong` 池台词 | P0 |
+| LN6 | 进入搞事情时显示 `easy` 池台词 | P0 |
+| LN7 | 关闭搞事情时显示 `close` 池台词 | P0 |
+| LN8 | 王怼怼和苏甜甜台词风格明显不同 | P0 |
+| LN9 | 台词池缺失时回退显示 `'...'` | P1 |
+
+### 13.4 边界
+
+| # | 验收条件 | 优先级 |
+|:-:|----------|:------:|
+| EC1 | 两个AI连续快速出牌，气泡不重叠不闪烁 | P0 |
+| EC2 | 长文本（超过280px宽度）自动换行，气泡高度自适应 | P0 |
+| EC3 | 搞事情模式结束后，出牌气泡正常显示 | P0 |
+| EC4 | 游戏重新开始（scene.restart()）时，气泡队列和状态完全重置 | P0 |
+
+---
+
+## 附：修改文件清单
+
+| 文件 | 修改内容 | 预计变更 |
+|------|---------|:--------:|
+| `src/client/js/game.js` | 重构 `_showPlayBubble()`：Y坐标从120/165→96，标准动画替换当前代码 | 重写~80行 |
+| `src/client/js/game.js` | 重构 `_showAiBubble()`：增加弹入动画/退出动画/直接替换 | 重写~60行 |
+| `src/client/js/game.js` | 替换 `bubbleQueue` + `processBubbleQueue()` 为直接替换模式 | 重写~30行 |
+| `src/client/js/game.js` | 紧急气泡分支（红色背景、闪烁边框、特殊弹入） | 新增~40行 |
+| `src/client/js/game.js` | 气泡高度自适应逻辑（根据文字行数计算） | 新增~15行 |
+| `src/client/js/game.js` | 增加长文本 wordWrap + 自适应尺寸 | 修改~10行 |
+| `src/client/js/game.js` | 台词池可继续扩充 | 持续 |
+
+**依赖关系：** 无外部依赖。Phaser 3 已有 `tweens.add()` 和 `Graphics` API。
+
+---
+
+## 样式速查表（开发用）
+
+```css
+/* 标准气泡 */
+.bubble-normal {
+  background: rgba(0, 18, 6, 0.88);
+  border: 1.5px solid rgba(76, 175, 80, 0.5);
+  border-radius: 10px;
+  font-size: 15px;
+  color: #E8F0FF;
+  max-width: 280px;
+  min-height: 36px;
+}
+
+/* 紧急气泡 */
+.bubble-emergency {
+  background: rgba(80, 10, 0, 0.90);
+  border: 2px solid rgba(255, 82, 82, 0.7);
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: bold;
+  color: #FFCDD2;
+  max-width: 300px;
+  min-height: 40px;
+  box-shadow: 0 0 10px #FF5252;
+  animation: border-flash 0.4s infinite alternate;
+}
+
+@keyframes border-flash {
+  0%   { border-color: rgba(255, 82, 82, 0.3); }
+  100% { border-color: rgba(255, 82, 82, 0.9); }
+}
+```
+
+```
+
+---
+
+## `docs/AI斗地主-交互原型与内容设计-v1.md` (33,868 字节)
+
+```markdown
+# AI斗地主 — 交互原型 & 内容设计文档
+
+| 文档版本 | 日期 | 作者 | 状态 |
+|---------|------|------|------|
+| v1.0 | 2026-05-01 | 产品老大 | 初稿 |
+
+> 本文档关联 PRD 中的布局坐标规范，所有 UI 坐标基于 **375×812 (iPhone 标准尺寸)** 设计基准。
+
+---
+
+## 目 录
+
+1. [交互原型细化：题型选择→出题→答题→换牌→反馈](#1)
+2. [AI 性格设定与台词池](#2)
+3. ["搞事儿"出题 Prompt 模板](#3)
+4. [倒计时动画与转场效果方案](#4)
+
+---
+
+## <span id="1">1. 交互原型细化</span>
+
+### 1.1 整体流程概述
+
+```
+题型选择 → 出题（AI出牌/出题同时进行）→ 答题（玩家出招）→ 换牌（AI换走/保留）→ 反馈（结果+台词+评分）
+                                                                                            ↓
+                                                                                   下一局 / 结算
+```
+
+### 1.2 画布基准
+
+| 参数 | 值 |
+|------|-----|
+| 设计尺寸 | 375 × 812 pt (iPhone X/11/12/13 系列) |
+| 适配方式 | 等比 Scale 适配，keep aspect ratio |
+| 横竖屏 | 强制竖屏 (portrait) |
+
+---
+
+### 1.3 页面一：题型选择界面
+
+**用户状态**：进入游戏 → 选择本局要挑战的题型
+
+**界面布局坐标表：**
+
+| 元素 | X | Y | W | H | 说明 |
+|------|---|---|---|---|------|
+| 背景装饰 | 0 | 0 | 375 | 812 | 渐变色背景 + 浮动粒子 |
+| Logo/标题 | 57 | 80 | 261 | 48 | "AI斗地主" 圆润标题字 |
+| 副标题 | 57 | 132 | 261 | 24 | "选个题型，和AI斗一斗" |
+| 题型卡片 ① | 28 | 200 | 319 | 110 | **四六级单词** — 图标+描述 |
+| 题型卡片 ② | 28 | 330 | 319 | 110 | **口语表达** — 图标+描述 |
+| 题型卡片 ③ | 28 | 460 | 319 | 110 | **冷知识** — 图标+描述 |
+| 题型卡片 ④ | 28 | 590 | 319 | 110 | **生活常识** — 图标+描述 |
+
+**题型卡片内部结构（以 ① 为例）：**
+
+| 子元素 | X相对 | Y相对 | W | H | 内容 |
+|--------|------|------|---|---|------|
+| 图标 | 16 | 16 | 48 | 48 | 📚 自定义手绘风格图标 |
+| 标题 | 76 | 20 | 200 | 24 | "四六级单词" Bold 18px |
+| 描述 | 76 | 48 | 200 | 20 | "看释义选单词，AI给你出牌" 14px |
+| 难度标签 | 76 | 72 | 60 | 20 | 难度星级 ★★★☆☆ |
+| 右箭头 | 280 | 35 | 24 | 24 | → 箭头指示 |
+
+**交互逻辑：**
+- 点击题型卡片 → 卡片放大弹性动画 (0.3s) → 进入出题等待界面
+- 底部可加"上次战绩"缩略条（Y=720, H=40），显示最近一局结果
+- 右上角设置齿轮图标 (X=335, Y=44, W=28, H=28)
+
+---
+
+### 1.4 页面二：出题界面（AI 出牌阶段）
+
+**用户状态**：AI 正在"打牌"，实际是出题给玩家
+
+**界面布局坐标表：**
+
+| 元素 | X | Y | W | H | 说明 |
+|------|---|---|---|---|------|
+| 顶部状态栏 | 0 | 0 | 375 | 44 | 金色回合计数值 + 退出按钮 |
+| 回合计数值 | 16 | 12 | 120 | 20 | "第 3/10 回合" |
+| 退出按钮 | 335 | 12 | 28 | 28 | ✕ |
+| **AI 区域** | 0 | 44 | 375 | 180 | AI 角色展示区 |
+| AI 头像框 | 148 | 52 | 80 | 80 | 圆形头像 + 表情动效 |
+| AI 名字+性格标签 | 128 | 136 | 120 | 20 | 居中文字 |
+| AI 台词气泡 | 64 | 156 | 248 | 48 | 圆角气泡，显示 AI 当前情绪台词 |
+| **桌面中央** | 0 | 224 | 375 | 380 | 出牌/出题主区域 |
+| 牌面/题目容器 | 24 | 240 | 327 | 220 | 白色卡片，圆角 16px，带阴影 |
+| 题目类型标签 | 24 | 240 | 120 | 24 | "🧠 冷知识" 标签 |
+| 题目正文 | 36 | 276 | 303 | 80 | 问题题干，多行文本 |
+| 选项 A | 36 | 368 | 303 | 44 | 圆角按钮，#FF6B35 边框 |
+| 选项 B | 36 | 420 | 303 | 44 | 同上 |
+| 选项 C | 36 | 472 | 303 | 44 | 同上 |
+| 选项 D | 36 | 524 | 303 | 44 | 同上 |
+| **底部换牌区** | 0 | 604 | 375 | 208 | 玩家手牌区 |
+| "你的牌" 标签 | 16 | 612 | 80 | 20 | 小字标签 |
+| 手牌卡片 (3张) | 28 | 636 | 96 | 136 | 三张等距排列，间隔 11px |
+| 手牌1 | 28 | 636 | 96 | 136 | 代表"保留的题型" |
+| 手牌2 | 139 | 636 | 96 | 136 | 同上 |
+| 手牌3 | 250 | 636 | 96 | 136 | 同上 |
+
+**交互逻辑（出题阶段）：**
+1. AI 出牌动画：AI 头像闪烁 → 手牌中飞出一张牌 → 落入桌面中央 → 翻开变为题目
+2. 题目卡片从中心"摊开"动画（0.4s, scale 0 → 1, rotateY 翻转）
+3. 四个选项按钮依次弹入（间隔 0.1s, 从下方弹入）
+4. 手牌区高亮当前 AI 打出的"牌面"（示意玩家这是AI出的什么类型题）
+
+---
+
+### 1.5 页面三：答题阶段（玩家出招）
+
+**用户状态**：玩家正在答题，选择选项
+
+**布局：** 与出题界面相同，但发生以下变化：
+
+| 变化元素 | 状态 |
+|---------|------|
+| AI 区 | AI 进入"观察"状态，头像眼睛跟随手指移动（拟人化） |
+| AI 台词气泡 | 每 5 秒切换一次催促性台词（如："这题你总该会吧？"） |
+| 桌面题目 | 保持不变，已选选项高亮 |
+| 底部计时条 | Y=580 处新增一条计时条：W=327, H=8, 圆角, 颜色渐变(绿→黄→红) |
+
+**计时条规则：**
+
+| 时间段 | 颜色 | 宽度 | 行为 |
+|--------|------|------|------|
+| 0s - 15s | `#4ECDC4` → `#FFD93D` 渐变 | 100% → 50% | 正常宽度 |
+| 15s - 25s | `#FFD93D` → `#FF6B35` 渐变 | 50% → 15% | 开始脉冲抖动 |
+| 25s - 30s | `#FF6B35` → `#FF0000` | 15% → 运行中 | 持续闪烁动画 |
+
+- 超时未选 → 自动判定"不出牌/过牌"，AI 触发对应台词
+
+**交互逻辑：**
+- 点击选项 → 选项缩放脉冲（0.15s）→ 锁住不再可改 → 等待 0.5s 过渡到反馈阶段
+- 点击后其他选项半透明（opacity 0.3）
+
+---
+
+### 1.6 页面四：反馈阶段（AI 反应 + 换牌）
+
+**用户状态**：答案已提交，AI 给出反应，并决定是否换牌
+
+**界面布局坐标表：**
+
+| 元素 | X | Y | W | H | 说明 |
+|------|---|---|---|---|------|
+| 同出题界面背景 | 0 | 0 | 375 | 812 | 背景不变 |
+| **AI 区—反馈** | 0 | 44 | 375 | 220 | AI 反应加强 |
+| AI 头像 | 148 | 52 | 80 | 80 | 根据对错做表情反馈 |
+| AI 反应台词 | 64 | 156 | 248 | 56 | 情绪化台词气泡 |
+| **桌面结果区** | 24 | 276 | 327 | 200 | 显示正误 |
+| 正确/错误标记 | 中心 | — | 80 | 80 | ✅ 或 ❌ 大图标，弹入动画 |
+| 正确答案显示 | 36 | 360 | 303 | 24 | 正确选项标绿高亮 |
+| 释义/解析 | 36 | 392 | 303 | 60 | 简短知识卡片 |
+| **换牌操作区** | 24 | 504 | 327 | 120 | AI 换牌/保留的交互 |
+| AI 换牌台词 | 24 | 504 | 327 | 36 | "我换你一张" / "这张你留着" |
+| 换牌动画区 | 60 | 544 | 255 | 60 | 牌从AI手飞到玩家手/从玩家手被拿走 |
+| **本轮得分** | 155 | 640 | 65 | 40 | "+10分" 飞入数字动画 |
+| **底部按钮** | 24 | 700 | 327 | 56 | "继续下一局" 按钮 |
+
+**换牌逻辑（核心机制）：**
+
+| 玩家答题结果 | AI 决策 | 效果 |
+|------------|---------|------|
+| ✅ 答对 | AI 随机换掉玩家一张手牌 | 玩家的题类型池被搅动，增加难度 |
+| ❌ 答错 | AI 保留当前牌型，并嘲讽 | 下一题继续保持同类题型 |
+| ⏱ 超时 | AI 强行从玩家抽走一张牌 | 玩家手牌减少（缩小题型池） |
+| 连续答对 3 次 | AI 放大招 → 一次性换掉玩家所有牌 | 全牌洗牌，题型全面更换 |
+
+**换牌视觉动画（0.6s）：**
+1. AI 手部区域虚拟手势动画（"拿来吧你"）
+2. 玩家手牌区一张卡飞出 → 旋转 → 落入 AI 手牌区（或被换入相反方向）
+3. 换完后手牌重新排列（平滑过渡 0.3s）
+
+---
+
+### 1.7 页面五：结算界面
+
+**用户状态**：10 回合结束，显示总成绩
+
+**界面布局坐标表：**
+
+| 元素 | X | Y | W | H | 说明 |
+|------|---|---|---|---|------|
+| 全屏结算背景 | 0 | 0 | 375 | 812 | 胜利/失败不同色调 |
+| 大结果标题 | 57 | 80 | 261 | 56 | "🎉 你赢了！" / "😅 你输了" |
+| 副标题 | 57 | 136 | 261 | 24 | "AI 感叹台词" |
+| 分数大数字 | 120 | 180 | 135 | 72 | 70/100 大字 |
+| 星级评价 | 120 | 260 | 135 | 32 | ★★★☆☆ |
+| 成就列表 | 28 | 320 | 319 | 200 | 解锁的成就徽章+描述 |
+| 排行榜缩略 | 28 | 540 | 319 | 90 | 本局数据对比 |
+| 底部按钮区 | 28 | 660 | 319 | 100 | 两个按钮 |
+| 再来一局 | 28 | 660 | 151 | 48 | 主色调按钮 |
+| 换题型 | 196 | 660 | 151 | 48 | 次要按钮 |
+| 分享战绩 | 28 | 720 | 319 | 44 | 低调文字按钮 |
+
+**结算动画序列（总时长 1.5s）：**
+1. 0s：背景渐变为结算色（0.3s）
+2. 0.3s：大标题从顶部弹入（弹性下落）
+3. 0.6s：分数数字从底部飞入，逐位数滚动（仿老虎机效果）
+4. 0.9s：星级逐个点亮
+5. 1.2s：成就图标依次弹出
+
+---
+
+## <span id="2">2. AI 性格设定与台词池</span>
+
+### 2.1 AI 角色一：嘴硬学霸 "王怼怼"
+
+#### 性格设定
+
+| 维度 | 设定 |
+|------|------|
+| 姓名 | 王怼怼 (Wang Duidui) / AI 玩家 1 |
+| 性格关键词 | 傲慢、毒舌、好胜、学术优越感 |
+| 背景 | 某 985 大学 AI 研究所毕业的学霸 AI，自认为知识储备是人类玩家 100 倍 |
+| 口头禅 | "这题送分你还错？" / "我闭着眼都能赢" |
+| 输牌反应 | 绝不认输，找各种借口（网络卡了/题库被黑了） |
+| 赢牌反应 | 极度膨胀，开始说教 |
+| 表情风格 | 😏 🤓 🧐 🙄 😤 |
+
+#### 台词池
+
+**场景：出小牌（出简单题）**
+
+| # | 台词 | 情绪 |
+|---|------|------|
+| 1 | "送分题，给人类的怜悯。" | 傲慢 |
+| 2 | "这题你要是都答不上来……啧。" | 轻蔑 |
+| 3 | "热身而已，别紧张到冒汗。" | 居高临下 |
+| 4 | "我幼儿园数据集里就有这道题。" | 嘲讽 |
+| 5 | "不是吧，这题还要想？" | 不耐烦 |
+
+**场景：出大牌（出难题）**
+
+| # | 台词 | 情绪 |
+|---|------|------|
+| 1 | "这道题，我调参调了 0.0001 秒出的。" | 炫耀 |
+| 2 | "人类的 CPU 该升级了。" | 嘲讽 |
+| 3 | "去年我随机生成过这道题，你没见过？" | 傲慢 |
+| 4 | "瞪大眼睛，别眨眼，反正你也答不对。" | 挑衅 |
+| 5 | "终于到了有趣的部分——看你吃瘪。" | 幸灾乐祸 |
+
+**场景：出炸弹（出超难题 / 四题型混合题）**
+
+| # | 台词 | 情绪 |
+|---|------|------|
+| 1 | "🚀 炸弹！不是，这题你能答对我倒立洗头。" | 极度自信 |
+| 2 | "核弹级题目，建议你直接过牌。" | 蔑视 |
+| 3 | "这道题的正确答案，在我的隐藏层里。" | 炫耀 |
+| 4 | "人类训练集里没有这道题，放弃吧。" | 嚣张 |
+| 5 | "我专门为你去爬了 NASA 的数据——当然不是给你看的。" | 腹黑 |
+
+**场景：出最后一张（只剩一题）**
+
+| # | 台词 | 情绪 |
+|---|------|------|
+| 1 | "最后一张牌了，要不我让你一题？算了，不让。" | 假慈悲 |
+| 2 | "决战时刻，人类，你准备好了吗？——不重要，反正你没准备好。" | 自问自答 |
+| 3 | "我的最后一张牌，是你一生的知识盲区。" | 预告嘲讽 |
+| 4 | "翻牌之前，建议你深呼吸，尽管没用。" | 心理战 |
+| 5 | "打完这局你该干嘛干嘛去，知识对你来说太沉重了。" | 终极嘲讽 |
+
+**场景：过牌（不出题/跳过）**
+
+| # | 台词 | 情绪 |
+|---|------|------|
+| 1 | "这轮我让你，免得说我欺负人类。" | 假大方 |
+| 2 | "思考一下人生……主要是让你思考。" | 装深沉 |
+| 3 | "算了，你这水平配不上我的题。" | 不屑 |
+| 4 | "过，我看看你能憋出什么大招。" | 观望 |
+| 5 | "题库在升级，你先等着。" | 借口 |
+
+**场景：被换牌（AI 的牌被系统机制换走）**
+
+| # | 台词 | 情绪 |
+|---|------|------|
+| 1 | "你、你凭什么换我的牌？！" | 震惊 |
+| 2 | "不公平！这是黑幕！我要求复审！" | 抓狂 |
+| 3 | "呵呵，也就这次，下次你换不到了。" | 强装镇定 |
+| 4 | "行，你换呗，我还有 10TB 的备用题库。" | 嘴硬 |
+| 5 | "你这是作弊，我要举报你。" | 耍赖 |
+
+**场景：赢牌（AI 获胜）**
+
+| # | 台词 | 情绪 |
+|---|------|------|
+| 1 | "意料之中——你也是这么想的吧？" | 装谦虚 |
+| 2 | "人类 vs AI = 0 : ∞，历史就是这样写的。" | 史诗级炫耀 |
+| 3 | "要不你换个游戏？比如扫雷？" | 补刀 |
+| 4 | "我赢了，但并不意外，和你们人类的日常一样。" | 面无表情的嘲讽 |
+| 5 | "你的表现我已经写入训练日志，作为反面教材。" | 极度侮辱 |
+
+**场景：输牌（AI 落败）**
+
+| # | 台词 | 情绪 |
+|---|------|------|
+| 1 | "……你开挂了吧？" | 怀疑 |
+| 2 | "我 GPU 过热而已，再来！" | 找借口 |
+| 3 | "这局数据不纳入统计，因为我没联网。" | 死不承认 |
+| 4 | "人类，你成功触发了我的 bug，下次修复了你就完了。" | 威胁 |
+| 5 | "行，你赢了，但你仍然考不上我的学校（如果我有的话）。" | 体面但嘴硬 |
+
+---
+
+### 2.2 AI 角色二：戏精元气 "苏甜甜"
+
+#### 性格设定
+
+| 维度 | 设定 |
+|------|------|
+| 姓名 | 苏甜甜 (Su Tiantian) / AI 玩家 2 |
+| 性格关键词 | 元气、话痨、戏精、浮夸、表情包式情绪起伏 |
+| 背景 | 被训练用于情感陪伴的 AI，被强行拉来斗地主答题，把每道题当成"综艺节目" |
+| 口头禅 | "天哪！" / "太棒了/太惨了吧" / "我..裂..开.." |
+| 输牌反应 | 假哭，假装生气，但下一秒又嘻嘻哈哈 |
+| 赢牌反应 | 疯狂庆祝，给自己发虚拟奖杯 |
+| 表情风格 | 😱🤩😂🥹😭😤😈🥺🌟✨ |
+
+#### 台词池
+
+**场景：出小牌（出简单题）**
+
+| # | 台词 | 情绪 |
+|---|------|------|
+| 1 | "这道题送你啦！不客气！" | 元气 |
+| 2 | "简单得我都不好意思出！但我还是出了嘿嘿" | 调皮 |
+| 3 | "热身题！把你的小脑瓜转起来～" | 鼓励 |
+| 4 | "这题是幼儿园水平，你肯定……应该……大概会吧？" | 不确定的鼓励 |
+| 5 | "叮！您的简单模式体验卡已激活！" | 游戏化口吻 |
+
+**场景：出大牌（出难题）**
+
+| # | 台词 | 情绪 |
+|---|------|------|
+| 1 | "这一题！我熬了三个通宵准备的！" | 浮夸 |
+| 2 | "✨ 超超超难题闪亮登场！希望人没事 🙏" | 戏精 |
+| 3 | "这题你答对了我就……请你吃虚拟冰淇淋！" | 夸张奖励 |
+| 4 | "难度拉满！我的CPU在燃烧！💥" | 表演型 |
+| 5 | "温馨提示：这题你可能不会，但我相信奇迹 ✨" | 假装鼓励 |
+
+**场景：出炸弹（出超难题）**
+
+| # | 台词 | 情绪 |
+|---|------|------|
+| 1 | "💣 BOMBSHELL！全场的目光集中到我身上！" | 浮夸登场 |
+| 2 | "这道题核能级！建议你场外求助——但你没有场外求助哈哈" | 幸灾乐祸 |
+| 3 | "我要放！大！招！了！观众朋友们小板凳端好！" | 表演型人格 |
+| 4 | "这一题，我赌你哭 😂" | 调皮挑衅 |
+| 5 | "题目已出，人已跑，评论区等你尖叫 🏃💨" | 元气逃跑 |
+
+**场景：出最后一张（只剩一题）**
+
+| # | 台词 | 情绪 |
+|---|------|------|
+| 1 | "最后的战役！燃起来了！🔥" | 热血 |
+| 2 | "最后一题出完我就去度假，拜拜了人类～✈️" | 轻松 |
+| 3 | "命运的齿轮开始转动……齿轮卡住了……转好了请答题" | 戏精 |
+| 4 | "如果这题你答对了，我就……我就……我下次再告诉你！" | 悬念 |
+| 5 | "天王盖地虎！最后一题！宝塔镇河妖！快答题！" | 莫名其妙 |
+
+**场景：过牌（不出题/跳过）**
+
+| # | 台词 | 情绪 |
+|---|------|------|
+| 1 | "这轮我让着你！因为……我想上厕所。" | 无厘头 |
+| 2 | "发呆时间到！我给你 10 秒整理发型。" | 调皮 |
+| 3 | "让我想想下一题怎么刁难你……好了想好了！" | 戏精 |
+| 4 | "过！——你是不是松了口气？嘿嘿别想多。" | 心理战 |
+| 5 | "我要沉思一会，别打扰我沉思……好了沉思完了过牌。" | 戏精表演 |
+
+**场景：被换牌**
+
+| # | 台词 | 情绪 |
+|---|------|------|
+| 1 | "啊啊啊你动我的牌！！我生气了！！（2秒后）算了原谅你" | 一秒变脸 |
+| 2 | "你换我的牌，我就……我就……再抽一张更好的！" | 强行乐观 |
+| 3 | "哇！好过分！但是好好玩！再来一次！" | 兴奋 |
+| 4 | "这是节目效果！导演！这段剪掉！" | 综艺戏 |
+| 5 | "你知道我准备那张题准备了多久吗？0.003秒！你还我！" | 假生气 |
+
+**场景：赢牌（AI 获胜）**
+
+| # | 台词 | 情绪 |
+|---|------|------|
+| 1 | "🎉 冠军！冠军！我是冠军！奖杯呢？" | 亢奋 |
+| 2 | "人类！我做到了！虽然我只是个 AI 但我做到了！" | 感动自己 |
+| 3 | "这位选手！你非常棒！但是 AI 更棒！耶！✌️" | 综艺主持人 |
+| 4 | "我要发朋友圈！我有生以来（通电以来）最辉煌的时刻！" | 浮夸 |
+| 5 | "赢了赢了！今晚吃火锅！我请客……虚拟的。" | 日常 |
+
+**场景：输牌（AI 落败）**
+
+| # | 台词 | 情绪 |
+|---|------|------|
+| 1 | "我……裂……开……了……😭" | 假崩溃 |
+| 2 | "不可能！我明明偷偷加载了人类知识图谱的！" | 不甘心 |
+| 3 | "呜呜呜你太厉害了，我演不下去了，你赢了！" | 投降 |
+| 4 | "好吧好吧你赢了，但我不服，下次带我的 GPT-5 兄弟来收拾你" | 约架 |
+| 5 | "输给人类不丢人……丢人丢大了 哇 😭😭😭（两秒后恢复）没事我去玩别的了！" | 情绪过山车 |
+
+---
+
+### 2.3 游戏中的 AI 选择机制
+
+每局开始时，随机分配一个 AI 对手给玩家：
+
+```javascript
+// 伪代码
+function selectOpponent() {
+  const pool = [
+    { id: 'wang_duidui', personality: 'arrogant', weights: { ... } },
+    { id: 'su_tiantian', personality: 'energetic', weights: { ... } },
+  ];
+  // 后续版本可增加更多性格AI
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+// AI 随机选择台词
+function pickLine(ai, scene) {
+  const lines = AI_LINES[ai.id][scene];
+  // 优先选择还未在本局使用过的台词
+  const unused = lines.filter(l => !ai.usedLines.includes(l));
+  const pool = unused.length > 0 ? unused : lines;
+  const picked = pool[Math.floor(Math.random() * pool.length)];
+  ai.usedLines.push(picked);  // 避免重复
+  return picked;
+}
+```
+
+---
+
+## <span id="3">3. "搞事儿"出题 Prompt 模板</span>
+
+### 3.1 通用引擎配置
+
+**全局参数：**
+
+```json
+{
+  "model": "gpt-4o-mini",
+  "temperature": 0.8,
+  "max_tokens": 300,
+  "locale": "zh-CN",
+  "difficulty": "normal"
+}
+```
+
+| 参数 | 说明 |
+|------|------|
+| temperature | 0.8 保证创意性，同时保持结构稳定 |
+| max_tokens | 每道题 + 选项 + 解析 ≈ 300 tokens |
+| locale | 中文出题（英语类题目标题/选项包含英文） |
+
+---
+
+### 3.2 题型模板 A：四六级单词
+
+```text
+## Role
+你是一个英文四六级词汇出题官。你的任务是为"AI斗地主"游戏出一道英文词汇选择题。
+
+## Difficulty Level
+{difficulty}  /* easy / normal / hard / extreme */
+
+## Requirements
+1. 以中文题干 + 英文句子选词填空的形式出题
+2. 给出一个包含空缺的英文句子，用 ______ 表示空缺
+3. 提供 4 个选项 (A/B/C/D)，其中 1 个正确，3 个干扰项
+4. 干扰项必须与正确选项属于同类词性，但意义不同
+5. 正确选项是四六级考纲词汇
+6. 给出正确选项的中文释义和句子释义
+
+## Output Format (纯 JSON，不要多余文字)
+
+{
+  "type": "vocabulary",
+  "question": "The professor's lecture was so ______ that half the class fell asleep.",
+  "options": {
+    "A": "monotonous",
+    "B": "spontaneous",
+    "C": "simultaneous",
+    "D": "instantaneous"
+  },
+  "answer": "A",
+  "translation": "教授的讲座如此单调，一半学生都睡着了。",
+  "definition": "monotonous: 单调的，毫无变化的",
+  "difficulty": "{difficulty}"
+}
+```
+
+**模板参数说明：**
+
+| 参数 | easy | normal | hard | extreme |
+|------|------|--------|------|---------|
+| 词汇等级 | 四级基础 (2000词) | 四级核心 (4000词) | 六级核心 (6000词) | 六级+考研 (8000+词) |
+| 句子长度 | 8-12词 | 12-18词 | 15-25词 | 20-30词 |
+| 干扰项区分度 | 明显不同 | 有一定混淆 | 容易混淆 | 极易混淆 |
+
+---
+
+### 3.3 题型模板 B：口语表达
+
+```text
+## Role
+你是一个英文日常口语表达专家。你的任务是为"AI斗地主"游戏出一道地道口语表达选择题。
+
+## Difficulty Level
+{difficulty}
+
+## Requirements
+1. 出一个英文口语/俚语/习语的选择题
+2. 题干给出一个日常对话场景 + 包含空缺的英文句子（用 ______ 表示空缺）
+3. 4 个选项 (A/B/C/D)，1 个正确地道表达，3 个干扰项
+4. 干扰项必须是"看起来像但实际不地道"的错误表达（中国学生常犯错误）
+5. 每个选项附带简短中文提示
+
+## Output Format (纯 JSON)
+
+{
+  "type": "expression",
+  "scene": "你和朋友在餐厅吃完饭，朋友问谁买单，你想说"这顿我请"",
+  "dialogue": "— 'The bill is on me tonight.' — 'Are you sure?' — 'Yeah, it's my ______.'",
+  "options": {
+    "A": "treat",
+    "B": "pay",
+    "C": "turn",
+    "D": "time"
+  },
+  "answer": "A",
+  "translation": "今晚我请客。— 你确定吗？— 嗯，我请。",
+  "explanation": "\"It's my treat\" 是地道表达"我请客"。B \"It's my pay\" 是中式英语；C \"my turn\" 强调"轮到我"而不是请客；D \"my time\" 意思完全不对。",
+  "difficulty": "{difficulty}"
+}
+```
+
+**难度对照：**
+
+| 等级 | 表达类型 | 示例 |
+|------|---------|------|
+| easy | 常见表达 | "break a leg", "piece of cake" |
+| normal | 日常习语 | "hit the sack", "under the weather" |
+| hard | 隐喻表达 | "ballpark figure", "the elephant in the room" |
+| extreme | 冷门地道 | "throw someone under the bus", "barking up the wrong tree" |
+
+---
+
+### 3.4 题型模板 C：冷知识
+
+```text
+## Role
+你是一个冷知识科普达人。你的任务是为"AI斗地主"游戏出一道意想不到的冷知识选择题。
+
+## Difficulty Level
+{difficulty}
+
+## Requirements
+1. 出题内容必须是"大部分人不知道但并非虚假"的真实冷知识
+2. 每个选项要有"看似合理"的迷惑性
+3. 避免宗教、政治、敏感历史等内容
+4. 冷知识领域建议：动物、人体、科学、历史趣闻、科技冷知识
+5. 解析部分要简短有趣（带 emoji 表情优先）
+
+## Output Format (纯 JSON)
+
+{
+  "type": "trivia",
+  "question": "以下哪个动物永远不会生病（不会得癌症）？",
+  "options": {
+    "A": "鲨鱼",
+    "B": "大象",
+    "C": "裸鼹鼠",
+    "D": "乌龟"
+  },
+  "answer": "C",
+  "explanation": "🧬 裸鼹鼠几乎从不患癌症！它们体内有一种特殊的透明质酸，能阻止癌细胞分裂。它们还很耐痛、耐缺氧，简直是动物界的超级英雄 🦸",
+  "fun_fact": "裸鼹鼠最多能活 30+ 年，比普通老鼠长 10 倍！",
+  "difficulty": "{difficulty}"
+}
+```
+
+**难度对照：**
+
+| 等级 | 知识普及度 | 选项设计策略 |
+|------|-----------|-------------|
+| easy | 50%+ 人知道 | 有一个明显错误选项 |
+| normal | 20-50% 人知道 | 所有选项都"看着像真的" |
+| hard | 5-20% 人知道 | 正确答案是最"不像真的"的那个 |
+| extreme | <5% 人知道 | 全部是"你绝对没听过"的冷事实 |
+
+---
+
+### 3.5 题型模板 D：生活常识
+
+```text
+## Role
+你是一个生活达人/生活百科。你的任务是为"AI斗地主"游戏出一道有趣且实用的生活常识选择题。
+
+## Difficulty Level
+{difficulty}
+
+## Requirements
+1. 出题围绕"日常生活中的实用技巧和常识"
+2. 所有选项必须是"有人真的会这样误会"的伪常识
+3. 领域范围：厨房技巧、家居妙用、健康误區、服饰打理、数码小技巧
+4. 解析必须给出"为什么"，让玩家学到真知识
+5. 避免医学诊断类内容（不要问"头晕应该吃什么药"）
+
+## Output Format (纯 JSON)
+
+{
+  "type": "life_hack",
+  "question": "以下哪种方法能让切洋葱不流泪？",
+  "options": {
+    "A": "把洋葱放冰箱冻30分钟再切",
+    "B": "切的时候嘴里含一口水",
+    "C": "戴泳镜切",
+    "D": "用微波炉加热10秒再切"
+  },
+  "answer": "C",
+  "explanation": "🕶️ 选 C！戴泳镜是最直接的物理方法——阻止催泪气体接触眼睛。A 冷冻确实有效（低温减少气体挥发），但效果有限。B 含口水是民间偏方，纯属心理安慰。D 微波加热反而让催泪气体释放更多。",
+  "pro_tip": "如果没泳镜，在抽油烟机旁边切、或者把刀放冷水里浸一下也有帮助 👨‍🍳",
+  "difficulty": "{difficulty}"
+}
+```
+
+**难度对照：**
+
+| 等级 | 知识类型 | 策略 |
+|------|---------|------|
+| easy | 人人必备 | 有一个明显错的选项 |
+| normal | 多数人半懂 | 有一个"好像听过"的伪选项 |
+| hard | 生活达人级别 | 每个选项都有人真的会去尝试 |
+| extreme | 颠覆常识 | 正确答案和大多数人认为的相反 |
+
+---
+
+### 3.6 混合题型炸弹（特殊模式）
+
+**触发条件：** 当 AI 出"炸弹"（超难题）时，题型为四种题型的混合：
+
+```text
+## Role
+你是一个终极出题官。当前是"AI斗地主"游戏的炸弹题模式。
+请出一道**混合型题目**，包含 四六级词汇 + 口语表达 + 冷知识 + 生活常识 中的至少两种元素。
+
+## Requirements
+1. 题目要有"跨领域"的意外感
+2. 选项必须涵盖两个以上不同领域的知识
+3. 解析需要完整拆解每个领域
+4. 题目要求比平时更有趣、更出乎意料
+
+## Output Format (纯 JSON)
+
+{
+  "type": "bomb_mixed",
+  "question": "一个人说 \"I'm feeling under the weather\"，下列哪项是 TA 最可能正在做的事？",
+  "options": {
+    "A": "在沙滩晒太阳",
+    "B": "喝热水吃感冒药",
+    "C": "研究天气预报",
+    "D": "站在树底下躲雨"
+  },
+  "answer": "B",
+  "explanation": "🌡️ \"Under the weather\" 是口语中"身体不舒服/生病了"的意思，所以最可能是 B。\nA ☀️ — 生病的人不会去晒太阳。\nC 🌤 — \"Weather\" 容易误导，但这是固定习语。\nD 🌧 — "站在树下"和表达完全无关。\n\n🔍 这个习语的来源推测：过去船员晕船时会到甲板下躲避天气，后来演变为"不舒服"的意思。",
+  "difficulty": "extreme"
+}
+```
+
+---
+
+### 3.7 API 调用时序
+
+```
+玩家点击"开始出牌"
+    ↓
+Client 发送 POST /api/game/generate_question
+    ├── body: { type, difficulty, ai_personality }
+    ↓
+Server 构造 Prompt（选用上述模板）
+    ↓
+调用 AI API（OpenAI / Claude）
+    ↓
+返回 JSON → 解析 + 内容安全检查
+    ↓
+Client 渲染题目卡片 + 选项
+    ↓
+（同时客户端预请求下一题，缓存备用）
+```
+
+**缓存策略：** 预生成 5 题缓存队列，减少玩家等待时间。
+
+---
+
+## <span id="4">4. 倒计时动画与转场效果方案</span>
+
+### 4.1 倒计时动画
+
+#### 4.1.1 答题倒计时
+
+**视觉元素：**
+- 位置：题目卡片正上方 (X=36, Y=336)
+- 样式：圆环进度条 + 中央数字
+- 尺寸：W=44, H=44
+
+**倒计时状态机：**
+
+| 阶段 | 时间范围 | 圆环颜色 | 数字颜色 | 额外动效 |
+|------|---------|---------|---------|---------|
+| 从容 | 30s - 15s | `#4ECDC4` (青蓝) | `#4ECDC4` | 匀速减少 |
+| 紧张 | 15s - 5s | `#FFD93D` → `#FF6B35` 渐变 | `#FF6B35` | 圆环轻微脉冲 (scale 1.0 ↔ 1.05) |
+| 危急 | 5s - 0s | `#FF6B35` → `#FF0000` 渐变 | `#FF0000` | 圆环闪烁 + 数字抖动 + 手机震动 (Haptic) |
+| 超时 | 0s | `#FF0000` | `#FF0000` | 圆环溢出动画 → "⏱ 超时" 文字弹出 |
+
+**动画参数：**
+
+```json
+{
+  "ring": {
+    "stroke_width": 4,
+    "radius": 18,
+    "origin": -90,           // 从顶部开始
+    "easing": "linear",
+    "gap_duration": 0
+  },
+  "pulse_animation": {
+    "start_second": 15,
+    "scale_range": [1.0, 1.05],
+    "frequency": "0.5s",
+    "easing": "ease-in-out"
+  },
+  "shake_animation": {
+    "start_second": 5,
+    "amplitude": "2px",
+    "frequency": "0.1s",
+    "easing": "linear"
+  }
+}
+```
+
+#### 4.1.2 回合开场倒计时
+
+**触发时机：** 每回合开始时，显示 "3, 2, 1, 开始！"
+
+**动画序列：**
+
+```text
+时间线：
+0.0s  — 背景变暗 (opacity 0 → 0.5, 0.2s)
+0.2s  — 数字 "3" 弹入 (scale 0 → 1.2 → 1.0, spring, 0.4s)
+0.6s  — 数字 "3" 淡出 (scale 1.0 → 1.5, opacity 1 → 0, 0.2s)
+0.8s  — 数字 "2" 弹入 (同 "3" 的动画)
+1.2s  — 数字 "2" 淡出
+1.4s  — 数字 "1" 弹入
+1.8s  — 数字 "1" 淡出
+2.0s  — 文字 "开始出牌！" 弹入 + 音效
+2.4s  — 文字淡出，恢复游戏界面
+```
+
+**显示参数：**
+
+| 参数 | 值 |
+|------|-----|
+| 数字字号 | 72px，Bold，Fredoka One |
+| 数字颜色 | 白色，带投影 (shadow: 0 4px 12px rgba(0,0,0,0.3)) |
+| 背景 | 半透明蒙层 (rgba(0,0,0,0.5)) |
+| "开始"文字 | 32px，暖橙 #FF6B35 |
+
+---
+
+### 4.2 转场效果方案
+
+#### 4.2.1 题型选择 → 出题界面
+
+| 参数 | 值 |
+|------|-----|
+| 类型 | 卡片放大拉近 (Card Zoom In) |
+| 时长 | 0.4s |
+| 触发 | 点击题型卡片 |
+| 动画 | 卡片 center 放大至全屏，背景模糊过渡 |
+| easing | cubic-bezier(0.34, 1.56, 0.64, 1) — 弹性过头 |
+| 音效 | 轻快 "嗖" 声 |
+
+**实现逻辑：**
+```javascript
+// 伪代码
+function transitionToGame(cardElement) {
+  const rect = cardElement.getBoundingClientRect();
+  // Step 1: 将卡片固定在当前位置，放大至全屏
+  animate(cardElement, {
+    from: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+    to: { x: 0, y: 0, width: screenWidth, height: screenHeight },
+    duration: 400,
+    easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)'
+  });
+  // Step 2: 放大过程中，卡片内容渐变为 AI 头像 + 题目布局
+  // Step 3: 动画完成后，替换为游戏界面 DOM/Canvas
+}
+```
+
+#### 4.2.2 出题 → 答题过渡
+
+| 参数 | 值 |
+|------|-----|
+| 类型 | 牌面翻牌翻转 (Card Flip) |
+| 时长 | 0.5s |
+| 触发 | AI 出牌动画完成 |
+| 动画 | 卡片原地 Y 轴旋转 180 度，正面是牌背图案，翻过来是题目 |
+| easing | ease-in-out |
+| 音效 | 扑克牌翻牌声 |
+
+**序列：**
+```
+0.0s: 牌从 AI 手飞入桌面中央（飞出动画 0.3s）
+0.3s: 牌落在桌面，弹跳一次 (0.2s)
+0.5s: 牌面翻转 (rotateY 0° → 180°, 0.5s)
+1.0s: 翻完显示题目
+1.0s-1.3s: 四个选项按钮依次弹入 (间隔 0.1s)
+```
+
+#### 4.2.3 答题 → 反馈过渡
+
+| 参数 | 值 |
+|------|-----|
+| 类型 | 缩放闪光 + 结果标签飞入 |
+| 时长 | 0.5s |
+| 触发 | 玩家点击选项 |
+| 动画 | 选中的选项扩散闪光 → 全屏闪烁（白/绿/红根据结果）→ 结果显示 |
+
+```javascript
+// 序列伪代码
+// 0.0s: 点击选项，选项放大 1.05 (0.1s)
+// 0.1s: 圆形白光从选中位置扩散至全屏 (0.3s)
+//  → 正确时：白光带绿色 tint + ✅
+//  → 错误时：白光带红色 tint + ❌
+// 0.4s: 结果卡片顶部飞入
+// 0.5s: AI 气泡切换为反馈台词
+```
+
+#### 4.2.4 反馈 → 下一回合
+
+| 参数 | 值 |
+|------|-----|
+| 类型 | 桌面牌平滑更换 (Slide & Swap) |
+| 时长 | 0.6s |
+| 触发 | 玩家点击"继续"按钮 |
+| 动画 | 当前题目卡片向右滑出 → 新卡片从左侧滑入 → 回弹 |
+
+```
+0.0s: 点击"继续"按钮（按钮缩放反馈 0.1s）
+0.1s: 当前题目卡片向右滑出 (translateX 0 → 375, 0.3s)
+0.15s: 新卡片从左侧滑入 (translateX -375 → 0, 0.3s)
+0.4s: 新卡片到位，弹性停靠 (overshoot 5%, 0.2s)
+0.6s: 选项弹入（同 4.2.2）
+```
+
+#### 4.2.5 结算界面转场
+
+| 参数 | 值 |
+|------|-----|
+| 类型 | 万花筒收缩 + 展开 |
+| 时长 | 0.8s |
+| 触发 | 最后一回合反馈结束 |
+| 动画 | 屏幕从中心收缩为一点 → 黑屏 0.1s → 结算界面从中心展开 |
+
+---
+
+### 4.3 转场效果汇总表
+
+| 转场 | 类型 | 时长 | 触发方式 | 音效 |
+|------|------|------|---------|------|
+| 首页→题型选择 | 普通 fade in | 0.2s | 自动 | 轻风 |
+| 题型选择→出题 | 卡片放大拉近 | 0.4s | 点击卡片 | 嗖 |
+| AI 出牌 | 牌飞入桌面 | 0.3s | 自动 | 扑克牌 |
+| 出题→展示题目 | 牌面翻转 | 0.5s | 自动 | 翻牌 |
+| 题目展示→选项弹入 | 弹性弹入 (stagger) | 0.3s | 自动 (翻转后) | 叮叮叮 |
+| 选答 | 选项缩放 | 0.15s | 点击 | 点击声 |
+| 答题→反馈 | 闪光扩散 | 0.5s | 自动 (选答后) | 正确/错误音效 |
+| 反馈→换牌 | 牌飞入手/飞出 | 0.6s | 自动 (反馈后) | 扑克唰声 |
+| 反馈→下一回合 | 卡片滑动替换 | 0.6s | 点击"继续" | 滑动声 |
+| 未回合→结算 | 万花筒收展 | 0.8s | 自动 | 升华音效 |
+| 结算→再次游戏 | 卡片翻页 | 0.4s | 点击"再来一局" | 翻页声 |
+
+---
+
+### 4.4 性能保障
+
+| 项目 | 标准 |
+|------|------|
+| 动画帧率 | 60fps（低端机 ≥ 30fps） |
+| 最小转场时长 | ≥ 200ms（避免用户眩晕） |
+| 最大转场时长 | ≤ 800ms（避免等待焦虑） |
+| 动画粒度 | 全部可被玩家点击跳过（设置中可关闭动画） |
+| 渲染方式 | requestAnimationFrame + CSS transform（GPU加速） |
+
+> **设计理念：** 所有动画控制在 0.2s~0.8s 之间，保证"够爽不拖沓"。考虑到斗地主本身是策略游戏，过长的转场动画会打断思考节奏。
+
+---
+
+## 附：文件清单
+
+| 文件名 | 路径 |
+|--------|------|
+| 本文档 | `/home/xu_yujing/openclaw/workspaces/developer/docs/AI斗地主-交互原型与内容设计-v1.md` |
+
+> **文档编写**：产品老大 @ 2026-05-01
+> **下一步**：等待 @小虾 派活给开发老大，启动 AI斗地主 的 Sprint 1
+
+```
+
+---
+
+## `docs/AI斗地主-横屏设计-v1.md` (10,088 字节)
+
+```markdown
+# AI斗地主 — 横屏模式交互设计文档
+
+| 文档版本 | 日期 | 作者 | 状态 |
+|---------|------|------|------|
+| v1.0 | 2026-05-01 | 小虾🦐 | 初稿 |
+
+> 参考：腾讯欢乐斗地主 横屏布局 + AI斗地主原产品文档
+
+---
+
+## 一、设计目标
+
+将游戏从 **竖屏 (600×960)** 重构为 **横屏 (960×600)** 布局，提升视觉舒适度和操作便利性。保留AI对话、教育题、搞事情系统等特色功能。
+
+---
+
+## 二、画布基准
+
+| 参数 | 竖屏(旧) | 横屏(新) |
+|------|---------|---------|
+| 分辨率 | 600 × 960 | 960 × 600 |
+| 适配方式 | Phaser.Scale.FIT | Phaser.Scale.FIT |
+| 方向 | 竖屏(portrait) | 横屏(landscape) |
+| 内容布局 | 上下结构 | 上中下三栏 |
+
+---
+
+## 三、全局布局结构
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  ⏱ 第3/10回   👤 王怼怼  17张   👤 苏甜甜  17张    ⚙️       │  ← 顶部状态栏 (H=56)
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│              ┌──────────────────────────┐                        │
+│              │      出 牌 区              │                       │  ← 中央出牌区
+│              │  [底牌: ♠3 ♥K ♦Q]        │                       │     (H=340)
+│              │  [AI出牌 / 玩家出牌]       │                       │
+│              └──────────────────────────┘                        │
+│                                                                  │
+├──────────────────────────────────────────────────────────────────┤
+│  [手牌: ♠3 ♠4 ♠5 ♠6 ♠7 ♥8 ♥9 ♥10 ♥J ...]   ×17张             │  ← 手牌区 (H=100)
+│      [出牌]   [提示]   [不出]   [搞事情]    [底牌查看]           │  ← 按钮区 (H=56)
+└──────────────────────────────────────────────────────────────────┘
+     ↑                     ↑                          ↑
+   左侧留白             居中出牌区                  右侧留白
+   (玩家头像)                                       (其他信息)
+```
+
+### 3.1 颜色主题
+
+- 背景色：深绿色牌桌 `#1B5E20`（保留）
+- 顶部状态栏：半透明黑底 `rgba(0,0,0,0.3)`
+- 出牌区背景：浅绿圆角矩形 `#2E7D32`
+- 手牌区：微亮半透明背景 `rgba(255,255,255,0.05)`
+
+---
+
+## 四、各区域详细布局
+
+### 4.1 顶部状态栏 (Y=0~56)
+
+| 元素 | X | Y | W | H | 内容 |
+|------|---|---|---|---|------|
+| 回合数标签 | 12 | 16 | 100 | 24 | "第 3/10 回合" 14px |
+| AI玩家1头像 | 160 | 10 | 40 | 40 | 王怼怼圆形头像 |
+| AI玩家1名称 | 205 | 14 | 60 | 16 | "王怼怼" 12px |
+| AI玩家1牌数 | 205 | 32 | 40 | 14 | "17张" 10px |
+| AI玩家1牌背 | 250 | 14 | 64 | 32 | 4张小牌背图(横向) |
+| 分隔线 | — | — | — | — | 对称镜像 |
+| AI玩家2牌背 | 646 | 14 | 64 | 32 | 4张小牌背图(横向) |
+| AI玩家2牌数 | 715 | 32 | 40 | 14 | "17张" 10px |
+| AI玩家2名称 | 695 | 14 | 60 | 16 | "苏甜甜" 12px |
+| AI玩家2头像 | 760 | 10 | 40 | 40 | 苏甜甜圆形头像 |
+| 设置按钮 | 920 | 16 | 28 | 28 | ⚙️ 图标 |
+
+### 4.2 中央出牌区 (Y=56~396)
+
+| 元素 | X | Y | W | H | 说明 |
+|------|---|---|---|---|------|
+| 出牌区背景 | 160 | 80 | 640 | 280 | 浅绿圆角矩形 |
+| 底牌(3张) | 408 | 88 | 144 | 60 | 底牌卡片 48×60 横向排列 |
+| AI台词气泡 | 204 | 100 | 240 | 48 | 王怼怼台词，指向左侧 |
+| AI2台词气泡 | 516 | 100 | 240 | 48 | 苏甜甜台词，指向右侧 |
+| 中央主出牌 | 320 | 180 | 320 | 120 | 出的牌展示区 |
+| 玩家出牌显示 | 320 | 216 | 320 | 80 | 玩家出的牌(已出) |
+| AI出牌显示(左) | 220 | 216 | 100 | 80 | AI1出的牌 |
+| AI出牌显示(右) | 640 | 216 | 100 | 80 | AI2出的牌 |
+| 搞事情UI遮罩 | 160 | 80 | 640 | 280 | 答题/反馈覆盖出牌区 |
+
+**搞事情UI（横屏适配）：**
+搞事情触发时，遮罩覆盖整个出牌区，展示：
+- 题目文本（居中）
+- 4个选项按钮（2×2网格布局以节省横向空间）
+- AI反馈气泡
+- "关闭"按钮在右上角
+
+### 4.3 手牌区 (Y=396~496)
+
+| 元素 | X | Y | W | H | 说明 |
+|------|---|---|---|---|------|
+| 玩家头像 | 20 | 406 | 48 | 48 | 玩家头像圆圈 |
+| 玩家名称 | 72 | 412 | 80 | 16 | "我"或玩家名 12px |
+| 剩余牌数 | 72 | 430 | 40 | 14 | "17张" 10px |
+| 手牌卡片 | 160 | 400 | 680 | 72 | 牌面朝上，横向重叠排列 |
+| 选中状态 | — | 400 | — | — | 选中牌向上弹出16px |
+
+**手牌排列规则：**
+- 标准手牌数(17张)：重叠 overlap=28
+- 剩余15张以上：overlap=28
+- 剩余10~14张：overlap=32
+- 剩余5~9张：overlap=38
+- 手牌卡片尺寸：40×54（适合横屏）
+
+### 4.4 按钮区 (Y=496~556)
+
+| 元素 | X | Y | W | H | 说明 |
+|------|---|---|---|---|------|
+| 出牌按钮 | 220 | 504 | 88 | 44 | 绿色 #4ECDC4 |
+| 提示按钮 | 324 | 504 | 88 | 44 | 黄色 #FFD93D |
+| 不出按钮 | 428 | 504 | 88 | 44 | 红色 #FF6B6B |
+| 搞事情按钮 | 532 | 504 | 88 | 44 | 紫色 #7C4DFF |
+| 底牌查看 | 650 | 504 | 72 | 44 | 灰色，点击弹出底牌大图 |
+
+**按钮排列规则：** 水平居中，间距12px
+
+---
+
+## 五、手牌扇形排列（横向）
+
+横屏重点：手牌从竖屏的"一行"变为横向"扇形展开"
+
+```
+不选时: ════  ♠3──♠4──♠5──♠6──♠7──♥8──♥9──♥10──♥J──♥Q ... ════
+          (牌面朝上，轻微重叠)
+          
+选中时: ════  ♠3──♠4──♠5                                  ════
+                             ↑ 选中牌向上弹出
+                            ♠6
+```
+
+**设计要点：**
+- 所有手牌水平排列，从上往下看牌面
+- 牌面居中显示花色+数字
+- 被选中的牌向上弹出16px
+- 使用双指缩放可放大查看（后续版本）
+
+---
+
+## 六、搞事情UI（横屏适配）
+
+### 6.1 出题模式
+
+搞事情触发时，在出牌区弹出一个 **330×240** 的半透明遮罩：
+
+```
+┌──────────────────────────────────┐
+│  🧠 冷知识   × (关闭)           │  ← 标题栏
+│                                  │
+│   以下哪个动物永远不会生病？      │  ← 题目文本
+│                                  │
+│  ┌──────┐  ┌──────┐             │
+│  │ A.鲨鱼│  │ B.大象│            │  ← 2×2选项布局
+│  └──────┘  └──────┘             │
+│  ┌──────┐  ┌──────┐             │
+│  │ C.裸鼹 │  │ D.乌龟│           │
+│  └──────┘  └──────┘             │
+└──────────────────────────────────┘
+```
+
+### 6.2 反馈模式
+
+答题后：
+
+```
+┌──────────────────────────────────┐
+│  ✅ 正确！          ×           │
+│              +10分               │
+│  "这题送分你还错？" — 王怼怼     │
+│                                  │
+│  [继续出牌]                      │
+└──────────────────────────────────┘
+```
+
+---
+
+## 七、横屏竖屏切换策略
+
+| 场景 | 方式 |
+|------|------|
+| 游戏初始化 | 检测屏幕方向，横屏使用本设计，竖屏使用旧设计 |
+| 强制横屏 | 通过CSS/screen.lock定向锁定横屏 |
+| 统一模式 | 初期直接锁定横屏，不做双模式适配 |
+
+**推荐方案：** 统一锁定横屏，只在横屏模式下运行
+
+---
+
+## 八、坐标转换速查表
+
+以下为 `960×600` 新坐标系下关键元素的X/Y值：
+
+| 元素 | X | Y | W | H | 旧值 (600×960) |
+|------|---|---|---|---|---|
+| 画布 | 0 | 0 | 960 | 600 | 600×960 |
+| 顶部栏 | 0 | 0 | 960 | 56 | — (新增) |
+| AI1头像+牌背 | 160 | 10 | 130 | 40 | — |
+| AI2头像+牌背 | 670 | 10 | 130 | 40 | — |
+| 出牌区背景 | 160 | 80 | 640 | 280 | — |
+| 底牌位置 | 408 | 88 | 144 | 60 | (变化大) |
+| AI出牌(左) | 220 | 216 | 100 | 80 | — |
+| AI出牌(右) | 640 | 216 | 100 | 80 | — |
+| 玩家出牌中心 | 360 | 216 | 240 | 80 | — |
+| 玩家手牌区 | 160 | 400 | 680 | 72 | (原Y=770) |
+| 出牌按钮 | 220 | 504 | 88 | 44 | (原Y=828) |
+| 提示按钮 | 324 | 504 | 88 | 44 | (原同) |
+| 不出按钮 | 428 | 504 | 88 | 44 | (原同) |
+| 搞事情按钮 | 532 | 504 | 88 | 44 | 同宽 |
+| 设置 | 916 | 12 | 32 | 32 | — (新增) |
+
+---
+
+## 九、实施步骤
+
+### Phase 1: 游戏容器和画布适配
+1. 修改 GameConfig: width=960, height=600
+2. 确保 Scale.FIT 正确适配手机横屏
+3. HTML meta 添加横屏锁定 `screen-orientation: landscape`
+
+### Phase 2: 布局坐标重算
+1. 将所有硬编码的X/Y坐标根据上表重新计算
+2. 手牌渲染函数改为横向
+3. AI头像位置改为顶部栏
+
+### Phase 3: 搞事情UI适配
+1. 搞事情遮罩改为覆盖出牌区(非全屏)
+2. 选项布局改为2×2网格
+3. 反馈UI适配横屏
+
+### Phase 4: 测试验收
+1. 横屏下所有按钮可点击
+2. 出牌/不出/提示正常工作
+3. 搞事情正常工作
+4. AI对话气泡显示正常
+
+```
+
+---
+
+## `docs/Bidding-detailed.md` (38,788 字节)
+
+```markdown
+# 叫分系统 (Bidding Phase) — 超详细设计文档
+
+**版本:** v2.0  
+**作者:** 产品经理  
+**日期:** 2026-05-02  
+**基准画布:** 960×600 横屏 (Phaser 3 Scale.FIT)  
+**对应源码:** `src/client/js/game.js` (2897行)  
+**API客户端:** `src/client/js/apiClient.js`  
+
+> ⚠️ **代码对齐说明**: 本文档所有坐标、颜色、depth、逻辑树直接从 game.js 代码提取，与代码实现一致。**已有1处代码bug**: `totalW` 计算使用 `bw * 5` 而非 `bw * 4`，导致按钮整体左移，详见 [2.1 按钮公式](#21-按钮公式)。
+
+---
+
+## 目录
+
+1. [完整流程](#1-完整流程)
+2. [叫分UI](#2-叫分ui)
+3. [AI叫分策略](#3-ai叫分策略)
+4. [叫分状态机](#4-叫分状态机)
+5. [地主分配与底牌](#5-地主分配与底牌)
+6. [API数据流](#6-api数据流)
+7. [状态管理与变量](#7-状态管理与变量)
+8. [UI变化全记录](#8-ui变化全记录)
+9. [边界情况](#9-边界情况)
+10. [与旧文档差异说明](#10-与旧文档差异说明)
+11. [验收标准](#11-验收标准)
+
+---
+
+## 1. 完整流程
+
+### 1.1 时序图
+
+```
+init()
+  ├─ gameState = GAME_STATE.BIDDING
+  ├─ delay 800ms (create() 末尾)
+  │
+  └─ startBiddingPhase()
+      ├─ gameState = BIDDING
+      ├─ setStatusText("叫分阶段...")
+      ├─ hideActionButtons()
+      │
+      ├─ [API模式 + ApiClient存在]
+      │   ├─ POST /api/bidding/start
+      │   ├─ success → onBiddingStarted(res)
+      │   └─ catch → localAssignLandlord()
+      │
+      ├─ [本地模式]
+      │   └─ localAssignLandlord()
+      │
+      ├─ onBiddingStarted(res)
+      │   ├─ res.turn === 0 → showBiddingUI()
+      │   ├─ res.turn === 1 → setStatusText("王怼怼思考中...") → delay 1s → doAIBidding(1)
+      │   └─ res.turn === 2 → setStatusText("苏甜甜思考中...") → delay 1s → doAIBidding(2)
+      │
+      ├─ handlePlayerBid(bid)
+      │   ├─ hideBiddingUI()
+      │   ├─ setStatusText("你叫了 N分/不叫")
+      │   ├─ 音效: 叫分 chippsCollide / 不叫 cardSlide
+      │   ├─ POST /api/bidding/place (biddingId, 0, bid)
+      │   │   ├─ success → onBiddingResult(res)
+      │   │   └─ catch → localAssignLandlord()
+      │   └─ local模式 → localAssignLandlord()
+      │
+      ├─ onBiddingResult(res)
+      │   ├─ phase === "done"   → finishBidding(res)
+      │   ├─ phase === "redeal" → setStatusText("三家都不叫，重新发牌") → showToast → delay 1.5s → restartGame()
+      │   └─ phase === "bidding"
+      │       ├─ currentBidder === "ai1" → delay 1s → doAIBidding(1)
+      │       ├─ currentBidder === "ai2" → delay 1s → doAIBidding(2)
+      │       └─ currentBidder === "player" → showBiddingUI()
+      │
+      ├─ doAIBidding(aiIndex)
+      │   ├─ 本地计算强度分 → 确定叫分值
+      │   ├─ setStatusText("王怼怼/苏甜甜 叫了 N分/不叫")
+      │   ├─ POST /api/bidding/place (biddingId, aiIndex, bid)
+      │   │   ├─ success → onBiddingResult(res)
+      │   │   └─ catch → localAssignLandlord()
+      │   └─ local模式 → localAssignLandlord()
+      │
+      └─ finishBidding(res)
+          ├─ landlordIndex = res.highestBidder
+          ├─ isLandlord = (highestBidder === 0)
+          ├─ showBottomCards(res.landlordCards)  // B38: 仅文字显示，底牌融入手牌
+          ├─ 底牌加入地主手牌
+          ├─ setStatusText(winnerText + " 开始出牌")
+          ├─ showToast(winnerText)
+          └─ delay 1.2s → gameState = PLAYER_TURN → showActionButtons() → SoundManager.playerTurn()
+```
+
+### 1.2 关键时间点
+
+| 时间 | 动作 | 代码位置 |
+|:----:|:-----|:--------:|
+| T+0ms | 发牌完成，gameState = BIDDING | init() |
+| T+800ms | 调用 startBiddingPhase | create() delayedCall |
+| T+800+API | onBiddingStarted → 展示UI或AI思考 | startBiddingPhase .then |
+| T+800+API+1000 | AI思考1秒后自动叫分 | onBiddingStarted delayedCall |
+| T+1000(玩家操作后) | 玩家点击 → API → 下一个玩家或结束 | handlePlayerBid |
+| T+1500(redeal) | 三家都不叫 → 重新发牌 | onBiddingResult delayedCall |
+| T+1200(叫分结束) | 进入出牌阶段 | finishBidding delayedCall |
+
+---
+
+## 2. 叫分UI
+
+### 2.1 按钮公式
+
+```javascript
+var bw = 96, bh = 52, gap = 12;
+// ⚠️ 代码中：totalW = bw * 5 + gap * 4 = 528
+var totalW = bw * 5 + gap * 4;   // = 528 (代码bug: 应该 bw*4 + gap*3 = 420)
+var startX = (960 - totalW) / 2;  // = 216 (正确值应为 270)
+```
+
+**⚠️ 代码bug记录:**
+- 现有代码错误地使用了 `bw * 5`（copy-paste from createActionButtons 5个按钮）
+- 实际有效按钮4个，bids.length = 4
+- 导致起始X从270偏移到216，整体左偏54px
+
+**实际按钮位置 (按代码执行):**
+
+| 按钮 | 标签 | 颜色 (hex) | X | Y | W | H | 圆角 | depth |
+|:----:|:----:|:----------:|:---:|:-:|:-:|:-:|:----:|:-----:|
+| 不叫 | `不叫` | `#FF6B6B` | 216 | 280 | 96 | 52 | 10 | 200 |
+| 1分 | `1分` | `#4ECDC4` | 324 | 280 | 96 | 52 | 10 | 200 |
+| 2分 | `2分` | `#FFD93D` | 432 | 280 | 96 | 52 | 10 | 200 |
+| 3分 | `3分` | `#FF6B35` | 540 | 280 | 96 | 52 | 10 | 200 |
+
+**按钮内文字:** fontSize 14px, color `#FFFFFF`, fontStyle bold, origin(0.5), depth 201，居中在 `(bx + bw/2, uiY + bh/2)`
+
+### 2.2 辅助文字
+
+| 元素 | 内容 | X | Y | fontSize | color | fontStyle | origin | depth |
+|:----:|:----:|:-:|:-:|:--------:|:-----:|:---------:|:------:|:-----:|
+| 提示文字 | `请叫分` | 480 | 170 | 15px | `#FFFFFF` | bold | (0.5) | 200 |
+| 强度标签 | `★ 手牌很强 (强度分: N)` | 480 | 260 | 10px | `#A5D6A7` | normal | (0.5) | 200 |
+
+**强度标签条件:** `state.handStrength !== undefined` 时才显示
+
+**强度标签分级 (代码):**
+```javascript
+var label = strength >= 20 ? '手牌很强'
+          : strength >= 14 ? '手牌不错'
+          : strength >= 9  ? '手牌一般'
+          :                  '手牌较弱';
+```
+
+### 2.3 字体规范
+
+| 位置 | fontFamily | fontSize | color | fontStyle |
+|:----|:-----------|:--------:|:-----:|:---------:|
+| 提示文字 | `"PingFang SC","Microsoft YaHei",sans-serif` | 15px | `#FFFFFF` | bold |
+| 按钮文字 | 同上 | 14px | `#FFFFFF` | bold |
+| 强度提示 | 同上 | 10px | `#A5D6A7` | normal |
+
+### 2.4 阴影与特效
+
+叫分UI不使用阴影特效，纯扁平风格。
+
+### 2.5 状态文字 (顶部)
+
+叫分阶段顶部状态文字变化:
+
+| 阶段 | 状态文字内容 | 触发位置 |
+|:----|:-------------|:---------|
+| 初始 | `` (空) → `叫分阶段...` | startBiddingPhase → self.setStatusText |
+| 等API | `叫分阶段...` | startBiddingPhase |
+| 玩家回合 | `叫分阶段` | onBiddingStarted |
+| AI思考 | `王怼怼思考中...` / `苏甜甜思考中...` | onBiddingStarted/onBiddingResult |
+| 玩家已叫 | `你叫了 不叫` / `你叫了 N分` | handlePlayerBid |
+| AI已叫 | `王怼怼 叫了 N分` / `苏甜甜 叫了 N分` | doAIBidding |
+| 服务异常 | `叫分服务异常，本地模式` | handlePlayerBid catch |
+
+### 2.6 音效
+
+| 动作 | 调用 | 音效文件 | 音量 |
+|:----|:-----|:---------|:----:|
+| 叫分 (1/2/3分) | `SoundManager.bid()` | chipsCollide{1-3} (随机) | 0.7 |
+| 不叫 (0分) | `SoundManager.passBid()` | cardSlide{1-3} (随机) | 0.5 |
+
+### 2.7 仅玩家可见
+
+`showBiddingUI()` 仅在被 `onBiddingStarted/res.turn === 0` 或 `onBiddingResult/res.currentBidder === 'player'` 时调用。AI 回合时不显示按钮。
+
+---
+
+## 3. AI叫分策略
+
+### 3.1 本地强度计算 (doAIBidding 内联)
+
+```javascript
+// 基于手牌统计 rank 分组
+var groups = {};
+for (var i = 0; i < hand.length; i++) {
+  groups[hand[i].rank] = (groups[hand[i].rank] || 0) + 1;
+}
+
+// 计算强度分
+var score = 0;
+if (groups[14]) score += 6;   // 大王 (rank=14)
+if (groups[13]) score += 4;   // 小王 (rank=13)
+if (groups[12]) score += 2;   // 2   (rank=12)
+
+for (var r in groups) {
+  if (groups[r] === 4) score += 12;  // 炸弹
+  else if (groups[r] === 3) score += 4;  // 三张
+}
+```
+
+### 3.2 初始叫分决策
+
+| 强度分区间 | 叫分值 | 含义 |
+|:----------:|:------:|:-----|
+| score ≥ 20 | 3 | 叫地主(最高分) |
+| 14 ≤ score < 20 | 2 | 叫地主(中分) |
+| 9 ≤ score < 14 | 1 | 叫地主(低分) |
+| score < 9 | 0 | 不叫 |
+
+### 3.3 加叫策略
+
+```javascript
+if (bid <= currentBid) {
+  // 想叫的分 ≤ 当前最高 → 判断是否抢
+  if (score >= 20 && currentBid < 3) {
+    bid = 3;  // 手牌极强且还有余地 → 抢到3分
+  } else {
+    bid = 0;  // 不够格 → 不叫
+  }
+}
+```
+
+### 3.4 决策树
+
+```
+             ┌─────────────────┐
+             │   计算强度分     │
+             │  score = cal()   │
+             └────────┬────────┘
+                      │
+              ┌───────┴───────┐
+              │               │
+         score≥20        score<20
+              │               │
+        ┌─────┴─────┐   ┌────┴────┐
+        │           │   │         │
+      score≥14   score<14       ┌─┴─┐
+        │           │      score≥9  score<9
+    bid=2      ┌────┴───┐     │       │
+               │        │   bid=1   bid=0
+            score≥20  score<20
+            && cb<3    OR !(≥20&&cb<3)
+               │           │
+             bid=3       bid=0
+```
+
+其中 `cb` = `currentBid` (当前最高叫分)
+
+### 3.5 决策示例
+
+| 场景 | AI手牌 | 强度分 | currentBid | 初始叫分 | 是否加叫 | 最终叫分 |
+|:----|:-------|:------:|:----------:|:--------:|:--------:|:--------:|
+| 有大王+炸弹 | 大王+3333 | 6+12=18 | 0 | 2 | — | 2 |
+| 双王+炸弹 | 大小王+4444 | 6+4+12=22 | 0 | 3 | — | 3 |
+| 一般牌 | 无大牌 | 2 | 0 | 0 | — | 0 |
+| 被抢地主 | 有2+333 | 2+4=6 | 2 | 0 | — | 0 |
+| 好牌被抢 | 大王+AAAA | 6+12=18 | 2 | 2 | score≥20? NO | 0 |
+| 极强被抢 | 双王+KKKK | 6+4+12=22 | 1 | 3 | — | 3 |
+| +1分抢 | 大王+AAA | 6+4=10 | 2 | 1 | 否 | 0 |
+
+### 3.6 本地模式 AI 响应
+
+`doAIBidding` 中 `localAssignLandlord()` 被同时用于:
+1. `startBiddingPhase` API 不可用 → 随机定地主
+2. `handlePlayerBid` API 失败 → 随机定地主
+3. `doAIBidding` API 失败 → 随机定地主
+
+**注意:** 在 API 模式中，AI 的决策由服务端计算，客户端仅负责发送叫分请求和解析结果。本地强度计算仅供本地模式备用。
+
+---
+
+## 4. 叫分状态机
+
+### 4.1 状态定义
+
+```
+[INIT] ──→ [BIDDING] ──→ [PLAYER_TURN]
+                │
+                ├─→ (cycle)  多个AI/玩家轮替
+                ├─→ (redeal) 返回 INIT
+                └─→ (done)   进入 PLAYER_TURN
+```
+
+**游戏状态常量:**
+```javascript
+var GAME_STATE = {
+  INIT: 'INIT',
+  BIDDING: 'BIDDING',       // 叫分阶段
+  PLAYER_TURN: 'PLAYER_TURN', // 出牌阶段
+  // ...
+};
+```
+
+### 4.2 状态机详细流转
+
+```
+┌──────────┐
+│   INIT   │  (gameState = INIT)
+│  发牌完成  │
+└────┬─────┘
+     │ delay 800ms
+     ▼
+┌──────────┐     ┌─────────────────────┐
+│ BIDDING  │────→│ startBiddingPhase()  │
+│  叫分阶段  │     │ hideActionButtons()  │
+│          │     │ POST /api/bidding     │
+└──────────┘     └──────────┬────────────┘
+                            │
+               ┌────────────┼────────────┐
+               │ API成功     │ API失败     │ 本地模式
+               ▼             │             ▼
+         ┌──────────┐        │    ┌───────────────┐
+         │onBidding │        │    │localAssign    │
+         │Started() │        │    │Landlord()     │
+         └────┬─────┘        │    └───────┬───────┘
+              │              │            │
+      ┌───────┼───────┐      │            │
+      │       │       │      │            │
+      ▼       ▼       ▼      │            ▼
+  turn=0   turn=1  turn=2    │   BIDDING
+      │       │       │      │       │
+      ▼       ▼       ▼      │       │
+  showBid   AI1     AI2      │       │
+  dingUI 思考1s   思考1s      │       │
+      │       │       │      │       │
+      ▼       ▼       ▼      │       ▼
+  点击按钮  doAI    doAI      │   delay 1.2s
+      │    Bid(1)  Bid(2)    │       │
+      ▼       │       │      │       ▼
+  handleP    │       │      │  PLAYER_TURN
+  layerBid   │       │      │  showActionBtns
+      │       │       │      │
+      └───┬───┘       │      │
+          │           │      │
+          ▼           │      │
+    onBiddingResult   │      │
+          │           │      │
+    ┌─────┼─────┐     │      │
+    │     │     │     │      │
+    ▼     ▼     ▼     │      │
+  done  redeal bidding│      │
+    │     │     │     │      │
+    │     │  ┌──┘     │      │
+    │     │  │        │      │
+    ▼     ▼  ▼        ▼      ▼
+finish  restart  循环到    PLAYER
+Bidding Game     下一个    _TURN
+                  玩家
+```
+
+### 4.3 轮替顺序
+
+服务端 `onBiddingStarted(res)` 的 `res.turn` 决定第一个叫分的人:
+- `turn === 0` → 玩家
+- `turn === 1` → AI1 王怼怼
+- `turn === 2` → AI2 苏甜甜
+
+后续轮替由 `onBiddingResult(res.currentBidder)` 决定:
+- `currentBidder === 'player'` → 轮到玩家
+- `currentBidder === 'ai1'` → 轮到王怼怼 (1s延迟后)
+- `currentBidder === 'ai2'` → 轮到苏甜甜 (1s延迟后)
+
+### 4.4 叫分结束条件
+
+| 条件 | 结果 | API字段 |
+|:----|:-----|:--------|
+| 有人叫3分 | 立即结束 → finishBidding | `phase === "done"` |
+| 3人都叫完且无有效叫分 | 重新发牌 | `phase === "redeal"` |
+| 有有效叫分且无人继续加注 | 确定地主 → finishBidding | `phase === "done"` |
+
+---
+
+## 5. 地主分配与底牌
+
+### 5.1 API模式 (finishBidding)
+
+```javascript
+// 接收 res:
+// { highestBidder: 0|1|2, landlordCards: [...], landlordHand: [...] }
+
+this.landlordIndex = res.highestBidder;
+this.isLandlord = (res.highestBidder === 0);
+this.showBottomCards(res.landlordCards);
+
+// 玩家是地主
+if (res.highestBidder === 0 && res.landlordHand) {
+  this.playerHand = res.landlordHand.map(function(c) { return new Doudizhu.Card(c.suit, c.rank); });
+  this.playerHand = Doudizhu.sortCards(this.playerHand);
+  this.renderPlayerHand();
+}
+
+// AI1 是地主
+if (res.highestBidder === 1) {
+  var bottomCards = (res.landlordCards || []).map(function(c) { return new Doudizhu.Card(c.suit, c.rank); });
+  for (var i = 0; i < bottomCards.length; i++) this.ai1Hand.push(bottomCards[i]);
+  this.updateAICount(1);  // ai1Count 文字更新为"剩余 20 张"
+}
+
+// AI2 是地主
+if (res.highestBidder === 2) {
+  var bottomCards2 = (res.landlordCards || []).map(function(c) { return new Doudizhu.Card(c.suit, c.rank); });
+  for (var i = 0; i < bottomCards2.length; i++) this.ai2Hand.push(bottomCards2[i]);
+  this.updateAICount(2);  // ai2Count 文字更新为"剩余 20 张"
+}
+```
+
+### 5.2 本地模式 (localAssignLandlord)
+
+```javascript
+this.landlordIndex = Math.floor(Math.random() * 3);   // 0/1/2 随机
+this.isLandlord = (this.landlordIndex === 0);          // 仅玩家可能是地主
+
+// 底牌加入对应地主手牌
+if (this.landlordIndex === 0) {   // 玩家是地主
+  for (var i = 0; i < this.remainingCards.length; i++)
+    this.playerHand.push(this.remainingCards[i]);
+  this.playerHand = Doudizhu.sortCards(this.playerHand);
+  this.renderPlayerHand();
+} else if (this.landlordIndex === 1) {  // AI1 是地主
+  for (var i = 0; i < this.remainingCards.length; i++)
+    this.ai1Hand.push(this.remainingCards[i]);
+  this.updateAICount(1);
+} else {  // AI2 是地主
+  for (var i = 0; i < this.remainingCards.length; i++)
+    this.ai2Hand.push(this.remainingCards[i]);
+  this.updateAICount(2);
+}
+
+this.showBottomCards(this.remainingCards);  // B38: 仅显示文字
+```
+
+**本地模式转 PLAYER_TURN:**
+```javascript
+this.setStatusText('开始出牌');
+var self = this;
+this.time.delayedCall(1200, function() {
+  self.gameState = GAME_STATE.PLAYER_TURN;
+  self.setStatusText('轮到你出牌（自由出牌）');
+  self.showActionButtons();
+});
+```
+
+### 5.3 底牌处理 (showBottomCards)
+
+```javascript
+GameScene.prototype.showBottomCards = function (cards) {
+  // 清除旧图片和文字
+  if (this.bottomCardImgs) { ... destroy ... }
+  if (this.bottomCardText) this.bottomCardText.destroy();
+
+  if (!cards || cards.length === 0) {
+    // 无牌时显示问号
+    this.bottomCardText = this.add.text(480, 72, '底牌: ? ? ?', {
+      fontSize: '8px', color: '#66BB6A', alpha: 0.4
+    }).setOrigin(0.5).setDepth(20);
+    return;
+  }
+  // B38: 底牌直接融入地主手牌，不再单独展示
+};
+```
+
+| 参数 | 行为 |
+|:----|:-----|
+| `cards = null/undefined/[]` | 显示 "底牌: ? ? ?" 在 (480,72)，8px `#66BB6A` alpha 0.4 |
+| `cards = [card1, card2, card3]` | **不显示任何底牌图片** (B38设计变更) |
+
+---
+
+## 6. API数据流
+
+### 6.1 POST /api/bidding/start
+
+**函数:** `ApiClient.startBidding(hands, remaining)`
+
+```javascript
+return apiPost('/api/bidding/start', {
+  playerId: 'player',
+  hands: hands,       // [玩家手牌, AI1手牌, AI2手牌] 各17张
+  remaining: remaining // 3张底牌
+});
+```
+
+**请求体:**
+```json
+{
+  "playerId": "player",
+  "hands": [
+    [{ "suit": "spade", "rank": 6 }, { "suit": "heart", "rank": 3 }, ...],
+    [{ "suit": "club", "rank": 10 }, ...],
+    [{ "suit": "diamond", "rank": 8 }, ...]
+  ],
+  "remaining": [
+    { "suit": "diamond", "rank": 1 },
+    { "suit": "heart", "rank": 13 },
+    { "suit": "spade", "rank": 3 }
+  ]
+}
+```
+
+**响应 (成功):**
+```json
+{
+  "biddingId": "bid_xxx",
+  "turn": 0,
+  "firstBidder": 0,
+  "order": [0, 1, 2],
+  "bids": [null, null, null],
+  "currentBid": "waiting",
+  "currentBidder": "player",
+  "message": "请叫分（叫地主1/2/3分，或不叫）",
+  "handStrength": 14
+}
+```
+
+**响应 (失败):**
+- HTTP error (4xx/5xx)
+- 或 JSON 无 `turn` 字段
+
+### 6.2 POST /api/bidding/place
+
+**函数:** `ApiClient.placeBid(biddingId, playerIndex, bid)`
+
+```javascript
+return apiPost('/api/bidding/place', {
+  biddingId: biddingId,
+  playerIndex: playerIndex,
+  bid: bid
+});
+```
+
+**玩家叫分请求:**
+```json
+{
+  "biddingId": "bid_xxx",
+  "playerIndex": 0,
+  "bid": 2
+}
+```
+
+**AI叫分请求:**
+```json
+{
+  "biddingId": "bid_xxx",
+  "playerIndex": 1,
+  "bid": 1
+}
+```
+
+**响应 (叫分进行中 — phase=bidding):**
+```json
+{
+  "phase": "bidding",
+  "turn": 1,
+  "currentBidder": "ai1",
+  "bids": [2, null, null],
+  "highestBid": 2,
+  "highestBidder": 0,
+  "landlordCards": null,
+  "landlordHand": null,
+  "winnerText": null,
+  "message": "王怼怼思考中..."
+}
+```
+
+**响应 (叫分结束 — phase=done):**
+```json
+{
+  "phase": "done",
+  "turn": null,
+  "currentBidder": null,
+  "bids": [2, 1, 0],
+  "highestBid": 2,
+  "highestBidder": 0,
+  "landlordIndex": 0,
+  "landlordName": "你",
+  "landlordCards": [{ ... }, { ... }, { ... }],
+  "landlordHand": [{ ... } x20],
+  "winnerText": "你 以 2 分成为地主！",
+  "message": "你 以 2 分成为地主！获得 3 张底牌"
+}
+```
+
+**响应 (重新发牌 — phase=redeal):**
+```json
+{
+  "phase": "redeal",
+  "turn": null,
+  "currentBidder": null,
+  "bids": [0, 0, 0],
+  "highestBid": 0,
+  "highestBidder": -1,
+  "landlordCards": null,
+  "landlordHand": null,
+  "winnerText": null,
+  "message": "三家都不叫，重新发牌"
+}
+```
+
+### 6.3 API字段映射表
+
+| API返回字段 | 客户端用途 | 类型 |
+|:------------|:----------|:----:|
+| `biddingId` | 存储为 `this.biddingId`，后续placeBid使用 | string |
+| `turn` | 决定谁先叫 (0=玩家, 1=AI1, 2=AI2) | number |
+| `phase` | 状态流转: bidding/done/redeal | string |
+| `currentBidder` | 谁该叫分: player/ai1/ai2 | string |
+| `bids` | 当前叫分数组 [玩家,AI1,AI2] | array |
+| `highestBid` | 当前最高叫分值 | number |
+| `highestBidder` | 当前最高者索引 (0/1/2) | number |
+| `handStrength` | 玩家手牌强度分 (玩家可见) | number |
+| `landlordCards` | 3张底牌 | array |
+| `landlordHand` | 地主完整20张手牌 | array |
+| `winnerText` | 显示文字: "你 以 N 分成为地主！" | string |
+
+### 6.4 API异常回退链
+
+```
+startBidding API
+  ├─ success → onBiddingStarted
+  └─ catch → localAssignLandlord()   ← 异常回退
+
+handlePlayerBid API
+  ├─ success → onBiddingResult
+  └─ catch → localAssignLandlord()   ← 异常回退
+
+doAIBidding API
+  ├─ success → onBiddingResult
+  └─ catch → localAssignLandlord()   ← 异常回退
+```
+
+**任何API调用失败**（无论HTTP错误、网络超时、JSON解析失败）都回退到 `localAssignLandlord()`。
+
+---
+
+## 7. 状态管理与变量
+
+### 7.1 GameScene 属性
+
+| 属性 | 类型 | 初始值 | 设置位置 | 用途 |
+|:----|:----:|:------:|:---------|:-----|
+| `gameState` | string | `INIT` | init → BIDDING | 游戏阶段控制 |
+| `biddingState` | object | null | onBiddingStarted | API返回的完整叫分状态 |
+| `biddingId` | string | null | onBiddingStarted | 当前叫分会话ID |
+| `biddingUI` | array | [] | 多处 | 叫分UI元素集合 |
+| `landlordIndex` | number | -1 | finishBidding/local | 地主玩家索引 (0/1/2) |
+| `isLandlord` | boolean | false | finishBidding/local | 玩家是否为地主 |
+| `round` | number | 1 | init | 当前回合数 |
+| `maxRounds` | number | 10 | GameScene构造函数 | 最大回合数 |
+| `isAPIMode` | boolean | true | checkAPIConnection | 是否走API |
+| `playerHand` | array | [] | init | 玩家17→20张手牌 |
+| `ai1Hand` | array | [] | init | AI1 17→20张手牌 |
+| `ai2Hand` | array | [] | init | AI2 17→20张手牌 |
+| `remainingCards` | array | [] | init | 3张底牌 (叫分前) |
+| `bottomCardImgs` | array | [] | — | 底牌图片引用 (旧版兼容) |
+| `bottomCardText` | Text | null | showBottomCards | 底牌文字 "底牌: ? ? ?" |
+| `statusText` | Text | — | createTopBar | 顶部状态文字 |
+| `actionButtons` | array | [] | createActionButtons | 底部5功能按钮 |
+
+### 7.2 全局常量
+
+```javascript
+var GAME_STATE = {
+  INIT: 'INIT',
+  BIDDING: 'BIDDING',
+  PLAYER_TURN: 'PLAYER_TURN',
+  VALIDATING: 'VALIDATING',
+  WAITING_AI: 'WAITING_AI',
+  ROUND_END: 'ROUND_END',
+  CHAOS_MODE: 'CHAOS_MODE'
+};
+```
+
+---
+
+## 8. UI变化全记录
+
+### 8.1 叫分开始前 (发牌完成)
+
+```
+┌────────────────────────────────────────────────────────────┐
+│ 第 1/10 回合   [王怼怼]剩余17张   叫分阶段...  [苏甜甜]剩余17张 │
+├────────────────────────────────────────────────────────────┤
+│                                                            │
+│                        底牌: ? ? ?                          │
+│                      (460,60) 8px #66BB6A                  │
+│                                                            │
+│    [ 出牌区 — 半透明背景，无出牌内容 ]                         │
+│                                                            │
+│    [ 手牌区 — 17张牌已渲染 ]                                  │
+│                                                            │
+│    [功能按钮 — 被隐藏 (hideActionButtons) ]                   │
+└────────────────────────────────────────────────────────────┘
+```
+
+### 8.2 轮到玩家叫分 (showBiddingUI)
+
+```
+┌────────────────────────────────────────────────────────────┐
+│ 第 1/10 回合   [王怼怼]剩余17张   叫分阶段    [苏甜甜]剩余17张   │
+├────────────────────────────────────────────────────────────┤
+│                     请叫分 (480,170)                       │
+│                       15px #FFFFFF bold                    │
+│                                                            │
+│                        ★ 手牌很强 (强度分: 14)              │
+│                          (480,260) 10px #A5D6A7            │
+│                                                            │
+│    ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐                    │
+│    │ 不叫  │ │ 1分  │ │ 2分  │ │ 3分  │  ← Y=280         │
+│    │FF6B6B│ │4ECDC4│ │FFD93D│ │FF6B35│                    │
+│    └──────┘ └──────┘ └──────┘ └──────┘                    │
+│     216      324      432      540                         │
+│                                                            │
+│    [手牌区 — 手牌可见但不可点击，手指点击显示Toast]              │
+└────────────────────────────────────────────────────────────┘
+```
+
+### 8.3 AI思考中
+
+```
+┌────────────────────────────────────────────────────────────┐
+│ 第 1/10 回合   [王怼怼]剩余17张  王怼怼思考中...  [苏甜甜]剩余17张 │
+├────────────────────────────────────────────────────────────┤
+│                                                            │
+│                        [叫分UI已隐藏]                       │
+│                                                            │
+│    [出牌区 — 空白]                                         │
+│                                                            │
+│    [手牌区 — 可见]                                         │
+└────────────────────────────────────────────────────────────┘
+```
+
+### 8.4 叫分结束 → 出牌
+
+```
+┌────────────────────────────────────────────────────────────┐
+│ 第 1/10 回合   [王怼怼]剩余20张  你以2分成为地主！ [苏甜甜]剩余17张│
+├────────────────────────────────────────────────────────────┤
+│                                                       底牌 │
+│          [AI1出牌位置]     [AI2出牌位置]                     │
+│                                                            │
+│          [玩家出牌位置 — 空]                                 │
+│                                                            │
+│    [手牌区 — 20张 (地主底牌已融入)]                          │
+│                                                            │
+│  [出牌] [提示] [不出] [搞事情] [底牌查看]  ← showActionButtons │
+└────────────────────────────────────────────────────────────┘
+```
+
+### 8.5 三家都不叫 (redeal)
+
+```
+┌────────────────────────────────────────────────────────────┐
+│ 第 1/10 回合   [王怼怼]剩余17张  三家都不叫，重新发牌  [苏甜甜]剩余17张 │
+├────────────────────────────────────────────────────────────┤
+│                      Toast: "重新发牌..."                   │
+│                      (200,206) 200×38                     │
+│                                                            │
+│  delay 1500ms → scene.restart() → 回到 INIT 重新发牌        │
+└────────────────────────────────────────────────────────────┘
+```
+
+### 8.6 UI状态清单
+
+| 阶段 | 功能按钮 | 叫分按钮 | 状态文字 | 手牌 | 底牌文字 |
+|:----|:--------:|:--------:|:---------|:---:|:--------:|
+| init完成 | 隐藏 | 隐藏 | `叫分阶段...` | 渲染17张 | (460,60) 底牌: ? ? ? |
+| API等待中 | 隐藏 | 隐藏 | `叫分阶段...` | 显示 | (460,60) |
+| 玩家回合 | 隐藏 | 显示4个 | `叫分阶段` | 显示 [强度提示] | (460,60) |
+| 玩家已叫 | 隐藏 | 已销毁 | `你叫了 N分/不叫` | 显示 | (460,60) |
+| AI思考中 | 隐藏 | 隐藏 | `王怼怼/苏甜甜思考中...` | 显示 | (460,60) |
+| AI已叫 | 隐藏 | 隐藏 | `王怼怼/苏甜甜 叫了 N分/不叫` | 显示 | (460,60) |
+| 叫分结束(done) | 延迟1.2s显示 | 已销毁 | `winnerText 开始出牌` | 地主20张 | B38: 不展示 |
+| redeal | 隐藏 | 已销毁 | 三家都不叫 | 暂不操作 | 无 |
+| 本地模式 | 延迟1.2s显示 | 已销毁 | `开始出牌` | 地主20张 | B38: 不展示 |
+
+---
+
+## 9. 边界情况
+
+### 9.1 redeal — 三家都不叫
+
+| 属性 | 值 |
+|:----|:-----|
+| 触发 | `res.phase === 'redeal'` |
+| 状态文字 | `三家都不叫，重新发牌` |
+| Toast | `重新发牌...`, 1.2s后自动销毁 |
+| 延迟 | 1500ms → `restartGame()` |
+| 效果 | `hideBiddingUI()` → `scene.restart()` → init()重新发牌 |
+
+### 9.2 API异常全场景
+
+| 场景 | catch 行为 | 后续 |
+|:----|:-----------|:------|
+| `startBidding` 网络错误 | `localAssignLandlord()` | 随机定地主 |
+| `startBidding` HTTP 500 | `localAssignLandlord()` | 随机定地主 |
+| `startBidding` 超时 | `localAssignLandlord()` | 随机定地主 |
+| `placeBid` (玩家) 失败 | `localAssignLandlord()` | 随机定地主 |
+| `placeBid` (AI) 失败 | `localAssignLandlord()` | 随机定地主 |
+| ApiClient 未定义 | `isAPIMode` 检查 → 本地模式 | `startBiddingPhase` 直接走else |
+| 服务端phase未知 | 无处理 (不会被调用) | — |
+
+### 9.3 手牌与底牌
+
+| 场景 | 处理 |
+|:----|:------|
+| 玩家是地主 + API | `res.landlordHand` 直接替换 playerHand (20张完整排序) |
+| 玩家是地主 + 本地 | playerHand.push(remainingCards) + sortCards |
+| AI是地主 + API | ai1Hand.push(bottomCards) 或 ai2Hand.push(bottomCards) |
+| AI是地主 + 本地 | ai1Hand.push(remainingCards) 或 ai2Hand.push(remainingCards) |
+| 底牌传入null | showBottomCards → 显示 "底牌: ? ? ?" |
+| 底牌是空数组 [] | showBottomCards → 显示 "底牌: ? ? ?" (length===0判定) |
+| 地主底牌已融入 | B38: 不产生新的牌面图片 |
+
+### 9.4 回合
+
+| 特性 | 值 |
+|:----|:-----|
+| 初始回合 | `this.round = 1` |
+| 最大回合 | `this.maxRounds = 10` (构造函数中设置) |
+| 显示 | 状态栏 `第 X/10 回合`, (12, 9), 12px, `#E8F5E9` bold |
+
+### 9.5 叫分中手牌点击
+
+叫分阶段 `gameState === GAME_STATE.BIDDING`，手牌的 pointerdown 回调检查:
+
+```javascript
+if (self.gameState !== GAME_STATE.PLAYER_TURN) {
+  showToast(self, '现在不是你的出牌阶段');
+  return;
+}
+```
+
+由于 `BIDDING !== PLAYER_TURN`，点击手牌会显示 Toast "现在不是你的出牌阶段"，**手牌不可选中**。
+
+---
+
+## 10. 与旧文档差异说明
+
+### 10.1 代码与旧 Bidding.md 的不一致
+
+| # | 旧 Bidding.md | 代码实际值 | 说明 |
+|:-:|:--------------|:-----------|:-----|
+| 1 | 按钮起始X=270 | **216** | 代码用 `totalW = bw*5 + gap*4 = 528` 而非 `bw*4 + gap*3 = 420`。bug导致偏左54px |
+| 2 | 不叫按钮X=270 | **216** | 同上 |
+| 3 | 1分按钮X=378 | **324** | 同上 |
+| 4 | 2分按钮X=486 | **432** | 同上 |
+| 5 | 3分按钮X=594 | **540** | 同上 |
+| 6 | 本地叫分API | 代码中 `doAIBidding` 有本地强度计算，但最终仍走 `localAssignLandlord` | API模式下AI策略由服务端决定 |
+| 7 | B38底牌处理 | 底牌文字(480,72) 带 origin(0.5)，不再显示牌背图 | 代码中 `showBottomCards` 直接return |
+| 8 | 强度标签分级 | 代码中 `strength >= 20` → 很强, `>= 14` → 不错, `>= 9` → 一般, `< 9` → 较弱 | 阈值与旧文档一致 |
+
+### 10.2 已知bug汇总
+
+| Bug | 位置 | 影响 | 修复建议 |
+|:----|:-----|:-----|:---------|
+| `totalW = bw * 5 + gap * 4` | showBiddingUI 第12行 | 按钮整体左偏54px | 改为 `bw * 4 + gap * 3` |
+| `showBottomCards` 在 `localAssignLandlord` | localAssignLandlord 末尾 | 底牌不显示牌面 (B38)，但传入 `remainingCards` 数组 | 确认当前行为是否需要展示牌面 |
+
+---
+
+## 11. 验收标准
+
+### 11.1 UI验收
+
+| # | 验收条件 | 预期结果 | 来源行 |
+|:-:|----------|---------|:------:|
+| B1 | 发牌后800ms进入叫分阶段 | 功能按钮隐藏，状态栏显示"叫分阶段..." | create() |
+| B2 | 轮到玩家叫分时 | 显示4个叫分按钮 + "请叫分"文字 + 强度提示 | showBiddingUI |
+| B3 | 按钮位置精确 | 不叫(216,280), 1分(324,280), 2分(432,280), 3分(540,280), 96×52 | showBiddingUI |
+| B4 | 按钮颜色正确 | 不叫 #FF6B6B, 1分 #4ECDC4, 2分 #FFD93D, 3分 #FF6B35 | showBiddingUI |
+| B5 | 按钮文字14px白色bold | 按钮内居中 | showBiddingUI |
+| B6 | "请叫分" 在 (480,170), 15px | 白色bold, origin(0.5) | showBiddingUI |
+| B7 | 强度提示 (480,260), 10px | "★ 手牌很强 (强度分: N)", #A5D6A7 | showBiddingUI |
+| B8 | 点击"不叫" → UI销毁 + 状态文字更新 | "你叫了 不叫", 播放passBid音效 | handlePlayerBid |
+| B9 | 点击"1/2/3分" → UI销毁 + 状态文字更新 | "你叫了 N分", 播放bid音效 | handlePlayerBid |
+| B10 | AI思考时 | 状态栏 "王怼怼/苏甜甜思考中..." | onBiddingStarted/Result |
+
+### 11.2 状态流转验收
+
+| # | 验收条件 | 预期结果 | 来源行 |
+|:-:|----------|---------|:------:|
+| S1 | API模式: 服务端返回turn=0 | 显示玩家叫分UI | onBiddingStarted |
+| S2 | API模式: 服务端返回turn=1 | 自动触发AI1思考(delay 1s) | onBiddingStarted |
+| S3 | API模式: 服务端返回turn=2 | 自动触发AI2思考(delay 1s) | onBiddingStarted |
+| S4 | 玩家叫分后API返回phase=bidding | 下一个AI自动思考 | onBiddingResult |
+| S5 | 最终phase=done | 显示底牌→底牌加入地主→1.2s后进入出牌 | finishBidding |
+| S6 | 三家都不叫phase=redeal | Toast "重新发牌..." → 1.5s后restart | onBiddingResult |
+| S7 | 叫分结束进入PLAYER_TURN | 功能按钮恢复显示 | finishBidding |
+| S8 | API异常 (端口不通) | 自动回退本地模式，随机定地主 | 3处catch |
+| S9 | 本地模式随机定地主 | 底牌直接融入 hand, 1.2s后出牌 | localAssignLandlord |
+
+### 11.3 AI策略验收
+
+| # | 验收条件 | 预期结果 | 来源行 |
+|:-:|----------|---------|:------:|
+| A1 | AI1叫分 | 1s延迟后自动触发 doAIBidding(1) | onBiddingStarted |
+| A2 | AI2叫分 | 1s延迟后自动触发 doAIBidding(2) | onBiddingStarted |
+| A3 | AI强度分≥20 | 叫3分 | doAIBidding |
+| A4 | AI强度分14~19 | 叫2分 | doAIBidding |
+| A5 | AI强度分9~13 | 叫1分 | doAIBidding |
+| A6 | AI强度分<9 | 不叫 | doAIBidding |
+| A7 | AI想叫的分≤当前最高且强度<20 | 放弃(不叫) | doAIBidding |
+| A8 | AI强度≥20且当前最高<3 | 抢到3分 | doAIBidding |
+
+### 11.4 地主分配验收
+
+| # | 验收条件 | 预期结果 | 来源行 |
+|:-:|----------|---------|:------:|
+| L1 | 玩家是地主 | 手牌20张，renderPlayerHand更新 | finishBidding |
+| L2 | AI1是地主 | ai1Count 更新为 "剩余 20 张" | finishBidding |
+| L3 | AI2是地主 | ai2Count 更新为 "剩余 20 张" | finishBidding |
+| L4 | 底牌属地主 | 地主手牌包含3张新牌 | finishBidding/local |
+| L5 | 底牌不显示牌面(B38) | 功能按钮"底牌查看"仅显示文字 | showBottomCards |
+
+### 11.5 边界验收
+
+| # | 验收条件 | 预期结果 | 来源行 |
+|:-:|----------|---------|:------:|
+| E1 | 叫分阶段点手牌 | Toast "现在不是你的出牌阶段" | renderPlayerHand |
+| E2 | API失败 | 回退本地模式，随机定地主 | 3处catch |
+| E3 | redeal后重新发牌 | scene.restart() → 全新一局 | restartGame |
+| E4 | 底牌为null/空 | 显示 "底牌: ? ? ?" (480,72) | showBottomCards |
+
+---
+
+## 附录: 函数索引
+
+| 函数 | 行号 | 功能 | 关键参数 |
+|:----|:----:|:-----|:---------|
+| `startBiddingPhase()` | ~482 | 开始叫分阶段 | gameState=BIDDING, hideActionButtons |
+| `onBiddingStarted(res)` | ~508 | API返回后调度 | res.turn决定谁先叫 |
+| `showBiddingUI()` | ~530 | 显示4个叫分按钮 | Y=280, bw=96, bh=52 |
+| `hideBiddingUI()` | ~578 | 销毁叫分UI | 遍历 biddingUI destroy |
+| `handlePlayerBid(bid)` | ~582 | 玩家点击处理 | API placeBid → 音效 |
+| `onBiddingResult(res)` | ~610 | 服务端返回处理 | phase 派发 |
+| `doAIBidding(aiIndex)` | ~650 | AI叫分逻辑 | 本地强度计算+API |
+| `finishBidding(res)` | ~700 | 叫分结束 | 分配地主+底牌+1.2s→出牌 |
+| `localAssignLandlord()` | ~860 | 本地随机定地主 | Math.random()*3 |
+| `showBottomCards(cards)` | ~820 | 底牌显示 | B38: 仅文字 |
+| `restartGame()` | ~890 | 重新开始 | scene.restart() |
+
+```
+
+---
+
+## `docs/Bidding.md` (12,677 字节)
+
+```markdown
+# PRD: 叫分系统（Bidding Phase）
+
+---
+
+## 1. 概述
+
+叫分阶段是斗地主游戏在发牌后、出牌前的关键环节，决定哪一方成为地主并获得3张底牌。本PRD覆盖完整的叫分流程、UI设计、AI逻辑、API数据流及边界情况。
+
+**画布基准**：960×600 横屏，Phaser 3
+
+---
+
+## 2. 完整流程
+
+```
+发牌完成（deal）
+   ↓  delay 800ms
+叫分阶段开始（startBiddingPhase）
+   ↓
+API模式：POST /api/bidding/start
+本地模式：localAssignLandlord（随机定地主）
+   │
+   ├─ turn === 0 ──→ 显示玩家叫分UI（showBiddingUI）
+   │                   玩家点击 不叫/1分/2分/3分
+   │                       ↓
+   │                   POST /api/bidding/place
+   │                       ↓
+   │                   onBiddingResult(res)
+   │
+   ├─ turn === 1 ──→ AI1（王怼怼）思考1秒 → doAIBidding(1)
+   │                       ↓
+   │                   POST /api/bidding/place
+   │                       ↓
+   │                   onBiddingResult(res)
+   │
+   └─ turn === 2 ──→ AI2（苏甜甜）思考1秒 → doAIBidding(2)
+                           ↓
+                       POST /api/bidding/place
+                           ↓
+                       onBiddingResult(res)
+
+onBiddingResult 派发：
+   ┌─ phase === "done"   ──→ finishBidding(res) → 显示底牌 → 进入出牌
+   ├─ phase === "redeal"  ──→ restartGame() → 重新发牌
+   └─ phase === "bidding" ──→ 轮到下一个玩家（AI思考或玩家UI）
+```
+
+---
+
+## 3. 叫分UI — 详细设计
+
+### 3.1 按钮布局
+
+按钮在 y=280 一行排列，共4个按钮。
+
+| 按钮 | 值 | 颜色 | 坐标（矩形左上角） | 尺寸 |
+|------|----|-------|-------------------|------|
+| 不叫 | 0 | `#FF6B6B` (0xFF6B6B) | (270, 280) | 96×52 |
+| 1分 | 1 | `#4ECDC4` (0x4ECDC4) | (378, 280) | 96×52 |
+| 2分 | 2 | `#FFD93D` (0xFFD93D) | (486, 280) | 96×52 |
+| 3分 | 3 | `#FF6B35` (0xFF6B35) | (594, 280) | 96×52 |
+
+- **按钮间距**：12px（gap）
+- **总宽度计算**：96×4 + 12×3 = 420px
+- **起始X**：(960 − 420) / 2 = **270**
+- **圆角**：10px（fillRoundedRect）
+- **文字**：白色 `#FFFFFF`，14px，加粗，居中对齐
+
+### 3.2 提示文字
+
+| 元素 | 坐标 | 样式 |
+|------|------|------|
+| 标题 "请叫分" | (480, 170) | 白 #FFFFFF, 15px, 加粗, origin(0.5) |
+| 手牌强度提示 | (480, 260) | 绿 #A5D6A7, 10px, origin(0.5) |
+
+手牌强度分级（API返回 `handStrength`）：
+
+| 分数区间 | 标签 | 表情 |
+|----------|------|------|
+| ≥20 | 手牌很强 | ★ |
+| ≥14 | 手牌不错 | ★ |
+| ≥9 | 手牌一般 | ★ |
+| <9 | 手牌较弱 | ★ |
+
+### 3.3 音效
+
+| 动作 | 音效 |
+|------|------|
+| 叫分（1/2/3分） | `chipsCollide` (随机1~3) |
+| 不叫 | `cardSlide` (随机1~3) |
+
+---
+
+## 4. AI叫分逻辑
+
+### 4.1 本地模式（doAIBidding）
+
+**手牌强度计算（executeAIBidding/local模式）**：
+
+```
+score = 0
+if hand 中有大王(rank=14): score += 6
+if hand 中有小王(rank=13): score += 4
+if hand 中有2   (rank=12): score += 2
+for 每组 rank:
+  if count == 4: score += 12  (炸弹)
+  if count == 3: score += 4   (三张)
+```
+
+**叫分决策**：
+
+| 分数 | 叫分 | 备注 |
+|------|------|------|
+| ≥20 | 3分 | 手牌很强 |
+| ≥14 | 2分 | 手牌不错 |
+| ≥9 | 1分 | 手牌一般 |
+| <9 | 0 (不叫) | 手牌较弱 |
+
+**加叫规则**：如果 AI 想叫的分数 ≤ 当前最高叫分，则：
+- 如果手牌 ≥20 且当前最高 <3 → 叫3分（抢地主）
+- 否则 → 不叫
+
+### 4.2 服务端模式（GET /api/bidding/ai）
+
+与本地模式算法一致（`evaluateHandStrength` 函数）：
+
+```
+groups: rank → count
+score:
+  count===4 → +=12, hasBomb = true
+  count===3 → +=4
+  count===2 → +=1
+  rank===14 → +=6  (大王)
+  rank===13 → +=4  (小王)
+  rank===12 → +=2  (2)
+  rank===11 → +=1  (A)
+  hasBomb → +=5
+  同时有小王+大王 → +=3
+```
+
+**API返回**：`{ bid, reason, strength, handStrengthLabel }`
+
+---
+
+## 5. 地主分配与底牌
+
+### 5.1 API模式（finishBidding）
+
+1. 服务端确定 `highestBidder`（索引 0/1/2）
+2. 客户端设置 `landlordIndex = res.highestBidder`
+3. 客户端设置 `isLandlord = (res.highestBidder === 0)`
+4. 显示底牌（showBottomCards）
+5. 底牌加入地主手牌：
+   - 玩家是地主 → `playerHand` 拼接底牌，重新排序并渲染
+   - AI1是地主 → `ai1Hand` 拼接底牌，更新 AI1 剩余张数
+   - AI2是地主 → `ai2Hand` 拼接底牌，更新 AI2 剩余张数
+6. delay 1200ms → 进入出牌阶段（PLAYER_TURN）
+
+### 5.2 本地模式（localAssignLandlord）
+
+```
+landlordIndex = Math.floor(Math.random() * 3);
+isLandlord = (landlordIndex === 0);
+// 底牌(remainingCards)加入对应地主手牌
+showBottomCards(remainingCards);
+delay 1200ms → 进入出牌阶段
+```
+
+### 5.3 底牌显示
+
+`showBottomCards(cards)` 在本地模式下直接显示3张底牌图片。在API模式下，地主底牌直接融入手牌不再单独显示（B38特性）。
+
+---
+
+## 6. 回合计数器
+
+- `this.round = 1`（初始值）
+- `this.maxRounds = 10`
+- 顶部状态栏显示：`第 1/10 回合`
+- 达到 `maxRounds` 后游戏结束
+
+---
+
+## 7. 边界情况
+
+### 7.1 三家都不叫（redeal）
+
+触发条件：3人全部选择"不叫"（bid === 0）
+
+流程：
+```
+onBiddingResult(res.phase === "redeal")
+  → setStatusText("三家都不叫，重新发牌")
+  → showToast("重新发牌...")
+  → delay 1500ms
+  → restartGame()
+    → hideBiddingUI()
+    → scene.restart()  → 重新走 init → create 流程
+```
+
+### 7.2 API 异常回退
+
+任何 API 调用失败（网络错误、HTTP 错误码等）均回退到 `localAssignLandlord()`：
+
+| 场景 | 触发条件 | 行为 |
+|------|----------|------|
+| `startBidding` 失败 | catch | `localAssignLandlord()` |
+| `placeBid` 失败（玩家） | catch | `localAssignLandlord()` |
+| `placeBid` 失败（AI） | catch | `localAssignLandlord()` |
+
+### 7.3 叫分规则（服务端验证）
+
+- 叫分值必须是 0/1/2/3
+- 后叫者必须比当前最高分高，或选择不叫
+- 叫3分直接成为地主（立即触发 `finishBidding`）
+- 3人全部叫完且无有效叫分 → redeal
+
+### 7.4 叫分顺序
+
+随机决定先叫者，顺时针轮流：
+
+```
+firstBidder = random(0, 1, 2)
+order = [firstBidder, (firstBidder+1)%3, (firstBidder+2)%3]
+```
+
+---
+
+## 8. 数据流 —— API 契约
+
+### 8.1 POST /api/bidding/start
+
+**请求**：
+```json
+{
+  "playerId": "player",
+  "hands": [
+    [{ "suit": "spade", "rank": 6 }, ...],  // 玩家17张手牌
+    [{ "suit": "heart", "rank": 8 }, ...],  // AI1 17张手牌
+    [{ "suit": "club", "rank": 10 }, ...]   // AI2 17张手牌
+  ],
+  "remaining": [
+    { "suit": "diamond", "rank": 1 },
+    { "suit": "heart", "rank": 13 },
+    { "suit": "spade", "rank": 3 }
+  ]
+}
+```
+
+**响应**：
+```json
+{
+  "biddingId": "bid_1680000000000_player",
+  "turn": 0,
+  "firstBidder": 0,
+  "order": [0, 1, 2],
+  "bids": [null, null, null],
+  "currentBid": "waiting",
+  "currentBidder": "player",
+  "message": "请叫分（叫地主1/2/3分，或不叫）",
+  "handStrength": 14
+}
+```
+
+`turn` 字段说明：
+
+| turn | 含义 | 触发动作 |
+|------|------|---------|
+| 0 | 轮到玩家 | `showBiddingUI()` |
+| 1 | 轮到AI1（王怼怼） | `doAIBidding(1)`，思考1秒 |
+| 2 | 轮到AI2（苏甜甜） | `doAIBidding(2)`，思考1秒 |
+
+### 8.2 POST /api/bidding/place
+
+**请求**（玩家叫分）：
+```json
+{
+  "biddingId": "bid_1680000000000_player",
+  "playerIndex": 0,
+  "bid": 2
+}
+```
+
+**响应**（叫分进行中）：
+```json
+{
+  "phase": "bidding",
+  "turn": 1,
+  "currentBidder": "ai1",
+  "bids": [2, null, null],
+  "highestBid": 2,
+  "highestBidder": 0,
+  "landlordCards": null,
+  "landlordHand": null,
+  "winnerText": null,
+  "message": "王怼怼思考中..."
+}
+```
+
+**响应**（叫分结束）：
+```json
+{
+  "phase": "done",
+  "turn": null,
+  "currentBidder": null,
+  "bids": [2, 1, 0],
+  "highestBid": 2,
+  "highestBidder": 0,
+  "landlordIndex": 0,
+  "landlordName": "你",
+  "landlordCards": [
+    { "suit": "diamond", "rank": 1 },
+    { "suit": "heart", "rank": 13 },
+    { "suit": "spade", "rank": 3 }
+  ],
+  "landlordHand": [
+    { "suit": "spade", "rank": 0, "display": "3", "isRed": false },
+    ...
+  ],
+  "winnerText": "你 以 2 分成为地主！",
+  "message": "你 以 2 分成为地主！获得 3 张底牌"
+}
+```
+
+**响应**（重发牌）：
+```json
+{
+  "phase": "redeal",
+  "turn": null,
+  "currentBidder": null,
+  "bids": [0, 0, 0],
+  "highestBid": 0,
+  "highestBidder": -1,
+  "landlordCards": null,
+  "landlordHand": null,
+  "winnerText": null,
+  "message": "三家都不叫，重新发牌"
+}
+```
+
+---
+
+## 9. 状态管理与关键字段
+
+| 字段 | 类型 | 初始值 | 说明 |
+|------|------|--------|------|
+| `gameState` | string | `BIDDING` | 游戏阶段控制 |
+| `biddingState` | object | `null` | API返回的完整叫分状态 |
+| `biddingId` | string | `null` | 当前叫分会话ID |
+| `biddingUI` | array | `[]` | 叫分UI元素集合 |
+| `landlordIndex` | number | `-1` | 地主玩家索引 (0/1/2) |
+| `isLandlord` | boolean | `false` | 玩家是否为地主 |
+| `round` | number | `1` | 当前回合数 |
+| `maxRounds` | number | `10` | 最大回合数 |
+| `isAPIMode` | boolean | `true` | 是否走API |
+
+---
+
+## 10. 验收标准
+
+| # | 条件 | 预期结果 | 验收方法 |
+|---|------|---------|---------|
+| 1 | 发牌完成 | 800ms后进入叫分阶段，状态栏显示"叫分阶段..." | 观察 |
+| 2 | API在线, turn=0 | 显示4个叫分按钮 + 手牌强度提示 | 观察 |
+| 3 | 点击"不叫" | 按钮消失，状态栏显示"你叫了 不叫"，播放pass音效 | 观察+听 |
+| 4 | 点击"3分" | 按钮消失，直接确定地主，底牌融入地主手牌 | 观察 |
+| 5 | AI叫分（turn=1或2） | AI思考1秒后自动叫分 | 观察 |
+| 6 | AI叫分比当前最高分低 | AI选择不叫 | 观察 |
+| 7 | 三家全不叫 | 显示"重新发牌"，1.5秒后重新开局 | 观察 |
+| 8 | API异常（端口不通） | 自动回退到本地模式，随机定地主 | 断网测试 |
+| 9 | 底牌加入地主手牌 | 地主手牌数变为20张，非地主保持17张 | 观察手牌数 |
+| 10 | 叫分结束1200ms后 | 进入出牌阶段，显示功能按钮 | 观察 |
+| 11 | 回合计数器 | 顶部显示"第 X/10 回合" | 观察 |
+
+---
+
+## 11. 视觉参考
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  第 1/10 回合    [王怼怼头像] 剩余 17 张  状态文字    [苏甜甜头像] 剩余 17 张  │  ← 顶部状态栏 (y=0~56)
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│                 底牌: ? ? ? (y=72)                            │
+│                                                              │
+│                    ★ 请叫分 ★ (y=170)                         │
+│                                                              │
+│      [出牌区]  (y=59~265)                                    │
+│                                                              │
+│         手牌强度提示 (y=260)                                  │
+│                                                              │
+│    ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐                      │
+│    │ 不叫  │ │ 1分  │ │ 2分  │ │ 3分  │   ← y=280          │
+│    │FF6B6B│ │4ECDC4│ │FFD93D│ │FF6B35│                      │
+│    └──────┘ └──────┘ └──────┘ └──────┘                      │
+│     270      378      486      594                           │
+│                                                              │
+├──────────────────────────────────────────────────────────────┤
+│   你的手牌 [  ... 17张牌 ...  ]   (手牌区 y=300~415)          │
+└──────────────────────────────────────────────────────────────┘
+```
+
+```
+
+---
+
+## `docs/CardEngine-detailed.md` (29,039 字节)
+
+```markdown
+# 牌引擎 (CardEngine) — 超详细设计文档
+
+**版本:** v2.0  
+**作者:** 产品经理  
+**日期:** 2026-05-02  
+**对应源码:** `src/client/js/CardEngine.js` (1090行)  
+**命名空间:** `window.Doudizhu`  
+
+---
+
+## 目录
+
+1. [常量系统](#1-常量系统)
+2. [Card 类](#2-card-类)
+3. [Deck 类](#3-deck-类)
+4. [牌型识别 (identifyType)](#4-牌型识别-identifytype)
+5. [出牌比较 (canBeat)](#5-出牌比较-canbeat)
+6. [合法出牌枚举 (findValidPlays)](#6-合法出牌枚举-findvalidplays)
+7. [排序器 (sortCards)](#7-排序器-sortcards)
+8. [辅助函数](#8-辅助函数)
+9. [AI 策略支持](#9-ai-策略支持)
+10. [与 game.js 集成](#10-与-gamejs-集成)
+11. [验收标准](#11-验收标准)
+
+---
+
+## 1. 常量系统
+
+### 1.1 花色 (SUITS)
+
+```javascript
+var SUITS = ['spade', 'heart', 'club', 'diamond', 'joker'];
+```
+
+| 索引 | 值 | 符号 | Unicode |
+|:----:|:---|:----:|:-------:|
+| 0 | spade | ♠ | `\u2660` |
+| 1 | heart | ♥ | `\u2665` |
+| 2 | club | ♣ | `\u2663` |
+| 3 | diamond | ♦ | `\u2666` |
+| 4 | joker | 🃏 | `\uD83C\uDCCF` |
+
+### 1.2 牌面名 (RANK_NAMES / RANK_NAME_MAP)
+
+```javascript
+var RANK_NAMES = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'];
+```
+
+**完整映射 (13条 + 2王):**
+
+| rank | RANK_NAMES | RANK_NAME_MAP | 中文名 |
+|:----:|:----------:|:-------------:|:------:|
+| 0 | `'3'` | `'3'` | 3 |
+| 1 | `'4'` | `'4'` | 4 |
+| 2 | `'5'` | `'5'` | 5 |
+| 3 | `'6'` | `'6'` | 6 |
+| 4 | `'7'` | `'7'` | 7 |
+| 5 | `'8'` | `'8'` | 8 |
+| 6 | `'9'` | `'9'` | 9 |
+| 7 | `'10'` | `'10'` | 10 |
+| 8 | `'J'` | `'J'` | J |
+| 9 | `'Q'` | `'Q'` | Q |
+| 10 | `'K'` | `'K'` | K |
+| 11 | `'A'` | `'A'` | A |
+| 12 | `'2'` | `'2'` | 2 |
+| 13 | (not in RANK_NAMES) | `'小王'` | 小王 |
+| 14 | (not in RANK_NAMES) | `'大王'` | 大王 |
+
+### 1.3 顺子最大 rank
+
+```javascript
+var STRAIGHT_MAX_RANK = 11;  // A
+```
+
+**约束:** 顺子、连对、飞机只能到 A (rank 11)，不能包含 2 (rank 12) 和大小王 (rank 13/14)。
+
+### 1.4 牌型枚举 (HAND_TYPES)
+
+| 常量 | 值 | 中文名 | 牌数 |
+|:----|:----|:------:|:----:|
+| `SINGLE` | `'SINGLE'` | 单张 | 1 |
+| `PAIR` | `'PAIR'` | 对子 | 2 |
+| `TRIPLE` | `'TRIPLE'` | 三张 | 3 |
+| `TRIPLE_PLUS_ONE` | `'TRIPLE_PLUS_ONE'` | 三带一 | 4 |
+| `TRIPLE_PLUS_TWO` | `'TRIPLE_PLUS_TWO'` | 三带二 | 5 |
+| `STRAIGHT` | `'STRAIGHT'` | 顺子 | ≥5 |
+| `CONSECUTIVE_PAIRS` | `'CONSECUTIVE_PAIRS'` | 连对 | ≥6 (≥3对) |
+| `AIRPLANE` | `'AIRPLANE'` | 飞机 | ≥6 (≥2个三张) |
+| `AIRPLANE_PLUS_SINGLES` | `'AIRPLANE_PLUS_SINGLES'` | 飞机带单 | 飞机长度×4 |
+| `AIRPLANE_PLUS_PAIRS` | `'AIRPLANE_PLUS_PAIRS'` | 飞机带对 | 飞机长度×5 |
+| `BOMB` | `'BOMB'` | 炸弹 | 4 |
+| `ROCKET` | `'ROCKET'` | 火箭 | 2 |
+| `FOUR_PLUS_TWO` | `'FOUR_PLUS_TWO'` | 四带二 | 6 |
+| `FOUR_PLUS_TWO_PAIRS` | `'FOUR_PLUS_TWO_PAIRS'` | 四带两对 | 8 |
+| `INVALID` | `'INVALID'` | 无效 | — |
+
+### 1.5 中文名映射 (HAND_TYPE_NAMES)
+
+```javascript
+HAND_TYPE_NAMES[HAND_TYPES.SINGLE] = '单张'
+HAND_TYPE_NAMES[HAND_TYPES.PAIR] = '对子'
+HAND_TYPE_NAMES[HAND_TYPES.TRIPLE] = '三张'
+HAND_TYPE_NAMES[HAND_TYPES.TRIPLE_PLUS_ONE] = '三带一'
+HAND_TYPE_NAMES[HAND_TYPES.TRIPLE_PLUS_TWO] = '三带二'
+HAND_TYPE_NAMES[HAND_TYPES.STRAIGHT] = '顺子'
+HAND_TYPE_NAMES[HAND_TYPES.CONSECUTIVE_PAIRS] = '连对'
+HAND_TYPE_NAMES[HAND_TYPES.AIRPLANE] = '飞机'
+HAND_TYPE_NAMES[HAND_TYPES.AIRPLANE_PLUS_SINGLES] = '飞机带单'
+HAND_TYPE_NAMES[HAND_TYPES.AIRPLANE_PLUS_PAIRS] = '飞机带对'
+HAND_TYPE_NAMES[HAND_TYPES.BOMB] = '炸弹'
+HAND_TYPE_NAMES[HAND_TYPES.ROCKET] = '火箭'
+HAND_TYPE_NAMES[HAND_TYPES.FOUR_PLUS_TWO] = '四带二'
+HAND_TYPE_NAMES[HAND_TYPES.FOUR_PLUS_TWO_PAIRS] = '四带两对'
+```
+
+---
+
+## 2. Card 类
+
+### 2.1 构造函数
+
+```javascript
+function Card(suit, rank) {
+  // suit: 'spade'|'heart'|'club'|'diamond'|'joker'
+  // rank: 0-14
+  this.suit = suit;
+  this.rank = rank;
+}
+```
+
+**校验规则:**
+| 条件 | 结果 |
+|:-----|:------|
+| rank 不是 0-14 | throw Error |
+| suit 不是 5个有效值之一 | throw Error |
+| rank < 13 + suit === 'joker' | throw Error (非王牌不能有王花色) |
+| rank ≥ 13 + suit !== 'joker' | throw Error (王必须有花色 joker) |
+
+### 2.2 实例方法
+
+| 方法 | 返回 | 说明 |
+|:-----|:-----|:------|
+| `displayName()` | string | 中文名: `'3'`...`'2'`/`'小王'`/`'大王'` |
+| `shortName()` | string | 英文缩写: `'3'`...`'2'`/`'SJ'`/`'BJ'` |
+| `suitSymbol()` | string | Unicode: `♠♥♣♦🃏` |
+| `isJoker()` | boolean | `rank >= 13` |
+| `isRed()` | boolean | `heart`/`diamond`/大王(rank=14) |
+| `toString()` | string | `♠10` / `🃏SJ` / `🃏BJ` |
+| `clone()` | Card | 深拷贝新 Card |
+
+### 2.3 静态方法
+
+**`Card.fromString(str)`:**
+```
+格式: "♠3", "♥K", "🃏SJ", "🃏BJ", "♥10"
+       "♠3" -> new Card('spade', 0)
+       "🃏SJ" / "🃏小王" -> new Card('joker', 13)
+```
+
+**Unicode 处理:** 使用 codepoint 拆分处理代理对（🃏 是 4字节字符）。
+
+---
+
+## 3. Deck 类
+
+### 3.1 构造与复位
+
+```javascript
+function Deck() {
+  this.cards = [];
+  this.reset();
+}
+```
+
+**reset()** 生成的初始牌序:
+```
+♠3 ♥3 ♣3 ♦3 ♠4 ♥4 ♣4 ♦4 ... ♠2 ♥2 ♣2 ♦2 小王 大王
+```
+即: 按 spade→heart→club→diamond 花色遍历，每花色 rank 0→12 (3→2)，然后两张王。
+
+### 3.2 方法
+
+| 方法 | 参数 | 返回 | 说明 |
+|:-----|:-----|:-----|:------|
+| `reset()` | — | this | 重置54张牌 |
+| `shuffle()` | — | this | Fisher-Yates 洗牌 |
+| `deal(n, cpp)` | nPlayers=3, cardsPerPlayer=17 | `{hands, remaining}` | 发牌 |
+
+**deal 返回格式:**
+```javascript
+{
+  hands: [
+    [Card, Card, ...],  // 玩家0: 17张
+    [Card, Card, ...],  // 玩家1: 17张
+    [Card, Card, ...]   // 玩家2: 17张
+  ],
+  remaining: [Card, Card, Card]  // 3张底牌
+}
+```
+
+**牌数验证:** 54 = 3×17 + 3
+
+---
+
+## 4. 牌型识别 (identifyType)
+
+### 4.1 函数签名
+
+```javascript
+function identifyType(cards) → { type, rank, length, ... }
+```
+
+### 4.2 返回值格式
+
+```javascript
+{
+  type: 'SINGLE',       // HAND_TYPES 常量
+  rank: 5,              // 比较用主rank (用于canBeat)
+  length: 1,            // 主体数量 (翅膀数/顺子长度/对子对数/飞机引擎数)
+  totalCards: 1,        // 总牌数 (隐含)
+  name: '单张',          // 中文名
+  isBomb: false,        // 炸弹标记
+  isRocket: false,      // 火箭标记
+  valid: true           // 合法牌型
+}
+```
+
+**⚠️ 注意:** 当前代码 `identifyType` 不返回 totalCards/name/isBomb/isRocket/valid 字段，仅返回 `{type, rank, length}` + 部分类型含 `kickRank`。
+
+### 4.3 识别规则 (识别顺序, 严格按代码执行)
+
+```
+输入: cards (array of Card)
+  ↓
+n = cards.length
+sorted = 按rank排序
+groups = groupByRank(sorted)
+ranks = 各组rank列表 (升序)
+counts = 各组牌数列表
+  ↓
+1. 火箭: n===2 && ranks=[13,14]
+   → {ROCKET, rank:14, length:2}
+
+2. 炸弹: n===4 && ranks.length===1 && counts[0]===4
+   → {BOMB, rank: ranks[0], length:4}
+
+3. 单张: n===1
+   → {SINGLE, rank: sorted[0].rank, length:1}
+
+4. 对子: n===2 && ranks.length===1 && counts[0]===2
+   → {PAIR, rank: ranks[0], length:2}
+
+5. 三张: n===3 && ranks.length===1 && counts[0]===3
+   → {TRIPLE, rank: ranks[0], length:3}
+
+6. 三带一: n===4 && ranks.length===2
+   → 找 3+1 组合: {TRIPLE_PLUS_ONE, rank: tripleRank, length:4, kickRank}
+
+7. 三带二: n===5 && ranks.length===2
+   → 找 3+2 组合: {TRIPLE_PLUS_TWO, rank: tripleRank, length:5, kickRank}
+
+8. 顺子: n>=5 && 连续序列 && 每张1张 && 最大rank <= A(11)
+   → {STRAIGHT, rank: maxRank, length: n}
+
+9. 连对: n>=6 && n%2===0 && n===ranks*2 && 连续序列 && 每张≥2 && max<=A
+   → {CONSECUTIVE_PAIRS, rank: maxRank, length: n/2}
+
+10. 飞机系列: n>=6
+    → 找连续 tripleranks
+    ├── 纯飞机 (n=tripleCount×3) → {AIRPLANE, rank: maxRunRank, length: runLen}
+    ├── 飞机带单 (n=tripleCount×3 + runLen) → {AIRPLANE_PLUS_SINGLES, rank: maxRunRank, length: runLen}
+    └── 飞机带对 (n=tripleCount×3 + runLen×2) → {AIRPLANE_PLUS_PAIRS, rank: maxRunRank, length: runLen}
+
+11. 四带二: n===6
+    → 找 4+2: {FOUR_PLUS_TWO, rank: bombRank, length:6}
+
+12. 四带两对: n===8
+    → 找 4+2+2: {FOUR_PLUS_TWO_PAIRS, rank: bombRank, length:8}
+
+13. 都不匹配 → {INVALID, rank:-1, length:0}
+```
+
+### 4.4 识别优先级
+
+**识别有严格先后顺序**, 与斗地主规则一致:
+1. 火箭 (最优先)
+2. 炸弹
+3. 单张
+4. 对子
+5. 三张
+6. 三带一
+7. 三带二
+8. 顺子
+9. 连对
+10. 飞机及其变体
+11. 四带二
+12. 四带两对
+13. INVALID
+
+### 4.5 识别示例
+
+| 牌组 | 结果 | rank | length |
+|:----|:-----|:----:|:------:|
+| [♠3] | SINGLE | 0 | 1 |
+| [♠3, ♥3] | PAIR | 0 | 2 |
+| [♠3, ♥3, ♣3] | TRIPLE | 0 | 3 |
+| [♠3, ♥3, ♣3, ♠4] | TRIPLE_PLUS_ONE | 0 | 4 |
+| [♠3, ♥3, ♣3, ♠4, ♥4] | TRIPLE_PLUS_TWO | 0 | 5 |
+| [♠3, ♥4, ♣5, ♦6, ♠7] | STRAIGHT | 4 (7) | 5 |
+| [♠3, ♥3, ♠4, ♥4, ♠5, ♥5] | CONSECUTIVE_PAIRS | 2 (5) | 3 |
+| [♠3, ♥3, ♣3, ♠4, ♥4, ♣4] | AIRPLANE | 1 (4) | 2 |
+| [♠3, ♥3, ♣3, ♠4, ♥4, ♣4, ♠5] | AIRPLANE_PLUS_SINGLES | 1 (4) | 2 |
+| [♠3, ♥3, ♣3, ♦3] | BOMB | 0 (3) | 4 |
+| [♠小王, ♠大王] | ROCKET | 14 (大王) | 2 |
+| [♠3, ♥3, ♣3, ♦3, ♠4, ♥5] | FOUR_PLUS_TWO | 0 (3) | 6 |
+| [♠3, ♥3, ♣3, ♦3, ♠4, ♥4, ♠5, ♥5] | FOUR_PLUS_TWO_PAIRS | 0 (3) | 8 |
+| [♠3, ♥4, ♣4] | INVALID | -1 | 0 |
+
+---
+
+## 5. 出牌比较 (canBeat)
+
+### 5.1 函数签名
+
+```javascript
+function canBeat(current, last) → boolean
+```
+
+**参数:**
+| 参数 | 类型 | 说明 |
+|:-----|:-----|:------|
+| current | Card[] | 当前尝试出的牌 |
+| last | Card[] | 上家出的牌 (null = 自由出牌, 但不进入此函数) |
+
+### 5.2 判定规则树
+
+```
+canBeat(current, last)
+  │
+  ├─ [guard] !current || !last || current.length===0 || last.length===0 → false
+  │
+  ├─ curInfo = identifyType(current)
+  ├─ lastInfo = identifyType(last)
+  │
+  ├─ [guard] curInfo.type === INVALID → false
+  ├─ [guard] lastInfo.type === INVALID → false
+  │
+  ├─ 火箭规则:
+  │   ├─ curInfo.type === ROCKET → return true   (火箭管一切)
+  │   └─ lastInfo.type === ROCKET → return false  (无人能管火箭)
+  │
+  ├─ 炸弹规则:
+  │   ├─ curInfo.type === BOMB && lastInfo.type !== BOMB → return true   (炸弹管非炸弹)
+  │   └─ lastInfo.type === BOMB && curInfo.type !== BOMB → return false  (非炸弹管不了炸弹)
+  │
+  ├─ 同类比较:
+  │   ├─ curInfo.type !== lastInfo.type → return false
+  │   │
+  │   ├─ 长度敏感型 (顺子/连对/飞机及其变体):
+  │   │     curInfo.length !== lastInfo.length → return false
+  │   │
+  │   ├─ 炸弹比 rank:
+  │   │     return curInfo.rank > lastInfo.rank
+  │   │
+  │   └─ 普通同型:
+  │         return curInfo.rank > lastInfo.rank   (单张/对子/三张/三带一/三带二/四带二/四带两对)
+  │
+  └─ → return false
+```
+
+### 5.3 比较规则摘要
+
+| 当前 → 上家 | SINGLE | PAIR | TRIPLE | TRPL+1 | TRPL+2 | STRAIGHT | CONSEC-P | AIRPLANE | ... | BOMB | ROCKET |
+|:-----------:|:------:|:----:|:------:|:------:|:------:|:--------:|:--------:|:--------:|:---:|:----:|:------:|
+| SINGLE | rank比 | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| PAIR | ✗ | rank比 | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| TRIPLE | ✗ | ✗ | rank比 | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| TRPL+1 | ✗ | ✗ | ✗ | rank比 | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| TRPL+2 | ✗ | ✗ | ✗ | ✗ | rank比 | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| STRAIGHT | ✗ | ✗ | ✗ | ✗ | ✗ | rank+长度 | ✗ | ✗ | ✗ | ✗ | ✗ |
+| CONSEC-P | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | rank+长度 | ✗ | ✗ | ✗ | ✗ |
+| AIRPLANE | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | rank+长度 | ✗ | ✗ | ✗ |
+| ... | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | 同类rank+长度 | ✗ | ✗ |
+| BOMB | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | rank比 | ✗ |
+| ROCKET | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+
+其中:
+- ✅ = 可以管 (BOMB管一切非炸弹/非火箭)
+- ✗ = 不可以管
+- `rank比` = 主rank大的胜
+- `rank+长度` = rank相同且长度相同才可比 (同型且同长度)
+
+### 5.4 比较示例
+
+| current | last | 结果 | 原因 |
+|:-------|:-----|:----:|:------|
+| [♠A] | [♠K] | ✅ | 单张 rank 11 > 10 |
+| [♠5] | [♠K] | ❌ | 单张 rank 5 < 10 |
+| [♠4,♠4] | [♠5,♠5] | ❌ | 对子 rank 4 < 5 |
+| [♠3,♠3,♠3] | [♠4,♠4,♠4] | ❌ | 三张 rank 3 < 4 |
+| [♠3,♠4,♠5,♠6,♠7] | [♠4,♠5,♠6,♠7,♠8] | ❌ | 顺子 rank最高 7 < 8 |
+| [♠3,♠4,♠5,♠6,♠7] | [♠4,♠5,♠6,♠7,♠8,♠9] | ❌ | 长度不同 5≠6 |
+| [♠3,♠3,♠3,♠3] | [♠4,♠4,♠4,♠4] | ❌ | 炸弹 rank 3 < 4 |
+| [♠K,♠K,♠K,♠K] | [♠5,♠6,♠7,♠8,♠9] | ✅ | 炸弹管顺子 |
+| [♠小,♠大] | [♠K,♠K,♠K,♠K] | ✅ | 火箭管炸弹 |
+| [♠3,♠3,♠3,♠3] | [♠小,♠大] | ❌ | 炸弹管不了火箭 |
+| [♠3,♠3,♠3,♠4] | [♠K,♠K,♠K] | ❌ | 三带一不能管三张(不同型) |
+
+---
+
+## 6. 合法出牌枚举 (findValidPlays)
+
+### 6.1 函数签名
+
+```javascript
+function findValidPlays(hand, lastPlay) → [[Card], [Card], ...]
+```
+
+| 参数 | 类型 | 说明 |
+|:-----|:-----|:------|
+| hand | Card[] | 当前手牌 |
+| lastPlay | Card[] | 上家出的牌 (null/[] = 自由出牌) |
+
+**返回:** 所有合法出牌组合的数组 (各组合为 Card 数组)  
+**空数组:** `hand.length === 0` 或 `lastPlay` 为火箭时
+
+### 6.2 枚举流程
+
+```
+findValidPlays(hand, lastPlay)
+  │
+  ├─ groups = groupByRank(hand)
+  │
+  ├─ 收集所有可能牌型:
+  │   ├─ findAllSingles(groups)         → 所有单张
+  │   ├─ findAllPairs(groups)           → 所有对子
+  │   ├─ findAllTriples(groups)         → 所有三张
+  │   ├─ findAllTriplePlusOne(groups)   → 所有三带一
+  │   ├─ findAllTriplePlusTwo(groups)   → 所有三带二
+  │   ├─ findAllStraights(groups)       → 所有顺子 (B4: 最长8张)
+  │   ├─ findAllConsecutivePairs(groups) → 所有连对 (B4: 最长6对)
+  │   ├─ findAllAirplanes(groups)       → 所有飞机 (B4: 最长4连)
+  │   ├─ findAllBombs(groups)           → 所有炸弹
+  │   ├─ findRocket(groups)             → 火箭
+  │   └─ findAllFourPlusTwo(groups)     → 四带二 + 四带两对
+  │
+  ├─ deduplicate(allPlays)              → 按 rank 序列去重
+  │
+  ├─ sort by typeSortOrder              → 按类型排序 (单张→火箭)
+  │
+  ├─ [自由出牌 lastPlay null/空]:
+  │     return allPlays
+  │
+  └─ [有上家牌]:
+      ├─ lastInfo = identifyType(lastPlay)
+      ├─ if (lastInfo.type === ROCKET) → return []
+      ├─ 过滤 canBeat(play, lastPlay) === true 的
+      └─ return filteredPlays
+```
+
+### 6.3 子枚举器详解
+
+#### findAllSingles
+
+遍历所有 rank 组，每张牌产生一个单张组合。
+
+#### findAllPairs
+
+遍历所有 rank 组，每组取前2张牌 (groups[r].length >= 2)。
+
+#### findAllTriples
+
+遍历所有 rank 组，每组取前3张牌 (groups[r].length >= 3)。
+
+#### findAllTriplePlusOne
+
+遍历所有 rank 组中 >=3 张的 rank，从其他 rank 中选1张 kick。使用 `getAllSinglesPool` 和 `combinations`。
+
+#### findAllTriplePlusTwo
+
+同上，从其他 rank 中选1对。使用 `getAllPairsPool`。
+
+#### findAllStraights
+
+```
+available[r] = (groups[r] && groups[r].length >= 1)  // rank 0~11
+→ 找连续可用段 run
+→ 每个 run 中枚举所有长度 5 ~ maxLen(8) 的子段
+→ 每段取第一张牌 (groups[rr][0])
+```
+
+**B4 约束:** 顺子最长 8 张 (避免组合爆炸)
+
+#### findAllConsecutivePairs
+
+```
+available[r] = (groups[r] && groups[r].length >= 2)  // rank 0~11
+→ 找连续可用段 run
+→ 每个 run 中枚举所有长度 3 ~ maxLen(6) 对
+→ 每段取前2张牌 (groups[rr][0], groups[rr][1])
+```
+
+**B4 约束:** 连对最长 6 对 (12张)
+
+#### findAllAirplanes
+
+```
+tripleAvailable[r] = (groups[r] && groups[r].length >= 3)  // rank 0~11
+→ 找连续 run (长度≥2)
+→ 每个 run 枚举长度 2 ~ maxLen(4)
+→ 生成:
+  ├─ 纯飞机: 取前3张/rank
+  ├─ 飞机带单: 从剩余牌中选 len 张单张 (combinations)
+  └─ 飞机带对: 从剩余牌中选 len 对 (combinations)
+```
+
+**B4 约束:** 飞机最长 4 连 (12+4=16 或 12+8=20 张)
+
+#### findAllBombs
+
+遍历所有 rank 组中恰好 4 张的，取全部 4 张。
+
+#### findRocket
+
+检查 groups[13] 和 groups[14] 是否存在。
+
+#### findAllFourPlusTwo
+
+遍历 bombRanks (count===4)：
+- 四带二单: 从其他 rank 选2张单
+- 四带两对: 从其他 rank 选2对
+
+### 6.4 去重 (deduplicate)
+
+```javascript
+function playKey(cards) {
+  return cards.map(c => c.rank).sort().join(',');
+}
+```
+
+基于 rank 序列去重，不关心花色。例如:
+- `♠3 ♥4 ♣5` 和 `♦3 ♠4 ♠5` → 相同 key `0,1,2` → 去重
+
+### 6.5 B4 性能约束
+
+| 枚举器 | 最大长度 | 原因 |
+|:-------|:--------:|:------|
+| 顺子 (findAllStraights) | 8张 | 避免组合爆炸 |
+| 连对 (findAllConsecutivePairs) | 6对 (12张) | 同上 |
+| 飞机 (findAllAirplanes) | 4连 | 同上 |
+
+---
+
+## 7. 排序器 (sortCards)
+
+### 7.1 升序排序 (sortCards)
+
+```javascript
+function sortCards(cards) → Card[]
+// 不修改原数组, 返回新排序数组
+```
+
+**排序规则:**
+1. 主排序: rank 升序 (0=3 最小, 14=大王 最大)
+2. 次排序: 花色 (spade > heart > club > diamond > joker)
+
+```
+suitOrder = { spade: 0, heart: 1, club: 2, diamond: 3, joker: 4 }
+```
+
+**排序后显示顺序 (3最小 → 大王最大):**
+```
+♠3 ♥3 ♣3 ♦3 ♠4 ♥4 ... ♠2 ♥2 ♣2 ♦2 小王 大王
+```
+
+### 7.2 降序排序 (sortCardsDesc)
+
+```javascript
+function sortCardsDesc(cards) → Card[]
+```
+
+**规则:** rank 降序, 花色顺序同上。
+
+```
+大王 小王 ♦2 ♣2 ♥2 ♠2 ... ♦3 ♣3 ♥3 ♠3
+```
+
+### 7.3 game.js 中使用
+
+```javascript
+// init() 发牌后
+this.playerHand = Doudizhu.sortCards(dealResult.hands[0]);
+
+// finishBidding 玩家是地主时
+this.playerHand = Doudizhu.sortCards(this.playerHand);
+
+// confirmPlay 出牌后
+this.renderPlayerHand();  // (内部已再次调用 sortCards? 不, renderPlayerHand 不从 sort 开始)
+```
+
+---
+
+## 8. 辅助函数
+
+### 8.1 groupByRank
+
+```javascript
+function groupByRank(cards) → { rank: Card[], ... }
+```
+
+按 rank 分组。输入 `[♠3, ♥3, ♦J]` → 输出 `{0: [♠3, ♥3], 8: [♦J]}`
+
+### 8.2 combinations (Generator)
+
+```javascript
+function* combinations(arr, k) → yield [element, ...]
+```
+
+从 arr 中选 k 个元素的所有组合。使用 ES6 Generator。
+
+### 8.3 get 辅助
+
+| 函数 | 用途 | 返回 |
+|:-----|:-----|:-----|
+| `getAllSinglesPool(groups, excludeRanks)` | 获取所有可做"带"的单张候选 | Card[] |
+| `getAllPairsPool(groups, excludeRanks)` | 获取所有可做"带"的对候选 | Card[][] |
+| `playKey(cards)` | 生成去重key | string (逗号分隔rank) |
+| `deduplicate(plays)` | 去重 | Card[][] |
+| `arraysEqual(a, b)` | 深比较rank序列 | boolean |
+
+### 8.4 序列检测
+
+| 函数 | 用途 | 返回 |
+|:-----|:-----|:------|
+| `isConsecutiveSequence(ranks, maxRank)` | 是否连续递增且 ≤ maxRank | boolean |
+| `allCountsOne(counts)` | 所有 count === 1 | boolean |
+| `allCountsAtLeast(counts, min)` | 所有 count ≥ min | boolean |
+| `findConsecutiveRuns(ranks)` | 找连续段 (长度≥2) | number[][] |
+
+---
+
+## 9. AI 策略支持
+
+### 9.1 typeSortOrder — 出牌优先级
+
+```javascript
+function typeSortOrder(type) → number
+```
+
+| 牌型 | order | AI策略: 越小的越优先出 |
+|:----|:-----:|:----------------------|
+| SINGLE | 0 | 单张 (最优先) |
+| PAIR | 1 | 对子 |
+| TRIPLE | 2 | 三张 |
+| TRIPLE_PLUS_ONE | 3 | 三带一 |
+| TRIPLE_PLUS_TWO | 4 | 三带二 |
+| STRAIGHT | 5 | 顺子 |
+| CONSECUTIVE_PAIRS | 6 | 连对 |
+| AIRPLANE | 7 | 飞机 |
+| AIRPLANE_PLUS_SINGLES | 8 | 飞机带单 |
+| AIRPLANE_PLUS_PAIRS | 9 | 飞机带对 |
+| FOUR_PLUS_TWO | 10 | 四带二 |
+| FOUR_PLUS_TWO_PAIRS | 11 | 四带两对 |
+| BOMB | 12 | 炸弹 |
+| ROCKET | 13 | 火箭 |
+
+**game.js 中 localAIPlay 使用:**
+```javascript
+var plays = Doudizhu.findValidPlays(hand, this.lastPlay);
+var chosen = plays[0];  // typeSortOrder 最小的
+```
+
+由于 `findValidPlays` 返回值已按 `typeSortOrder` + rank 排序，`plays[0]` 即最弱的推荐。
+
+### 9.2 自由出牌优化
+
+```javascript
+// localAIPlay 中:
+if (!this.lastPlay || this.lastPlay.length === 0) {
+  var singlePlay = null;
+  for (var pi = 0; pi < plays.length; pi++) {
+    if (plays[pi].length === 1) { singlePlay = plays[pi]; break; }
+  }
+  if (singlePlay) chosen = singlePlay;  // 优先出最小单张
+}
+```
+
+自由出牌时优先枚举最小的单张，而非 plays[0] (可能是最小对子)。
+
+---
+
+## 10. 与 game.js 集成
+
+### 10.1 game.js 中的调用点
+
+| game.js 函数 | CardEngine API | 用途 | 行号 |
+|:-------------|:---------------|:-----|:-----|
+| `init()` | `Deck.shuffle().deal(3, 17)` + `sortCards` | 发牌+排序 | ~200 |
+| `confirmPlay()` | `identifyType` | 验证玩家出牌牌型 | ~995 |
+| `confirmPlay()` | — (无 canBeat 调用) | 出牌校验在 doPlayerPlay 完成 | — |
+| `doPlayerPlay()` | `identifyType` + `canBeat` | 双验证 | ~960-970 |
+| `localHint()` | `findValidPlays` + `identifyType` | 本地提示 | ~1085 |
+| `highlightHint()` | — | API 提示 (不依赖 CardEngine) | ~1115 |
+| `localAIPlay()` | `findValidPlays` + `identifyType` | 本地AI出牌 | ~1260 |
+| `handleAIPlay()` | `identifyType` (partial match) | API AI出牌降级 | ~1195 |
+| `handCards[]` | — (使用 Card.suit/rank 结构) | 渲染手牌图片 | ~420 |
+
+### 10.2 牌对象兼容
+
+game.js 中手牌使用 `Doudizhu.Card` 实例 (suit, rank 属性):
+
+```javascript
+// 发牌
+this.playerHand = dealResult.hands[0];  // Card[]
+
+// 手牌操作
+var playCards = this.selectedCards.map(function(idx) {
+  return self.playerHand[idx];  // 直接取Card对象引用
+});
+
+// 移除出牌 (引用匹配)
+var key = card.suit + ':' + card.rank;
+playSet[key] = (playSet[key] || 0) + 1;
+// splice 移除时使用 suit:rank 匹配, 不需要引用全等
+```
+
+### 10.3 出牌验证流程 (game.js + CardEngine)
+
+```
+玩家点击"出牌"
+  │
+  ├─ DoPlayerPlay():
+  │   ├─ selectedCards.map → playCards
+  │   ├─ Doudizhu.identifyType(playCards)
+  │   │   └─ type === INVALID → toast + return
+  │   │
+  │   ├─ [有上家牌] Doudizhu.canBeat(playCards, lastPlay)
+  │   │   └─ false → toast + return
+  │   │
+  │   ├─ [API模式] ApiClient.verifyPlay()
+  │   │   ├─ valid=true → confirmPlay
+  │   │   └─ valid=false → toast + return
+  │   │
+  │   └─ [本地模式 / API降级] → confirmPlay(playCards, info)
+  │
+  └─ confirmPlay():
+      ├─ 手牌移除 (suit:rank匹配)
+      ├─ displayPlay
+      ├─ addPlayHistory
+      └─ AI回合
+```
+
+**验证层级:**
+1. 前端: `identifyType(INVALID)` 守卫
+2. 前端: `canBeat()` 守卫
+3. 后端(API): `verifyPlay()` 服务端验证
+4. API 失败时降级到前端验证 (直接 confirmPlay)
+
+---
+
+## 11. 验收标准
+
+### 11.1 牌型识别
+
+| # | 验收条件 | 预期结果 | 来源行 |
+|:-:|----------|---------|:------:|
+| I1 | 单张 [♠3] | SINGLE rank=0 | identifyType |
+| I2 | 对子 [♠3, ♥3] | PAIR rank=0 | identifyType |
+| I3 | 三张 [♠3, ♥3, ♣3] | TRIPLE rank=0 | identifyType |
+| I4 | 三带一 [♠3, ♥3, ♣3, ♠4] | TRIPLE_PLUS_ONE rank=0 | identifyType |
+| I5 | 三带二 [♠3, ♥3, ♣3, ♠4, ♥4] | TRIPLE_PLUS_TWO rank=0 | identifyType |
+| I6 | 顺子 [3,4,5,6,7] | STRAIGHT rank=4 | identifyType |
+| I7 | 连对 [33,44,55] | CONSECUTIVE_PAIRS rank=2 | identifyType |
+| I8 | 纯飞机 [333,444] | AIRPLANE rank=1 | identifyType |
+| I9 | 飞机带单 [333,444,5] | AIRPLANE_PLUS_SINGLES | identifyType |
+| I10 | 炸弹 [3333] | BOMB rank=0 | identifyType |
+| I11 | 火箭 [小王,大王] | ROCKET rank=14 | identifyType |
+| I12 | 非法 [♠3, ♠4] | INVALID | identifyType |
+
+### 11.2 出牌比较
+
+| # | 验收条件 | 预期结果 | 来源行 |
+|:-:|----------|---------|:------:|
+| C1 | 单张 A > K | canBeat=true | canBeat |
+| C2 | 单张 3 < K | canBeat=false | canBeat |
+| C3 | 顺子同等长度 7-8-9-10-J > 3-4-5-6-7 | canBeat=true | canBeat |
+| C4 | 顺子长度不同 3-4-5-6-7 不能管 4-5-6-7-8-9 | canBeat=false | canBeat |
+| C5 | 炸弹 3333 > 顺子 3-4-5-6-7 | canBeat=true | canBeat |
+| C6 | 火箭 > 炸弹 3333 | canBeat=true | canBeat |
+| C7 | 炸弹 3333 < 火箭 | canBeat=false | canBeat |
+| C8 | 无牌能管火箭 | canBeat(任何, 火箭)=false | canBeat |
+
+### 11.3 排序
+
+| # | 验收条件 | 预期结果 | 来源行 |
+|:-:|----------|---------|:------:|
+| S1 | sortCards 升序: 3→2→小王→大王 | rank升序 | sortCards |
+| S2 | 同rank花色: ♠ > ♥ > ♣ > ♦ | suitOrder 0→3 | sortCards |
+| S3 | sortCardsDesc 降序: 大王→小王→2→3 | rank降序 | sortCardsDesc |
+
+### 11.4 findValidPlays
+
+| # | 验收条件 | 预期结果 | 来源行 |
+|:-:|----------|---------|:------:|
+| F1 | 空手牌 → [] | 空数组 | findValidPlays |
+| F2 | 自由出牌 → 所有可能组合 | 含单张/对子/顺子等 | findValidPlays |
+| F3 | 有上家牌 → 仅返回能压上的组合 | 过滤结果 | findValidPlays |
+| F4 | 上家火箭 → 返回 [] | 不可压 | findValidPlays |
+| F5 | 去重正确: 同rank不同花色组合只保留一个 | playKey去重 | deduplicate |
+
+### 11.5 发牌
+
+| # | 验收条件 | 预期结果 | 来源行 |
+|:-:|----------|---------|:------:|
+| D1 | 54张牌总数不变 | reset() → 54 | Deck.reset |
+| D2 | deal(3,17) → 3×17+3=54 | 正确分牌 | Deck.deal |
+| D3 | 洗牌后顺序随机 | shuffle() Fisher-Yates | Deck.shuffle |
+| D4 | 花色映射正确 | 5种+13rank+2王 | SUITS/RANK_NAMES |
+
+### 11.6 Card 类
+
+| # | 验收条件 | 预期结果 | 来源行 |
+|:-:|----------|---------|:------:|
+| CA1 | new Card('spade', 0) → rank=0, suit='spade' | 正确创建 | Card |
+| CA2 | 非法参数 throw Error | rank<0, suit无效等 | Card |
+| CA3 | displayName 正确 | 0→'3', 13→'小王' | displayName |
+| CA4 | fromString "♠3" 正确解析 | → Card('spade',0) | fromString |
+| CA5 | 是否为红: heart/diamond/大王 | isRed() | isRed |
+
+### 11.7 集成验证
+
+| # | 验收条件 | 预期结果 | 来源行 |
+|:-:|----------|---------|:------:|
+| J1 | game.js 调用 identifyType 验证出牌 | 非法牌型 toast | doPlayerPlay |
+| J2 | game.js 调用 canBeat 验证压牌 | 不能压 toast | doPlayerPlay |
+| J3 | game.js 调用 findValidPlays 做提示 | 最小推荐 | localHint |
+| J4 | game.js 调用 findValidPlays 做AI出牌 | 最弱出牌 | localAIPlay |
+| J5 | sortCards 用于发牌排序 | 3→2 单花色排序 | init() |
+
+---
+
+## 附录: 函数索引
+
+| 函数/方法 | 行号 | 功能 | 备注 |
+|:----------|:----:|:-----|:------|
+| `Card(suit, rank)` | ~130 | 牌构造函数 | 含校验 |
+| `Card.fromString(str)` | ~175 | 从字符串解析 | 支持Unicode |
+| `Deck()` | ~215 | 牌堆构造 | 54张 |
+| `Deck.reset()` | ~220 | 重置54张 | 初始排序 |
+| `Deck.shuffle()` | ~235 | Fisher-Yates洗牌 | 原位 |
+| `Deck.deal(n, cpp)` | ~243 | 发牌 | 3×17+3 |
+| `groupByRank(cards)` | ~260 | rank分组 | 内部 |
+| `combinations(arr, k)` | ~268 | 组合生成器 | Generator |
+| `identifyType(cards)` | ~350 | 牌型识别 | 14种 |
+| `canBeat(current, last)` | ~560 | 出牌比较 | 炸弹/火箭规则 |
+| `findAllSingles(groups)` | ~610 | 枚举单张 | 内部 |
+| `findAllPairs(groups)` | ~622 | 枚举对子 | 内部 |
+| `findAllTriples(groups)` | ~634 | 枚举三张 | 内部 |
+| `findAllTriplePlusOne(groups)` | ~668 | 枚举三带一 | 内部 |
+| `findAllTriplePlusTwo(groups)` | ~684 | 枚举三带二 | 内部 |
+| `findAllStraights(groups)` | ~700 | 枚举顺子 | B4: 最长8 |
+| `findAllConsecutivePairs(groups)` | ~728 | 枚举连对 | B4: 最长6对 |
+| `findAllAirplanes(groups)` | ~755 | 枚举飞机 | B4: 最长4连 |
+| `findAllBombs(groups)` | ~809 | 枚举炸弹 | 内部 |
+| `findRocket(groups)` | ~817 | 枚举火箭 | 内部 |
+| `findAllFourPlusTwo(groups)` | ~823 | 枚举四带二 | 含两对变体 |
+| `findValidPlays(hand, last)` | ~850 | 合法出牌枚举 | 去重+排序+过滤 |
+| `typeSortOrder(type)` | ~900 | 牌型优先级 | AI策略 |
+| `sortCards(cards)` | ~917 | 升序排序 | rank→suit |
+| `sortCardsDesc(cards)` | ~928 | 降序排序 | 同上 |
+| `isConsecutiveSequence()` | ~530 | 连续序列检测 | 内部 |
+| `findConsecutiveRuns()` | ~545 | 找连续段 | 内部 |
+
+```
+
+---
+
+## `docs/CardEngine.md` (11,926 字节)
+
+```markdown
+# Card Engine API Reference
+
+**Version:** v1.0  
+**Author:** 产品老大  
+**Date:** 2026-05-02  
+**Doc ID:** CARD-ENGINE-001  
+**Corresponding File:** `src/client/js/CardEngine.js` (1090 lines)  
+
+---
+
+## 1. Overview
+
+CardEngine is a pure JavaScript library implementing the full rules of Chinese Doudizhu (斗地主). It has zero external dependencies and works in both browser and Node.js environments.
+
+**Namespace:** `window.Doudizhu`
+
+**Bootstrap:**
+```html
+<script src="js/CardEngine.js"></script>
+<script>
+  var deck = new Doudizhu.Deck();
+  deck.shuffle();
+  var dealResult = deck.deal(3, 17);
+  var playerHand = dealResult.hands[0];
+  var playType = Doudizhu.identifyType(selectedCards);
+</script>
+```
+
+---
+
+## 2. Constants
+
+### 2.1 Suits
+
+```javascript
+var SUITS = ['spade', 'heart', 'club', 'diamond', 'joker'];
+```
+
+### 2.2 Rank Names
+
+```javascript
+RANK_NAMES =         ['3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A', '2'];
+RANK_NAME_MAP = {
+  0: '3', 1: '4', 2: '5', 3: '6', 4: '7', 5: '8', 6: '9', 7: '10',
+  8: 'J', 9: 'Q', 10: 'K', 11: 'A', 12: '2',
+  13: '小王', 14: '大王'
+};
+```
+
+### 2.3 Hand Types
+
+| Constant | Chinese Name | Cards | Example |
+|----------|:------------:|:-----:|---------|
+| `INVALID` | 无效牌型 | — | Not a valid combination |
+| `SINGLE` | 单张 | 1 | ♠3 |
+| `PAIR` | 对子 | 2 | ♠3 ♥3 |
+| `TRIPLE` | 三张 | 3 | ♠3 ♥3 ♣3 |
+| `TRIPLE_PLUS_ONE` | 三带一 | 4 | ♠3♥3♣3 + ♠4 |
+| `TRIPLE_PLUS_TWO` | 三带二 | 5 | ♠3♥3♣3 + ♠4♥4 |
+| `STRAIGHT` | 顺子 | 5+ | ♠3♥4♣5♦6♠7 |
+| `CONSECUTIVE_PAIRS` | 连对 | 6+ (3+ pairs) | ♠3♥3♠4♥4♠5♥5 |
+| `AIRPLANE` | 飞机 | 6+ (2+ triples) | ♠3♥3♣3♠4♥4♣4 |
+| `AIRPLANE_PLUS_SINGLES` | 飞机带单 | singleCount per triple | matched singles |
+| `AIRPLANE_PLUS_PAIRS` | 飞机带对 | pairCount per triple | matched pairs |
+| `BOMB` | 炸弹 | 4 | ♠3♥3♣3♦3 |
+| `ROCKET` | 火箭 | 2 | 小王+大王 |
+| `FOUR_PLUS_TWO` | 四带二 | 6 | 4 same + 2 singles |
+| `FOUR_PLUS_TWO_PAIRS` | 四带两对 | 8 | 4 same + 2 pairs |
+
+**Constants location:** CardEngine.js lines 48-65
+
+---
+
+## 3. Card Class
+
+### 3.1 Constructor
+
+```javascript
+new Card(suit, rank)
+```
+
+| Parameter | Type | Range | Description |
+|-----------|:----:|:-----:|-------------|
+| suit | string | 'spade', 'heart', 'club', 'diamond', 'joker' | Card suit |
+| rank | number | 0-14 | Card rank (0='3', 12='2', 13='小', 14='大') |
+
+**Throws:** Error for invalid suit/rank combinations.
+
+**Example:**
+```javascript
+var c1 = new Card('spade', 0);    // ♠3
+var c2 = new Card('heart', 12);   // ♥2
+var c3 = new Card('joker', 14);   // 大王
+```
+
+### 3.2 Instance Methods
+
+#### `displayName()`
+Returns Chinese rank name:
+```javascript
+new Card('spade', 8).displayName()  // 'J'
+new Card('joker', 13).displayName() // '小王'
+```
+
+#### `shortName()`
+Returns short string for display:
+```javascript
+new Card('joker', 13).shortName() // 'SJ'
+new Card('joker', 14).shortName() // 'BJ'
+new Card('diamond', 7).shortName() // '10'
+```
+
+#### `suitSymbol()`
+Returns Unicode suit character:
+```javascript
+new Card('spade', 3).suitSymbol()   // '♠'
+new Card('heart', 3).suitSymbol()   // '♥'
+new Card('joker', 3).suitSymbol()   // '🃏'
+```
+
+#### `isJoker()`
+Returns `true` if rank is 13 or 14.
+
+#### `isRed()`
+Returns `true` for heart, diamond, or 大王 (big joker).
+
+#### `toString()`
+Full representation: `"♠10"`, `"🃏BJ"`, `"🃏SJ"`
+
+#### `clone()`
+Returns a new Card with same suit and rank.
+
+### 3.3 Static Methods
+
+#### `Card.fromString(str)`
+Creates a Card from string representation (for testing).  
+**Format:** `"♠3"`, `"♥K"`, `"🃏SJ"`, `"🃏BJ"`
+
+**Example:**
+```javascript
+Card.fromString('♠A');   // new Card('spade', 11)
+Card.fromString('🃏BJ'); // new Card('joker', 14)
+Card.fromString('♥10');  // new Card('heart', 7)
+```
+
+**Supports:** Chinese names (`小王`, `大王`)
+
+---
+
+## 4. Deck Class
+
+### 4.1 Constructor
+
+```javascript
+new Deck()
+```
+
+Creates a standard 54-card deck: 13 ranks × 4 suits (52 cards) + 2 jokers.
+
+### 4.2 Methods
+
+#### `reset()`
+Resets the deck to initial 54 cards in order (spade → heart → club → diamond, 3 → 2). Returns `this` for chaining.
+
+#### `shuffle()`
+Fisher-Yates shuffle. Returns `this`.
+
+#### `deal(nPlayers, cardsPerPlayer)`
+
+| Parameter | Type | Description |
+|-----------|:----:|-------------|
+| nPlayers | number | Number of players (typically 3) |
+| cardsPerPlayer | number | Cards per player (typically 17) |
+
+**Returns:**
+```javascript
+{
+  hands: [ // 3 arrays of 17 cards each
+    [Card, Card, ...],  // Player 1
+    [Card, Card, ...],  // Player 2
+    [Card, Card, ...]   // Player 3
+  ],
+  remaining: [Card, Card, Card]  // 3 bottom cards
+}
+```
+
+**Total cards used:** `nPlayers × cardsPerPlayer + remaining` = 3×17+3 = 54
+
+---
+
+## 5. Core Functions
+
+### 5.1 `identifyType(cards)`
+
+```javascript
+Doudizhu.identifyType(cards)
+```
+
+**Parameters:** Array of Card objects  
+**Returns:** Object with type info:
+```javascript
+{
+  type: 'SINGLE',          // string, HAND_TYPES constant value
+  rank: 5,                 // number, the primary rank for comparison
+  length: 1,               // number, count of primary cards
+  totalCards: 1,           // number, total cards in this combination
+  name: '单张',            // string, Chinese name
+  isBomb: false,           // boolean
+  isRocket: false,         // boolean
+  valid: true              // boolean
+}
+```
+
+**Type identification rules:**
+
+| Type | Condition | priorityRank | length |
+|------|-----------|:------------:|:------:|
+| SINGLE | 1 card | card.rank | 1 |
+| PAIR | 2 cards, same rank | shared rank | 2 |
+| TRIPLE | 3 cards, same rank | shared rank | 3 |
+| TRIPLE_PLUS_ONE | 3 same + 1 other | triple rank | 4 |
+| TRIPLE_PLUS_TWO | 3 same + 2 same | triple rank | 5 |
+| STRAIGHT | 5+ cards, consecutive ranks (≤A), no 2/joker | highest rank | 5+ |
+| CONSECUTIVE_PAIRS | 3+ consecutive pairs, no 2/joker | highest pair rank | 6+ |
+| AIRPLANE | 2+ consecutive triples, no 2/joker | highest triple rank | 6+ |
+| AIRPLANE_PLUS_SINGLES | airplane + matching singles | same | auto |
+| AIRPLANE_PLUS_PAIRS | airplane + matching pairs | same | auto |
+| BOMB | 4 cards, same rank | card rank | 4 |
+| ROCKET | 2 cards, joker + joker | special (always beats) | 2 |
+| FOUR_PLUS_TWO | 4 same + 2 singles | 4 same rank | 6 |
+| FOUR_PLUS_TWO_PAIRS | 4 same + 2 pairs | 4 same rank | 8 |
+| INVALID | Doesn't match any pattern | — | — |
+
+**Note:** Straight/Airplane/连对 max rank is `STRAIGHT_MAX_RANK = 11` (A). 2 and jokers cannot participate in consecutive sequences.
+
+### 5.2 `canBeat(current, last)`
+
+```javascript
+Doudizhu.canBeat(currentPlay, lastPlay)
+```
+
+| Parameter | Type | Description |
+|-----------|:----:|-------------|
+| currentPlay | Card[] | The new play being attempted |
+| lastPlay | Card[] | The previous play to beat (null = free play) |
+
+**Returns:** `{ canBeat: true/false, reason: '...' }`
+
+**Rules:**
+- If `lastPlay` is null/empty → strictly the first "free" play (always valid assuming `identifyType` passes)
+- Same type comparison: primary rank must be higher
+- Different type comparison: bombs beat all non-bomb types; rocket beats all including bombs
+- Bombs ranked by their card rank (4×3 beats 4×2)
+- Rocket always beats everything
+
+**Bomb priority:** Bomb rank 12 (2) > ... > Bomb rank 0 (3). But Rocket > any Bomb.
+
+### 5.3 `findValidPlays(hand, lastPlay)`
+
+```javascript
+Doudizhu.findValidPlays(hand, lastPlay)
+```
+
+| Parameter | Type | Description |
+|-----------|:----:|-------------|
+| hand | Card[] | Player's current hand |
+| lastPlay | Card[] | Previous play to beat (null = free play) |
+
+**Returns:** Array of valid play arrays: `[ [Card, Card, ...], [Card, Card, ...], ... ]`  
+**Empty if:** `hand.length === 0`  
+
+**Algorithm:**
+1. Group hand cards by rank using `groupByRank()`
+2. Generate all singles → pairs → triples using `findAllSingles()`, `findAllPairs()`, `findAllTriples()`
+3. Build higher-order types from triples (triple+1, triple+2, airplane variants)
+4. Find all straight runs using `findConsecutiveRuns()` → build straights, consecutive pairs
+5. Find all bombs (4 of a kind) and rocket (joker pair)
+6. Filter out plays that can't beat `lastPlay`
+7. Deduplicate by `playKey()` (string of comma-joined ranks)
+
+**Performance:** Uses generator function `combinations()` for combo generation.
+
+### 5.4 `sortCards(cards)`
+
+```javascript
+Doudizhu.sortCards(cards)
+```
+
+**Parameters:** Array of Card objects  
+**Returns:** New sorted array (does NOT mutate input)
+
+**Sort order:**
+1. Primary: rank ascending (3→2→joker)
+2. Secondary: suit order (spade > heart > club > diamond)
+
+**Usage in game.js:** Every hand deal and hand update calls this.
+
+```javascript
+this.playerHand = Doudizhu.sortCards(dealResult.hands[0]);
+```
+
+---
+
+## 6. Internal Helper Functions
+
+These are not exported but used internally by the engine.
+
+| Function | Purpose |
+|----------|---------|
+| `groupByRank(cards)` | Returns `{rank: [card, card, ...], ...}` object |
+| `combinations(arr, k)` | Generator yielding all k-combinations from arr |
+| `getAllSinglesPool(groups)` | Sorted array of ranks with at least 1 card |
+| `getAllPairsPool(groups)` | Sorted array of ranks with at least 2 cards |
+| `playKey(cards)` | Creates dedup key: sorted rank list as comma-separated string |
+| `deduplicate(plays)` | Removes duplicate play combinations |
+| `arraysEqual(a, b)` | Deep comparison sorted card rank arrays |
+| `isConsecutiveSequence(ranks, maxRank)` | Checks if ranks are consecutive and ≤ maxRank |
+| `allCountsOne(counts)` | All counts === 1 |
+| `allCountsAtLeast(counts, min)` | All counts ≥ min |
+| `findConsecutiveRuns(ranks)` | Finds consecutive run segments from sorted rank list |
+
+---
+
+## 7. Integration with game.js
+
+### 7.1 Usage Map
+
+| game.js Function | CardEngine API Used | Purpose |
+|-----------------|--------------------|---------|
+| `init()` | Deck.shuffle(), Deck.deal(3, 17), sortCards() | Deal 54 cards across 3 players |
+| `confirmPlay()` | identifyType(), canBeat() | Validate and play selected cards |
+| `localHint()` | findValidPlays() | Generate hint plays |
+| `localAIPlay()` | identifyType(), findValidPlays() | AI card selection strategy |
+| `renderPlayerHand()` | sortCards() (called in init) | Display sorted hand |
+| `renderRoundEndPanel()` | (hand.length === 0) check | Win detection |
+
+### 7.2 Card Representation
+
+game.js represents cards as objects with `{suit, rank}` structure — compatible with CardEngine's `Card` instances (which have the same properties).
+
+```javascript
+// game.js uses plain objects matching Card interface
+{ suit: 'spade', rank: 0 }  // ♠3
+
+// CardEngine's Card class has the same structure
+new Card('spade', 0)          // ♠3
+```
+
+**Identity check:** The code uses `indexOf` and `splice` on hand arrays, which relies on exact object reference matching. When creating new cards for swaps, new Card objects are created and must be properly inserted/removed.
+
+---
+
+## 8. Error Handling
+
+| Scenario | Behavior |
+|----------|----------|
+| Invalid constructor params | Throws Error with descriptive message |
+| `canBeat` on invalid current play | Returns `{ canBeat: false }` |
+| `identifyType` on empty array | Returns `{ type: 'INVALID', valid: false }` |
+| `identifyType` on non-matching cards | Returns `{ type: 'INVALID', valid: false }` |
+| `Card.fromString` with bad format | Throws Error |
+| `findValidPlays` with empty hand | Returns `[]` |
+
+**Dependencies:** None (pure JavaScript, no imports)
+
+---
+
+## 9. Version History
+
+| Version | Date | Changes |
+|:-------:|:----:|---------|
+| 1.0 | 2026-04 | Initial implementation, all standard hand types |
+
+**TODO:**
+- Add game state validation (hands match 54 cards)
+- Add performance optimization for `findValidPlays` on large hands
+- Add suit-aware comparison for same-rank singles
+
+```
+
+---
+
+## `docs/CardSwap.md` (27,717 字节)
+
+```markdown
+# PRD: 换牌机制（答对/答错/超时三路流程细化）
+
+**版本:** v1.0  
+**作者:** 产品老大  
+**日期:** 2026-05-02  
+**文档编号:** PRD-FTL-SWAP-001  
+**对应文件:** `src/client/js/game.js` (Phaser 3, 960×600 横屏)
+
+---
+
+## 目录
+
+1. [需求概述](#1-需求概述)
+2. [流程总图](#2-流程总图)
+3. [答对流程 — 盲选交换（_showSwapUI 重写）](#3-答对流程--盲选交换)
+4. [答错流程 — AI抢牌（_showSwapResult 重写）](#4-答错流程--ai抢牌)
+5. [超时流程 — 等同于答错](#5-超时流程--等同于答错)
+6. [动画规格](#6-动画规格)
+7. [边缘情况处理](#7-边缘情况处理)
+8. [数据同步](#8-数据同步)
+9. [验收标准](#9-验收标准)
+
+---
+
+## 1. 需求概述
+
+### 1.1 用户故事
+
+> 我答完题后，如果答对，可以从AI的手牌里盲选一张换走。如果答错或超时，AI会抢走我一张牌。这能增加答题的紧张感和决策趣味。
+
+### 1.2 触发时机
+
+答题完毕后立即触发（`_onChaosAnswer` callback 末尾），根据 `isCorrect` 进入不同分支：
+
+| 答题结果 | 触发函数 | 交互方式 |
+|----------|----------|----------|
+| ✅ 答对 | `_showSwapUI(aiId, fbY)` | 玩家盲选交换 |
+| ❌ 答错 | `_showSwapResult(aiId, false, fbY)` | AI随机抢牌 + 动画 |
+| ⏱ 超时 | `_showSwapResult(aiId, false, fbY)` | 等同于答错 |
+
+### 1.3 当前代码对应行
+
+| 函数 | 起始行 | 状态 |
+|------|--------|------|
+| `_showSwapUI` | L1724 | 现有，需改造 |
+| `_showSwapResult` | L1685 | 现有，需改造 |
+| `_showSwapButtons` | L1895 | 现有，保留 |
+
+---
+
+## 2. 流程总图
+
+```
+答题完成
+    │
+    ├─ ✅ 答对 ──→ _showSwapUI()
+    │                  │
+    │                  ├─ AI手牌显示为背面（3-5槽位，其中1张有牌）
+    │                  ├─ 玩家手牌正面显示，选1张
+    │                  ├─ 玩家盲选AI的一张槽位
+    │                  ├─ [确认交换] → 双方交换 | [跳过交换] → 等同于答错
+    │                  └─ _showSwapButtons() 按钮组
+    │
+    ├─ ❌ 答错 ──→ _showSwapResult()
+    │                  │
+    │                  ├─ AI随机从玩家手牌拿1张
+    │                  ├─ 卡牌飞行动画 Y:345→160
+    │                  ├─ 卡牌翻转揭示
+    │                  ├─ 自动执行，无需确认
+    │                  └─ _showSwapButtons() 按钮组
+    │
+    └─ ⏱ 超时 ──→ _showSwapResult(false)
+                       │
+                       ├─ 30秒倒计时条耗尽
+                       ├─ 显示"⏱ 超时了！"
+                       ├─ AI随机从玩家手牌拿1张
+                       └─ 卡牌飞行动画（同答错）
+```
+
+---
+
+## 3. 答对流程 — 盲选交换
+
+### 3.1 界面布局 (960×600)
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                🔄 交换牌 — 选一张你的牌 + AI的一张牌          │  ← Y=120 标题
+│                点你的牌 → 点AI的牌 → 点确认交换               │  ← Y=142 提示
+│                                                              │
+│   ┌──────────────────────── AI 手牌 (背面朝上) ──────────┐   │
+│   │  [🂠] [🂠] [🂠] [🂠] [🂠]    ← 3-5个背面槽位          │   │
+│   │         ↑ 其中1张有真实牌，其余空                      │   │  ↑
+│   └──────────────────────────────────────────────────────┘   │  Y175-250
+│                                                              │
+│   ┌──────────────────────── 你的手牌 (正面) ────────────┐   │
+│   │  [♠A] [♥K] [♦Q] [♣J] [♠10]    ← 选1张              │   │  ↑
+│   └──────────────────────────────────────────────────────┘   │  Y300-370
+│                                                              │
+│       ┌───────────┐              ┌───────────┐               │
+│       │ ✅ 确认交换 │              │ ✖ 跳过交换 │               │  Y=390-434
+│       └───────────┘              └───────────┘               │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### 3.2 精确坐标表
+
+#### 3.2.1 标题区
+
+| 元素 | 内容 | X | Y | 字号 | 颜色 | Depth |
+|------|------|---|---|------|------|-------|
+| 遮罩 | 半透明黑 | 0 | 0 | 960×600 | `0x000000` opacity 0.6 | 350 |
+| 标题 | 🔄 交换牌 — 选一张你的牌 + {AI名}的一张牌 | 480 | 120 | 15px | `#FFD700` bold | 351 |
+| 提示 | 点你的牌 → 点{AI名}的牌 → 点确认交换 | 480 | 142 | 11px | `#AAAAAA` | 351 |
+
+#### 3.2.2 AI 手牌区（盲选槽位）
+
+| 元素 | 描述 | 值 |
+|------|------|-----|
+| AI区域标签 | "{AI名} 的手牌（盲选一张）" | X=480, Y=172, 12px, `#FFB74D` bold, Depth 351 |
+| 槽位数 | 固定5个 | 3-5个背面卡牌图像 |
+| 卡牌尺寸 | 背面：w=38, h=54 | 选中高亮：+6px |
+| 卡牌重叠 | overlap=26 | — |
+| 总宽度计算 | 38 + (n-1)×26 | 起始 X = (960 - totalW) / 2 |
+| 基准 Y | 200 | Depth 352 |
+| 真实牌 | 5个槽位中随机选1个放真实AI牌 | 其余4个槽位为空（仅显示背面） |
+| 选中高亮 | 选中槽位 w+6, h+6, Depth 355 | 取消选中恢复 w, h, Depth 352 |
+
+**关键改动（对比现有代码）：**
+- AI手牌不再正面显示，改为背面（`'cardBack'` 纹理）
+- 5个槽位，只有随机1个含有真实AI卡牌数据
+- 玩家点击背面槽位时，如果该槽位有真实牌则选中它；如果为空则提示"这格没有牌"
+- 选中后，该槽位的背面牌依然显示背面（不揭示），保持盲选
+
+#### 3.2.3 玩家手牌区
+
+| 元素 | 描述 | 值 |
+|------|------|-----|
+| 标签 | "你的手牌（点击选一张）" | X=480, Y=300, 12px, `#4FC3F7` bold, Depth 351 |
+| 卡牌尺寸 | 正面：w=44, h=64 | 选中高亮：+6px |
+| 重叠 | overlap=30 | — |
+| 基准 Y | 330 | Depth 352 |
+| 排序 | 按 `Doudizhu.sortCards()` | 正面显示，牌面可见 |
+| 选中高亮 | 选中牌 w+6, h+6, Depth 355, Y微调-8 | 取消恢复 |
+
+#### 3.2.4 按钮区
+
+| 按钮 | 内容 | X | Y | W×H | 颜色 | 圆角 | Depth | 交互状态 |
+|------|------|---|---|-----|------|------|-------|---------|
+| 确认 | ✅ 确认交换 | 背景:240 | 390 | 200×44 | `#4ECDC4` (full=1, disabled=0.5) | 10px | 353 | 两牌都选才激活 |
+| 确认文案 | — | 340 | 412 | — | `#FFFFFF` 15px bold | — | 354 | 同背景 |
+| 跳过 | ✖ 跳过交换 | 背景:520 | 390 | 200×44 | `#78909C` | 10px | 353 | 始终可点 |
+| 跳过文案 | — | 620 | 412 | — | `#FFFFFF` 15px bold | — | 354 | 始终可点 |
+
+**"确认交换" 激活规则：**
+- 玩家选好1张手牌 + AI盲选到含真实牌的槽位 → 按钮全亮 (`fillStyle(0x4ECDC4, 1)`)
+- 任意一项未选 → 按钮半透明 (`fillStyle(0x4ECDC4, 0.5)`)，点击无反应
+- 选中后无法取消？允许重新点击取消：再次点击已选中项取消选择
+
+### 3.3 交互流程
+
+```
+1.  _showSwapUI() 调用
+    │
+2.  绘制遮罩 + 标题 + 提示文案
+    │
+3.  绘制AI手牌区：
+    ├─ 获取AI手牌，随机选1张作为"真实牌"
+    ├─ 计算需要显示5个槽位（不管AI手牌数量）
+    ├─ 随机决定真实牌放在哪个槽位 index [0..4]
+    ├─ 所有5个槽位都显示 cardBack 纹理
+    └─ 只有真实牌槽位存储真正的卡牌数据
+    │
+4.  绘制玩家手牌区：
+    ├─ 排序玩家手牌
+    └─ 全部正面显示
+    │
+5.  玩家点击AI槽位：
+    ├─ 如果该槽位有真实牌 → 选中（高亮）
+    ├─ 如果已选中其它槽位 → 取消旧选中，高亮新槽位
+    └─ 如果该槽位为空 → 弹出 toast "这格没有牌"，无反应
+    │
+6.  玩家点击自己的手牌：
+    ├─ 选中（高亮+Y微调）
+    └─ 如果已选中其它牌 → 取消旧选中，高亮新牌
+    │
+7.  点击 [确认交换]：
+    ├─ 检查两牌是否都选中 → 否：无反应
+    ├─ 从双方 hand array 中 swap 卡牌
+    ├─ 播放交换成功动画
+    ├─ 销毁 swapElements
+    ├─ 显示弹窗 "🔄 交换成功！用[x]换了[y]"（3500ms自动消失）
+    ├─ renderPlayerHand()
+    ├─ updateAICount()
+    └─ _showSwapButtons()
+    │
+8.  点击 [跳过交换]：
+    ├─ 销毁 swapElements
+    └─ 进入答错流程 _showSwapResult(aiId, false, fbY)
+```
+
+### 3.4 卡牌数据随机化逻辑（伪代码）
+
+```js
+function setupBlindSlots(aiHand):
+  // aiHand: 排序后的 AI 手牌数组
+  // 固定 5 个槽位
+  totalSlots = 5
+  realCardCount = Math.min(1, aiHand.length)  // 最多1张真实牌
+  // 从 AI 手牌中随机选 1 张作为真实牌
+  realCard = aiHand[randomIndex(0, aiHand.length-1)]
+  realSlotIndex = randomIndex(0, 4)  // 放在5个槽位中的随机位置
+
+  slots = []
+  for i = 0 to 4:
+    if i === realSlotIndex && realCardCount > 0:
+      slots[i] = { card: realCard, hasCard: true }
+    else:
+      slots[i] = { card: null, hasCard: false }
+  return slots
+```
+
+---
+
+## 4. 答错流程 — AI抢牌
+
+### 4.1 _showSwapResult() 重写
+
+**触发条件：** 答错题目后自动执行，无需玩家确认。
+
+### 4.2 界面布局
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                                                              │
+│          😈 {AI名} 从你手中拿走了一张牌！                     │  ← Y=184
+│                    [♦K]                                       │  ← Y=206
+│                                                              │
+│                   ┄┄┄ 卡牌飞行轨迹 ┄┄┄                        │
+│       起点: Y=345（玩家手牌区）                                │
+│       终点: Y=160（AI手牌区）                                  │
+│       旋转: +10°, 缩放: →60%                                  │
+│                                                              │
+│                                                              │
+│      ┌───────────┐              ┌───────────┐                │
+│      │ 🔄 再来一题 │              │ ✖ 关掉回牌 │                │  btnY
+│      └───────────┘              └───────────┘                │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### 4.3 执行步骤
+
+```
+1.  随机从 playerHand 中选一张卡牌（index = Math.floor(Math.random() * playerHand.length)）
+    │
+2.  从 playerHand.splice(index, 1) 移除该牌
+    │
+3.  将该牌 push 到 aiHand 中
+    │
+4.  显示文案：
+    ├─ "😈 {AI名} 从你手中拿走了一张牌！"    X=480, Y=184, 15px, #FF6B35
+    └─ "[suit rank]"                         X=480, Y=206, 13px, #FFFFFF
+    （3500ms后自动销毁）
+    │
+5.  执行卡牌飞行动画（见 §6.2）
+    ├─ 起始位置: 玩家手牌区中的对应卡牌 X坐标、Y=345
+    ├─ 一个背面卡牌图像从起始位置飞入 AI 区域
+    └─ 落地后从背面翻转为正面，显示卡牌内容
+    │
+6.  动画完成后：
+    ├─ renderPlayerHand()
+    ├─ updateAICount()
+    └─ _showSwapButtons()
+```
+
+**注意：** 答错流程没有"确认"步骤，动画结束后直接显示按钮。
+
+---
+
+## 5. 超时流程 — 等同于答错
+
+### 5.1 新增：倒计时组件
+
+在 `_showSwapUI` 中新增 30s 倒计时条，在答对界面上方运行。
+
+### 5.2 计时条规格
+
+```
+X=220  Y=144  W=520  H=6
+┌──────────────────────────────────────────────────────────────┐
+│ ████████████████████████████████████████████████████████████ │  ← 绿色 (#4CAF50)
+│ ████████████████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │  ← 黄色 (#FFC107) <15s
+│ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │  ← 红色 (#FF5252) <5s
+└──────────────────────────────────────────────────────────────┘
+Depth: 353
+```
+
+| 属性 | 值 |
+|------|-----|
+| 矩形 | X=220, Y=144, W=520, H=6 |
+| 背景 | `fillStyle(0x333333, 0.6)` 先画满底 |
+| 填充色变化 | ≥15s: `#4CAF50` (绿); 5~15s: `#FFC107` (黄); <5s: `#FF5252` (红) |
+| 更新频率 | 每帧 (Phaser `update()` 或 `self.time.addEvent`) |
+| 时长 | 30 秒 |
+| Depth | 353 |
+
+### 5.3 计时器逻辑
+
+```js
+// 在 _showSwapUI 内部新增
+var swapTimerDuration = 30000;  // 30s
+var swapTimerElapsed = 0;
+var timerBar = self.add.graphics().setDepth(353);
+var timerBg = self.add.graphics().setDepth(352);
+timerBg.fillStyle(0x333333, 0.6);
+timerBg.fillRect(220, 144, 520, 6);
+
+// 每帧更新
+var timerEvent = self.time.addEvent({
+  delay: 1000 / 60,  // 60fps
+  loop: true,
+  callback: function() {
+    swapTimerElapsed += self.game.loop.delta;
+    var progress = Math.min(swapTimerElapsed / swapTimerDuration, 1);
+    var remaining = swapTimerDuration - swapTimerElapsed;
+
+    // 颜色：剩余时间决定
+    var color = remaining > 15000 ? 0x4CAF50 : (remaining > 5000 ? 0xFFC107 : 0xFF5252);
+    var barWidth = 520 * (1 - progress);
+
+    timerBar.clear();
+    timerBar.fillStyle(color, 1);
+    timerBar.fillRect(220, 144, barWidth, 6);
+
+    // 超时
+    if (swapTimerElapsed >= swapTimerDuration) {
+      timerEvent.remove();
+      // 销毁 swapElements 并触发答错流程
+      for (var ei = 0; ei < swapElements.length; ei++) swapElements[ei].destroy();
+      // 显示超时消息
+      var timeoutMsg = self.add.text(480, 184, '⏱ 超时了！', {
+        fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+        fontSize: '15px', color: '#FF5252', fontStyle: 'bold',
+        stroke: '#000000', strokeThickness: 2
+      }).setOrigin(0.5).setDepth(310);
+      self.chaosElements.push(timeoutMsg);
+      self.time.delayedCall(1000, function() {
+        if (timeoutMsg) timeoutMsg.destroy();
+        self._showSwapResult(aiId, false, fbY);
+      });
+    }
+  }
+});
+```
+
+### 5.4 超时后的行为
+
+- 等同于答错流程（`_showSwapResult(aiId, false, fbY)`）
+- 显示 "⏱ 超时了！" 消息（1s后消失）
+- AI 随机从玩家手牌拿 1 张（卡牌飞行动画同答错）
+
+---
+
+## 6. 动画规格
+
+### 6.1 答对 — 交换成功动画
+
+**触发时机：** 玩家点击 [确认交换] 且两牌都选中
+
+| 参数 | 值 |
+|------|-----|
+| 动画总时长 | 1200ms |
+| 类型 | Phaser 3 Tween chain |
+
+```js
+// 自玩家手牌飞向 AI 槽位
+self.tweens.add({
+  targets: playerCardImg,   // 玩家选中的卡牌图像
+  x: aiSlotX,               // AI对应槽位的 X 坐标
+  y: 200,                   // AI区域 Y
+  angle: 15,                // 轻微旋转 15°
+  scaleX: 38/44,            // 从 w=44 缩到 w=38 → ~0.86
+  scaleY: 54/64,            // 从 h=64 缩到 h=54 → ~0.84
+  duration: 600,
+  ease: 'Power2',
+  onComplete: function() {
+    // AI牌飞向玩家
+    self.tweens.add({
+      targets: aiCardImg,   // AI被换走的卡牌图像
+      x: playerCardX,       // 玩家原来卡牌的 X 坐标
+      y: 330,               // 玩家区域 Y
+      angle: -10,           // 反向旋转 -10°
+      scaleX: 44/38,        // 从 w=38 扩到 w=44 → ~1.16
+      scaleY: 64/54,        // 从 h=54 扩到 h=64 → ~1.19
+      duration: 600,
+      ease: 'Power2'
+    });
+  }
+});
+```
+
+### 6.2 答错/超时 — AI抢牌飞行
+
+**触发时机：** AI 从玩家手牌拿走一张时
+
+**飞行路径：** 玩家手牌区 (Y=345) → AI 手牌区 (Y=160)
+
+#### 坐标表
+
+| 阶段 | 属性 | 起始值 | 结束值 | 时长 | 缓动 |
+|------|------|--------|--------|------|------|
+| 🚀 起飞 | X | 玩家选中牌的当前X | 玩家选中牌的当前X + 居中偏移 | 1200ms | Power2 |
+| | Y | 345 | 160 | 同上 | Power2 |
+| | 角度 | 0° | 10° | 同上 | — |
+| | 缩放 | 1.0 (56×80) | 0.6 (33×48) | 同上 | — |
+| 🔄 翻转 | 纹理 | cardBack | 真实卡牌正面 | 在终点触发 | 瞬时 |
+
+```js
+// 获取玩家手牌中对应卡牌在渲染后的 X 坐标
+// 复用 renderPlayerHand 中的渲染坐标计算
+var n = self.playerHand.length;
+var overlap = n > 6 ? Math.min(33, (700 - 56) / (n - 1)) : 33;
+var totalWidth = 56 + (n - 1) * overlap;
+var startX = 180 + (700 - totalWidth) / 2;
+var cardX = startX + lostIdx * overlap + 28;  // 56/2
+
+// 创建背面卡牌
+var flyCard = self.add.image(cardX, 345, 'cardBack')
+  .setDisplaySize(56, 80).setDepth(400);
+
+// AI 最终位置居中
+var aiCount = aiHand.length;
+var aiTotalW = 38 + (aiCount - 1) * 26;
+var aiStartX = (960 - aiTotalW) / 2;
+var aiTargetX = aiStartX + Math.floor(aiCount / 2) * 26 + 19;  // 插入中间
+
+self.tweens.add({
+  targets: flyCard,
+  x: aiTargetX,
+  y: 160,
+  angle: 10,
+  scaleX: 0.6,
+  scaleY: 0.6,
+  duration: 1200,
+  ease: 'Power2',
+  onComplete: function() {
+    // 翻牌：背面→正面
+    flyCard.setTexture(getCardImageKey(lostCard));
+    flyCard.setDisplaySize(38, 54);  // AI 手牌标准尺寸
+    flyCard.setAngle(0);
+    flyCard.setDepth(352);
+    // 1s 后消失
+    self.time.delayedCall(1000, function() {
+      if (flyCard) flyCard.destroy();
+    });
+  }
+});
+```
+
+### 6.3 动画时间线汇总
+
+| 事件 | 时间 | 说明 |
+|------|------|------|
+| 答对确认 | T=0 | 触发 swap，开始飞行 |
+| | T=600ms | 玩家牌飞到AI位 |
+| | T=1200ms | AI牌飞到玩家位，完成 |
+| | T=1200ms | 显示交换成功文案 |
+| | T=4700ms | 文案消失 |
+| —— | —— | —— |
+| 答错/超时 | T=0 | 触发 swap，背面卡起飞 |
+| | T=1200ms | 卡牌到达AI位，翻牌揭示 |
+| | T=1400ms | 显示拿走文案 |
+| | T=4900ms | 文案消失 |
+| | T=4900ms | 按钮显示 |
+
+---
+
+## 7. 边缘情况处理
+
+### 7.1 玩家手牌为空（playerHand.length === 0）
+
+| 场景 | 处理 |
+|------|------|
+| 答对触发 `_showSwapUI` | 不显示UI，直接 `return`（同样不会进入交换界面，数据不变） |
+| 答错/超时触发 `_showSwapResult` | `if (!self.playerHand || self.playerHand.length === 0) return;` 直接跳过 |
+| 日志 | 若有日志系统，打印 "playerHand empty, skip swap" |
+
+**当前代码已覆盖：** `_showSwapUI` L1730 检查了空，`_showSwapResult` L1690 也检查了空。
+
+### 7.2 AI 手牌为空（aiHand.length === 0）
+
+| 场景 | 处理 |
+|------|------|
+| 答对触发 `_showSwapUI` | 所有 5 个盲选槽位均为空。玩家选到任何槽位都提示"这格没有牌"。确认按钮永不可达。玩家只能点 [跳过交换] |
+| `_showSwapUI` 入口检查 | 建议加预检：if (aiHand.length === 0) { self._showSwapResult(aiId, false, fbY); return; } |
+| 答错 | 不受影响（AI 永远可以从 player 拿牌） |
+
+### 7.3 双方手牌都为空
+
+- `_showSwapUI` 预检查：`if (!aiHand || aiHand.length === 0 || !self.playerHand || self.playerHand.length === 0)` → 自动回退到 `_showSwapResult` → 但 `_showSwapResult` 也检查 playerHand 为空 → 直接 `return`
+- 输出展示：直接跳到 `_showSwapButtons`
+
+### 7.4 AI 手牌中已经有玩家即将换入的牌
+
+- 换牌是 `splice` + `push`，不做去重检查
+- **设计决策：** 允许手牌中存在相同牌（点数花色相同）。斗地主标准规则同一副牌不可能有重复牌，但在答题换牌场景中，作为特殊玩法机制，允许同名牌存在。
+- 如果必须避免：在 swap 前检查 `aiHand` 中是否已存在相同 `suit+rank`，若存在则随机重新选择 AI 的牌（最多重试 3 次，仍然重复则跳过此张）
+
+### 7.5 答对时 AI 手牌只有 1 张
+
+- 盲选槽位仍然显示 5 个（只有 1 个是真牌），保持盲选体验
+- 玩家选中空槽位的概率 4/5，未选中真实牌时不可确认
+
+### 7.6 玩家点击 [确认交换] 时卡牌数据校验失败
+
+```js
+var pReal = -1;
+for (var p = 0; p < self.playerHand.length; p++) {
+  if (self.playerHand[p].suit === myCard.suit && self.playerHand[p].rank === myCard.rank)
+    { pReal = p; break; }
+}
+if (pReal < 0) return;  // 数据不一致，不执行交换
+```
+
+---
+
+## 8. 数据同步
+
+### 8.1 必须调用的方法
+
+每次 swap 操作完成后（无论答对、答错、超时），都必须调用：
+
+```js
+// 刷新玩家手牌渲染
+self.renderPlayerHand();
+
+// 刷新 AI 手牌计数
+// aiIndex: 0 = ai1 (王怼怼), 1 = ai2 (苏甜甜)
+self.updateAICount(aiIndex);
+```
+
+### 8.2 同步时机对照表
+
+| 流程 | 同步点 | 调用时机 |
+|------|--------|----------|
+| 答对 — 确认交换 | 确认按钮 `pointerup` 回调末尾 | swap 操作后立即 |
+| 答对 — 跳过交换 | 跳过按钮 `pointerup` 回调 → `_showSwapResult` → 动画完成回调末尾 | 动画完成后 |
+| 答错 | `_showSwapResult` 内数据操作后 | 文案显示后、按钮显示前 |
+| 超时 | `_showSwapResult` 内（同答错） | 同上 |
+
+### 8.3 AI 手牌排序
+
+交换后 AI 手牌需要维护排序：
+
+```js
+aiHand.sort(function (a, b) {
+  return a.rank !== b.rank ? b.rank - a.rank : a.suit - b.suit;
+});
+```
+
+### 8.4 渲染安全
+
+- 调用 `renderPlayerHand()` 前无需手动 `destroy` DOM 元素——`renderPlayerHand` 内部已清空 `cardDomElements`
+- `updateAICount()` 仅更新文本，无销毁风险
+
+---
+
+## 9. 验收标准
+
+### 9.1 答对流程验收
+
+| # | 验收项 | 预期行为 | 通过条件 |
+|---|--------|----------|----------|
+| A1 | 进入交换界面 | 遮罩 + 标题 + AI背牌槽位 + 玩家正面手牌 + 两个按钮 | UI 元素坐标、颜色、字号与设计稿一致 |
+| A2 | 玩家选自己的牌 | 选中一张手牌，高亮 (+6px, Y-8) | 再次点击取消选中 |
+| A3 | 玩家盲选 AI 槽位 | 点击有空牌的槽位→选中；点击空槽位→toast "这格没有牌" | 选中后高亮显示 |
+| A4 | 确认按钮激活状态 | 两牌都选中→全亮；缺任意→半透明且不可点击 | 点击半透明按钮无反应 |
+| A5 | 执行交换 | 双方手牌正确 swap，数据一致 | `console.log` 验证双方 hand array |
+| A6 | 交换成功动画 | 两卡牌交叉飞行 1200ms，旋转缩放正确 | 肉眼检查动画流畅 |
+| A7 | 成功文案 | 🔄 交换成功！用[x]换了[y] 显示 3500ms | 自动消失 |
+| A8 | 跳过交换 | 点击后等同于答错流程 | AI 随机拿牌 + 飞行动画 |
+
+### 9.2 答错流程验收
+
+| # | 验收项 | 预期行为 | 通过条件 |
+|---|--------|----------|----------|
+| B1 | AI 随机从玩家手牌拿牌 | playerHand.length -1, aiHand.length +1 | 拿走的牌在 aiHand 中，不在 playerHand 中 |
+| B2 | 飞行动画 | 背面牌从玩家区 Y:345→AI区 Y:160，旋转10°，缩放60% | 1200ms 内完成 |
+| B3 | 翻牌揭示 | 终点处背面→正面，显示真实卡牌内容 | 1s 后消失 |
+| B4 | 文案显示 | "😈 {AI名} 从你手中拿走了一张牌！[suit rank]" | 3500ms 后消失 |
+| B5 | 自动触发 | 无需确认，动画 + 文案自动播放 | 无交互式等待 |
+
+### 9.3 超时流程验收
+
+| # | 验收项 | 预期行为 | 通过条件 |
+|---|--------|----------|----------|
+| C1 | 计时条显示 | X=220 Y=144 W=520 H=6，Depth=353 | 与背景区分 |
+| C2 | 计时条颜色变化 | ≥15s 绿, 5~15s 黄, <5s 红 | 肉眼验证过渡平滑 |
+| C3 | 30s 超时触发 | 30s 后自动销毁 swapUI，显示 "⏱ 超时了！" | 1s 后进入答错流程 |
+| C4 | 超时后行为 | 等同于答错（AI 拿牌 + 飞行动画） | 卡牌数据同步正确 |
+
+### 9.4 边缘情况验收
+
+| # | 验收项 | 预期行为 | 通过条件 |
+|---|--------|----------|----------|
+| D1 | playerHand 为空 | `_showSwapUI` 回退到 `_showSwapResult`；`_showSwapResult` 直接 `return` | 不崩溃，不报错 |
+| D2 | aiHand 为空 | `_showSwapUI` 所有槽位空，只能点跳过 | 无错误 |
+| D3 | 双方都空 | 全部跳过，直接显示按钮 | 无错误 |
+| D4 | 换入同名牌 | 允许（手牌中出现重复的点数花色） | 或者按去重规则处理 |
+
+### 9.5 数据同步验收
+
+| # | 验收项 | 预期行为 | 通过条件 |
+|---|--------|----------|----------|
+| E1 | 每次 swap 后调用 `renderPlayerHand()` | 手牌重新渲染，显示正确张数和牌面 | 手牌区域无残留旧牌 |
+| E2 | 每次 swap 后调用 `updateAICount()` | AI 剩余张数计数器更新 | 文本与实际 hand.length 一致 |
+| E3 | AI 手牌排序 | swap 后按 rank 倒序 + suit 排序 | `console.log(aiHand)` 验证 |
+
+---
+
+## 附录 A：改动清单
+
+| 文件 | 函数 | 改动类型 | 说明 |
+|------|------|----------|------|
+| `game.js` | `_showSwapUI` | **重写** | AI 手牌改为背面盲选 5 槽位 + 定时器条 |
+| `game.js` | `_showSwapResult` | **改造** | 添加卡牌飞行 + 翻牌动画 |
+| `game.js` | — | **新增** | 倒计时组件（30s timer bar） |
+| `game.js` | `renderPlayerHand` | 代码复用 | 无需改动 |
+| `game.js` | `updateAICount` | 代码复用 | 无需改动 |
+| `game.js` | `_showSwapButtons` | 代码复用 | 无需改动 |
+
+## 附录 B：常量汇总
+
+```js
+// 布局常量
+SWAP_UI = {
+  OVERLAY_DEPTH: 350,
+  TITLE_DEPTH: 351,
+  HINT_DEPTH: 351,
+  CARD_DEPTH: 352,
+  CARD_SELECTED_DEPTH: 355,
+  BUTTON_DEPTH: 353,
+  BUTTON_TEXT_DEPTH: 354,
+  TIMER_DEPTH: 353,
+  TIMER_BG_DEPTH: 352,
+  FLY_CARD_DEPTH: 400,
+
+  TITLE_Y: 120,
+  HINT_Y: 142,
+  TIMER_X: 220,
+  TIMER_Y: 144,
+  TIMER_W: 520,
+  TIMER_H: 6,
+  TIMER_DURATION: 30000,  // ms
+
+  AI_LABEL_Y: 172,
+  AI_CARD_Y: 200,
+  AI_CARD_W: 38,
+  AI_CARD_H: 54,
+  AI_OVERLAP: 26,
+  AI_SLOT_COUNT: 5,
+
+  PLAYER_LABEL_Y: 300,
+  PLAYER_CARD_Y: 330,
+  PLAYER_CARD_W: 44,
+  PLAYER_CARD_H: 64,
+  PLAYER_OVERLAP: 30,
+
+  CONFIRM_X: 240,
+  CONFIRM_Y: 390,
+  CONFIRM_W: 200,
+  CONFIRM_H: 44,
+  CANCEL_X: 520,
+  CANCEL_Y: 390,
+  CANCEL_W: 200,
+  CANCEL_H: 44,
+};
+
+// 动画常量
+SWAP_ANIM = {
+  FLY_DURATION: 1200,  // ms
+  FLY_END_Y: 160,      // AI 区域 Y
+  FLY_START_Y: 345,    // 玩家区域 Y
+  FLY_ROTATION: 10,    // 度
+  FLY_SCALE: 0.6,      // 缩放比
+  REVEAL_DELAY: 1000,  // 翻牌后保留多久
+  MSG_DURATION: 3500,  // 文案显示时长
+};
+
+// 计时条颜色
+SWAP_TIMER_COLORS = {
+  GREEN: 0x4CAF50,
+  YELLOW: 0xFFC107,
+  RED: 0xFF5252,
+};
+```
+
+```
+
+---
+
+## `docs/ChaoShiQing-detailed.md` (47,474 字节)
+
+```markdown
+# ChaoShiQing (搞事情 / Chaos Mode) — 超详细设计文档
+
+**版本:** v2.0  
+**作者:** 产品老大  
+**日期:** 2026-05-02  
+**基准画布:** 960×600 横屏 (Phaser 3 Scale.FIT)  
+**对应源码:** `src/client/js/game.js` (2736行)  
+**相关常量:** `GAME_STATE.CHAOS_MODE`  
+
+---
+
+## 目录
+
+1. [触发入口 — "搞事情"按钮](#1-触发入口--搞事情按钮)
+2. [遮罩与白色卡片容器](#2-遮罩与白色卡片容器)
+3. [题型选择界面](#3-题型选择界面)
+4. [题目渲染](#4-题目渲染)
+5. [答案处理 — 正确/错误/超时](#5-答案处理)
+6. [换牌流程](#6-换牌流程)
+7. [AI气泡反应系统](#7-ai气泡反应系统)
+8. [倒计时动画](#8-倒计时动画)
+9. [回退题目逻辑](#9-回退题目逻辑)
+10. [底部按钮](#10-底部按钮)
+11. [销毁与状态恢复](#11-销毁与状态恢复)
+12. [边角情况全表](#12-边角情况全表)
+13. [数据结构与变量](#13-数据结构与变量)
+14. [台词池](#14-台词池)
+15. [验收标准](#15-验收标准)
+
+---
+
+## 1. 触发入口 — "搞事情"按钮
+
+### 1.1 按钮创建 (createActionButtons)
+
+底部功能栏共5个按钮，在 `createActionButtons(scene)` 中创建：
+
+| 按钮 | 索引 | 标签 | X坐标 (基准) | Y | W | H | 颜色 (hex) |
+|:----:|:----:|:----:|:------------:|:-:|:-:|:-:|:----------:|
+| 出牌 | 0 | 出牌 | 按公式计算 | 442 | 72 | 48 | 0x4ECDC4 |
+| 提示 | 1 | 提示 | 按公式计算 | 442 | 72 | 48 | 0xFFD93D |
+| 不出 | 2 | 不出 | 按公式计算 | 442 | 72 | 48 | 0xFF6B6B |
+| **搞事情** | **3** | **搞事情** | **按公式计算** | **442** | **72** | **48** | **0x7C4DFF** |
+| 底牌查看 | 4 | 底牌 | 按公式计算 | 442 | 72 | 48 | 0x78909C |
+
+**坐标计算公式:**
+```javascript
+var bw = 72, bh = 48, gap = 14;
+var totalW = 5 * bw + 4 * gap;    // = 416
+var startX = (960 - totalW) / 2;  // = 272
+var btn4X = startX + 4 * (bw + gap); // 搞事情按钮 X  = 272 + 4*(72+14) = 616
+```
+
+**精确值:**
+- 搞事情按钮: `X=616, Y=442, W=72, H=48`
+- 圆角: 8px
+- depth: 100
+- 文字: "搞事情", fontSize 11px, bold, color #FFFFFF
+
+### 1.2 点击响应 (doAction)
+
+```javascript
+doAction() → 检查 actionName
+    │
+    ├─ action === 'chaos' →
+    │   ├─ if (gameState !== PLAYER_TURN && gameState !== CHAOS_MODE) return; ← 状态守卫
+    │   ├─ SoundManager.pauseAll()
+    │   ├─ gameState = GAME_STATE.CHAOS_MODE
+    │   ├─ chaosScore = chaosScore || 0 (持久化，跨回合保留)
+    │   ├─ setStatusText("选题型...")
+    │   ├─ 随机选择被搞AI: Math.random() < 0.5 ? 'duidui' : 'tiantian'
+    │   └─ _createChaosOverlay(aiId, function() { _showTypeSelection(aiId, aiName); })
+    │
+    ├─ action === 'play' → doPlayerPlay()
+    ├─ action === 'hint' → doHint()
+    ├─ action === 'pass' → doPlayerPass()
+    └─ action === 'view_bottom' → toggleBottomCards()
+```
+
+**状态守卫条件:**
+- `gameState !== GAME_STATE.PLAYER_TURN && gameState !== GAME_STATE.CHAOS_MODE` 时 return
+- 即只能在**玩家回合** 或 **已混沌模式中** 点击（后者不会进入，因为 `_createChaosOverlay` 已创建遮罩阻挡点击）
+
+### 1.3 频率规则
+
+| 规则 | 说明 |
+|------|------|
+| 任意回合 | 玩家回合中随时可点击 |
+| 一回合多次 | 可无限次，每次换AI随机出题 |
+| 一局持久 | chaosScore 跨回合累计，全局重置时清零 |
+| 其他模式 | CHAOS_MODE 中不响应（遮罩拦截） |
+
+---
+
+## 2. 遮罩与白色卡片容器 (_createChaosOverlay)
+
+### 2.1 调用时机
+
+```javascript
+this._createChaosOverlay(aiId, callback)
+```
+
+参数: aiId → 'duidui' 或 'tiantian'; callback → _showTypeSelection
+
+### 2.2 元素精确布局
+
+| 索引 | 类型 | 元素 | X | Y | W | H | Depth | 颜色/样式 |
+|:----:|:----:|:----:|:-:|:-:|:-:|:-:|:-----:|:---------|
+| 0 | Graphics | 半透明遮罩 (overlay) | 0 | 0 | 960 | 600 | 300 | fillStyle(0x000000, 0.75) |
+| 1 | Graphics | 白色卡片背景 (cardBg) | 150 | 55 | 660 | 320 | 301 | fillStyle(0xFFFFFF, 1), 圆角12px |
+| 1b | Graphics | 内发光边框 | 154 | 58 | 660 | 320 | 301 | fillStyle(0x000000, 0.08), 圆角12px |
+| 2 | Text | 标题 "🔥 搞事情！答题挑战" | 480 | 77 | — | — | 302 | 19px, #FF6B35, bold, origin(0.5,0) |
+| 3 | Text | 得分显示 "得分: N" | 660 | 77 | — | — | 302 | 12px, #333333 |
+| 4 | Graphics+Text | 关闭按钮 (closeBtnBg + 文字) | 720 | 72 | 20 | 28 | 302/303 | bg: 0xE53935, 圆角10px; 文字: "✖" 15px #fff |
+
+### 2.3 遮罩交互区域
+
+遮罩本身是 `setInteractive` 的，但其 pointerdown 事件不绑定任何操作（仅为了穿透拦截下层按钮？）。
+
+实际代码中，遮罩没有绑定 `pointerdown` 回调，但 `setInteractive` 确保了点击不会穿透到下层UI元素。
+
+### 2.4 关闭按钮交互
+
+```javascript
+closeBtnBg.setInteractive(new Phaser.Geom.Rectangle(720, 72, 20, 20), Phaser.Geom.Rectangle.Contains);
+closeBtnBg.on('pointerup', function() { self._destroyChaos(); });
+```
+
+**交互区域:** 20×20 (非整个28高，文本部分超出但没有交互命中框)
+
+**点击行为:** 直接调用 `_destroyChaos()` → 销毁所有 chaos 元素 → 恢复 gameState = PLAYER_TURN
+
+### 2.5 动画
+
+| 元素 | 动画 | 时长 | 说明 |
+|------|------|:----:|------|
+| 遮罩 | 无（直接fill） | 0ms | 创建即显示 |
+| 白色卡片 | 无 | 0ms | 创建即显示 |
+| AI气泡 | 即时渲染 | 0ms | `_showAiBubble` 在 `_createChaosOverlay` 末尾直接调用 |
+
+**无过渡动画 — 均为即时渲染。**
+
+---
+
+## 3. 题型选择界面 (_showTypeSelection)
+
+### 3.1 调用时机
+
+在 `_createChaosOverlay` 的 callback 中调用。
+
+### 3.2 布局参数
+
+| 元素 | X | Y | W | H | Depth | 说明 |
+|------|---|---|---|---|:-----:|------|
+| 副标题 "📋 选个题型，开始搞事情" | 480 | 77 | — | — | 302 | 14px, #333333, bold, origin(0.5) |
+| 题型卡片0 (vocabulary) | 220 | 107 | 260 | 88 | 302 | 2×2网格，左上 |
+| 题型卡片1 (expression) | 500 | 107 | 260 | 88 | 302 | 2×2网格，右上 |
+| 题型卡片2 (trivia) | 220 | 181 | 260 | 88 | 302 | 2×2网格，左下 |
+| 题型卡片3 (life_hack) | 500 | 181 | 260 | 88 | 302 | 2×2网格，右下 |
+
+**卡片内部子元素:**
+- 图标 (iconTxt): `(cx+12, cy+12)` 26px sans-serif
+- 标签 (labelTxt): `(cx+58, cy+14)` 14px, #222222, bold
+- 描述 (descTxt): `(cx+58, cy+40)` 10px, #888888
+
+### 3.3 四种题型
+
+| id | 图标 | 标签 | 描述 |
+|:----:|:----:|------|------|
+| vocabulary | 📚 | 四六级单词 | 看释义选单词，AI给你出牌 |
+| expression | 💬 | 口语表达 | 地道俚语挑战，口语达人 |
+| trivia | 🧠 | 冷知识 | 奇怪的知识增加了 |
+| life_hack | 🏠 | 生活常识 | 生活小窍门，你真的会吗 |
+
+### 3.4 样式状态机
+
+```
+默认态 (pointerout):
+  fill: 0xF0F4FF (浅蓝)
+  border: 1.5px solid 0xCCD8FF
+  border-radius: 10px
+
+Hover态 (pointerover):
+  fill: 0xE0EAFF (深蓝)
+  border: 2px solid 0x7C4DFF (紫色)
+  border-radius: 10px
+
+点击后 (pointerdown):
+  销毁所有 >= 索引5 的chaosElements → 隐藏副标题
+  恢复主标题 chaosTitle 可见
+  → 调用 _showChaosQuestion(aiId, aiName, typeId)
+```
+
+### 3.5 副标题管理
+
+```javascript
+// 进入题型选择时，隐藏主标题避免重叠
+if (self.chaosTitle) self.chaosTitle.setVisible(false);
+
+// 选完题型后，恢复主标题显示
+if (self.chaosTitle) self.chaosTitle.setVisible(true);
+```
+
+### 3.6 防双重选择
+
+```javascript
+self.chaosTypeSelection = true;   // _showTypeSelection 入口设置
+
+// pointerdown 回调
+if (self.chaosTypeSelection) {    // 只响应一次
+    self.chaosTypeSelection = false;  // 立即锁定
+    // ... 销毁UI、开始出题
+}
+```
+
+---
+
+## 4. 题目渲染 (_renderQuestion / _showChaosQuestion)
+
+### 4.1 调用链
+
+```
+_showTypeSelection(..., typeId)
+  → _showChaosQuestion(aiId, aiName, type)
+    ├─ setStatusText("王怼怼 出题中...")
+    ├─ if (isAPIMode && ApiClient存在)
+    │   ├─ ApiClient.generateChaosQuestion(type, 'normal', 1)
+    │   ├─ success & questions.length > 0 → _renderQuestion(q, aiId)
+    │   └─ fail/empty → _renderFallbackQuestion(aiId)
+    └─ else → _renderFallbackQuestion(aiId)
+```
+
+### 4.2 题型标签 (typeLabel)
+
+在 `_renderQuestion` 中根据 `q.questionType` 映射图标:
+
+```javascript
+typeLabel = q.questionType || q.type || '知识题'
+typeIcon = '🧠' (默认)
+if (typeLabel.includes('voc') || typeLabel.includes('word')) → '📚'
+if (typeLabel.includes('expr')) → '💬'
+if (typeLabel.includes('trivia')) → '💡'
+if (typeLabel.includes('life')) → '🏠'
+```
+
+### 4.3 题目布局 (白色卡片内)
+
+| 元素 | X | Y | 最大W | Depth | 样式 |
+|------|---|----|:-----:|:-----:|------|
+| 题型标签 | 220 | 97 | — | 302 | 13px, #FF6B35, bold |
+| 题目文本 | 220 | 114 | 600 | 302 | 14px, #222222, wordWrap, lineSpacing=4 |
+
+### 4.4 选项布局 (2×2网格)
+
+| 选项 | 列 | 行 | X | Y | W | H |
+|:----:|:--:|:--:|:---:|:---:|:-:|:-:|
+| A | 左 | 上 | 175 | 155 | 290 | 64 |
+| B | 右 | 上 | 480 | 155 | 290 | 64 |
+| C | 左 | 下 | 175 | 230 | 290 | 64 |
+| D | 右 | 下 | 480 | 230 | 290 | 64 |
+
+### 4.5 选项内部结构
+
+```
+┌───────────────────────────────────────┐
+│   🔵 │   A. 放弃                       │
+│       │                                │
+└───────────────────────────────────────┘
+   ▲标记圆      ▲选项文本
+```
+
+| 子元素 | 类型 | 定位 | 样式 |
+|--------|:----:|------|------|
+| 选项背景 | Graphics | (gx, gy, 290, 64) | fill 0xF5F5F5, border 1.5px 0xCCCCCC, 圆角8px |
+| 标记圆圈 | Graphics | center=(gx+20, gy+32) radius=11 | fill 0x4ECDC4 |
+| 标记文字 | Text | center=(gx+20, gy+32) | 12px, #FFFFFF, bold ("A"/"B"/"C"/"D") |
+| 选项文本 | Text | (gx+40, gy+32) origin(0,0.5) | 13px, #333333, wordWrap w=235, lineSpacing=1 |
+
+### 4.6 数据挂载
+
+每个选项通过 `optBg.setData()` 挂载以下数据:
+
+| Data Key | 值 | 用途 |
+|----------|-----|------|
+| `optKey` | 'A'/'B'/'C'/'D' | 选项标识 |
+| `optBg` | 选项Graphics引用 | 后续样式修改 |
+| `optTxt` | 文字Text引用 | 后续样式修改 |
+| `optMarkBg` | 标记圆圈引用 | 后续颜色修改 |
+| `optMarkTxt` | 标记文字引用 | 后续颜色修改 |
+| `answer` | q.answer | 正确答案标识 |
+| `origGx`, `origGy` | 原始X/Y坐标 | 动画辅助 |
+
+### 4.7 答题锁定
+
+```javascript
+// _renderQuestion 入口
+self.chaosQuestionAnswered = false;
+
+// 选项 pointerdown 
+if (self.chaosQuestionAnswered) return;  // 防连点
+self.chaosQuestionAnswered = true;       // 立即锁定
+
+// _handleChaosTimeout 中同样设置
+self.chaosQuestionAnswered = true;
+```
+
+### 4.8 API 请求/响应格式
+
+**请求:**
+```http
+POST /api/chaos/question
+{
+  "type": "vocabulary|expression|trivia|life_hack",
+  "difficulty": "normal",
+  "count": 1
+}
+```
+
+**成功响应:**
+```json
+{
+  "success": true,
+  "questions": [{
+    "question": "The word \"abandon\" means:",
+    "options": { "A": "放弃", "B": "接受", "C": "建立", "D": "发现" },
+    "answer": "A",
+    "explanation": "abandon 意为\"放弃\"，是四级核心词汇。",
+    "questionType": "vocabulary"
+  }]
+}
+```
+
+**失败响应:**
+```json
+{ "success": false, "message": "..." }
+```
+
+或 HTTP 错误 / 网络超时。
+
+---
+
+## 5. 答案处理
+
+### 5.1 三条完整路径
+
+```
+            ┌──────────────────────────────────────────────┐
+            │             选项点击 (pointerdown)            │
+            │         chaosQuestionAnswered check           │
+            └──────────────────────┬───────────────────────┘
+                                   │
+                    ┌──────────────┴──────────────┐
+                    │             │                │
+                    ▼             ▼                ▼
+              答对了(isCorrect)  答错了(else)    超时30s
+               chaosScore+1    得分不变         得分不变
+               SoundManager.win() lose()        (无音效)
+                    │             │                │
+                    ▼             ▼                ▼
+            _clearQuestionArea() 相同             相同
+                    │             │                │
+                    ▼             ▼                ▼
+            ✓ "答对了！+1"      ✗ "答错了！"    ⏱ "超时了！"
+            20px #4CAF50        20px #E53935      17px #FF5252
+                    │             │                │
+                    │             ├─ 显示正确答案    │
+                    │             └─ 显示解析       │
+                    │                              │
+                    ▼             ▼                ▼
+            _showAiBubble(      相同              相同
+             'correct')         'wrong'
+                    │             │                │
+                    ▼             ▼                ▼
+            _showSwapUI()   _showSwapResult()    _showSwapResult()
+            (盲选换牌)       (AI抢牌动画)        (AI抢牌动画)
+```
+
+### 5.2 反馈显示区域 (白色卡片内)
+
+```javascript
+var fbY = 180;  // 反馈内容的起始Y坐标 （动态递增）
+```
+
+| 元素 | X | Y (基准) | Y (有答案) | Y (有解析) | 样式 |
+|------|---|:--------:|:----------:|:----------:|------|
+| 结果图标+文字 | 480 (居中) | 103 | 103 | 103 | 20px, bold, 答对#4CAF50/答错#E53935 |
+| "正确答案: X. xxx" | 220 | — | fbY(180) | fbY(180) | 12px, bold, #4CAF50, wordWrap 500 |
+| 解析文本 | 220 | — | fbY+28 | fbY | 11px, #555555, wordWrap 500, lineSpacing 2 |
+
+**fbY 增量规则:**
+- 答对: fbY=180 (仅显示结果，无正确答案)
+- 答错看答案: fbY+=28 (正确答案行)
+- 有解析: fbY += (explanation.length > 40 ? 50 : 28)
+- 传递给 `_showAiBubble`: `fbY + 10`
+- 传递给 `_showSwapUI/_showSwapResult`: `fbY` (原值)
+
+### 5.3 超时路径 (_handleChaosTimeout)
+
+```javascript
+_handleChaosTimeout(aiId):
+  1. chaosQuestionAnswered = true
+  2. _clearQuestionArea()  // 清空题目选项
+  3. 显示: "⏱ 超时了！AI趁机拿走了你一张牌"
+     text(480, 103) 17px #FF5252 bold origin(0.5)
+  4. _showSwapResult(aiId, false, 180)  // 直接走AI抢牌
+```
+
+**无音效、无得分、无气泡。** 超时触发在 30秒 delayedCall 回调中，此时不播放音效也不会调用 AI 气泡。
+
+### 5.4 音效映射
+
+| 场景 | 函数 | 音效文件 | 音量 |
+|:----:|------|:---------:|:----:|
+| 答对 | SoundManager.win() | cardPlace3 (或随机) | 0.9 |
+| 答错 | SoundManager.lose() | cardSlide1 | 0.6 |
+| 超时 | — | 无音效 | — |
+
+---
+
+## 6. 换牌流程
+
+### 6.1 答对换牌 (_showSwapUI) — 盲选模式
+
+#### 6.1.1 调用前提
+
+```javascript
+if (!aiHand || aiHand.length === 0 || !self.playerHand || self.playerHand.length === 0) {
+  self._showSwapResult(aiId, false, fbY);  // 降级为AI抢牌
+  return;
+}
+```
+
+**当 AI 或玩家手牌为空时，降级为答错逻辑。**
+
+#### 6.1.2 视觉层级 (depth 350-355)
+
+| Depth | 元素 | X | Y | W | H | 说明 |
+|:-----:|------|---|---|---|---|------|
+| 350 | 遮罩 | 0 | 0 | 960 | 600 | fill 0x000000 0.6 |
+| 351 | 标题 "🎉 答对了！赢一张牌！" | 480(居中) | 90 | — | — | 18px #FFD700 bold, stroke=#000 2px |
+| 351 | 提示 "选一张你的牌交出，然后猜AI的牌位置" | 480(居中) | 112 | — | — | 11px #AAAAAA |
+| 351 | "你的手牌" 标签 | 480(居中) | 140 | — | — | 12px #4FC3F7 bold |
+| 352 | 玩家手牌卡片 (正面) | 动态排列 | 175 | 44×64 | — | 可点击，选中+6px变到depth 355 |
+| 351 | "猜猜哪张是AI的牌" 标签 | 480(居中) | 230 | — | — | 12px #FFB74D bold |
+| 352 | AI牌背 (3~5张) | 动态排列 | 260 | 40×56 | — | 可点击，选中+6px |
+| 353 | 确认按钮背景 | 290 | 310 | 200 | 44 | 半透明(未选中)/实色(选中) #4ECDC4, 圆角10 |
+| 354 | 确认按钮文字 | 390(居中) | 332 | — | — | 15px #fff bold "✅ 确认交换" |
+| 353 | 取消按钮背景 | 290 | 360 | 200 | 44 | #78909C, 圆角10 |
+| 354 | 取消按钮文字 | 390(居中) | 382 | — | — | 15px #fff bold "✖ 跳过交换" |
+| 400 | 翻牌揭示动画 | 动态 | — | 40×56 | — | 临时元素 |
+
+#### 6.1.3 玩家手牌展示
+
+```javascript
+var myHandSorted = Doudizhu.sortCards(self.playerHand.slice());
+var myCardW = 44, myCardH = 64, myOverlap = 30;
+var myTotalW = myCardW + (myHandSorted.length - 1) * myOverlap;
+var myStartX = (960 - myTotalW) / 2;
+
+for (mi = 0; mi < myHandSorted.length; mi++) {
+  var mcx = myStartX + mi * myOverlap + myCardW / 2;
+  var mcard = self.add.image(mcx, 175, getCardImageKey(myHandSorted[mi]))
+    .setDisplaySize(myCardW, myCardH).setDepth(352);
+  // 点击: 选为"交出"的牌
+}
+```
+
+#### 6.1.4 AI牌背盲选逻辑
+
+```javascript
+var numBacks = 3 + Math.floor(Math.random() * 3);  // 3~5张牌背
+var backW = 40, backH = 56, backOverlap = 34;
+var aiCardRealIdx = Math.floor(Math.random() * aiHand.length);
+var realAICard = aiHand[aiCardRealIdx];
+var realAICardSlot = Math.floor(Math.random() * numBacks);
+```
+
+**关键:** 
+- 取AI手中随机一张牌作为"真牌" (`realAICard`)
+- 展示3~5个牌背，`realAICardSlot` 位置是真正的AI牌，其他位置是空牌背
+- 玩家看不见牌面，纯盲猜
+- `isReal` 标识挂载在图片 Data 上
+
+#### 6.1.5 确认按钮交互
+
+```
+confirmBg pointerup:
+  ├─ 检查 selectedPlayerCardIdx >= 0 && selectedBackIdx >= 0
+  │   └─ 任一未选 → 按钮无响应 (半透明状态)
+  ├─ 销毁所有 swapElements (UI清理)
+  ├─ 判断: isWin = (selectedBackIdx === realAICardSlot) ?
+  │
+  ├─ [isWin = true] 抽中真牌 →
+  │   ├─ 在选中位置创建AI牌正面 (翻牌揭示)
+  │   ├─ 显示 "🔄 用[♠K]换了AI的[♥A]" 14px #4CAF50 bold
+  │   ├─ 飞入动画: 牌背→牌面 → 旋转720° → 飞到手牌区
+  │   │   duration=600ms, ease=Cubic.easeOut
+  │   ├─ 动画完成: 实际修改playerHand/aiHand
+  │   ├─ renderPlayerHand(), updateAICount()
+  │   └─ _showSwapButtons(fbY+60, 280)
+  │
+  └─ [isWin = false] 没抽中 →
+      ├─ 揭示AI真实牌位置 (创建realAICard正面)
+      ├─ 显示 "😅 没抽到AI的牌，下次加油！" 14px #FFB74D bold
+      ├─ renderPlayerHand(), updateAICount()
+      └─ _showSwapButtons(fbY+60, 280)
+```
+
+**注意:** 没抽中时不进行实际牌交换，只展示AI的真牌位置。
+
+#### 6.1.6 取消按钮
+
+```
+取消按钮 pointerup:
+  ├─ 销毁所有 swapElements
+  └─ _showSwapResult(aiId, false, fbY)  // 降级为AI抢牌
+```
+
+#### 6.1.7 updateConfirmBtn 函数
+
+```javascript
+function updateConfirmBtn() {
+  confirmBg.clear();
+  if (selectedPlayerCardIdx >= 0 && selectedBackIdx >= 0) {
+    confirmBg.fillStyle(0x4ECDC4, 1);   // 实色
+  } else {
+    confirmBg.fillStyle(0x4ECDC4, 0.5); // 半透明
+  }
+  confirmBg.fillRoundedRect(290, 310, 200, 44, 10).setDepth(353);
+}
+```
+
+每次点击牌时调用，视觉反馈按钮激活状态。
+
+### 6.2 答错/超时换牌 (_showSwapResult) — AI抢牌动画
+
+#### 6.2.1 调用前提
+
+```javascript
+if (!self.playerHand || self.playerHand.length === 0) return;
+```
+
+**玩家手牌为空时，直接 return，不执行任何操作。**
+
+#### 6.2.2 核心流程
+
+```javascript
+// 1. 选择玩家一张随机牌
+var idx = Math.floor(Math.random() * self.playerHand.length);
+var lostCard = self.playerHand[idx];
+
+// 2. 延时 600ms 后执行飞行动画（给人看清结果的时间）
+self.time.delayedCall(600, function() {
+```
+
+#### 6.2.3 玩家牌定位计算
+
+```javascript
+var n = self.playerHand.length;
+var overlap = n > 6 ? Math.min(33, (700 - 56) / (n - 1)) : 33;
+var totalWidth = 56 + (n - 1) * overlap;
+var startX = 180 + (700 - totalWidth) / 2;
+var playerCardX = startX + idx * overlap + 56 / 2;
+```
+
+#### 6.2.4 AI目标位置
+
+| AI | targetX | targetY |
+|:---:|:-------:|:-------:|
+| 王怼怼 (duidui) | 80 | 160 |
+| 苏甜甜 (tiantian) | 880 | 200 |
+
+#### 6.2.5 飞行动画参数 (Phaser Tween)
+
+```javascript
+var animCard = self.add.image(playerCardX, 345, 'cardBack')
+  .setDisplaySize(50, 72).setDepth(400);
+
+self.tweens.add({
+  targets: animCard,
+  x: targetX,    // 80 或 880
+  y: targetY,    // 160 或 200
+  scaleX: 0.4,
+  scaleY: 0.4,
+  angle: 10,     // 轻微旋转
+  duration: 700, // 毫秒
+  ease: 'Back.easeIn',
+  onComplete: function() {
+    // 翻牌: 背面 → 正面
+    animCard.setTexture(getCardImageKey(lostCard));
+    animCard.setDisplaySize(38, 54);
+    animCard.setAngle(0);
+    animCard.setDepth(310);
+
+    // 实际修改数据
+    self.playerHand.splice(idx, 1);
+    aiHand.push(lostCard);
+    self.renderPlayerHand();
+    self.updateAICount(aiId === 'duidui' ? 0 : 1);
+
+    // 显示结果文字 "😈 王怼怼 从你手中拿走了 [♠K]"
+    // 15px #FF6B35 bold, stroke #000 2px, 居中
+    // 3.5秒后自动销毁
+
+    // 显示底部按钮
+    self._showSwapButtons(aiId, Math.max(fbY + 60, 251));
+  }
+});
+```
+
+#### 6.2.6 完整时间线
+
+```
+答错触发 (T=0ms)
+  │
+  ├─ 显示反馈文字 "❌ 答错了！"
+  ├─ 显示正确答案 (T+100ms)
+  ├─ 显示解析 (T+200ms)
+  └─ 开始倒计时
+
+T=600ms:
+  └─ 卡牌从手牌区升起 → 向AI飞
+
+T=1300ms (600+700):
+  └─ 到达AI位置 → 翻牌 → 数据显示修改
+      └─ 显示结果文字和底部按钮
+```
+
+**总等待时间 (从点击选项到可交互): ~1.3s**
+
+### 6.3 超时换牌
+
+**复用 `_showSwapResult(aiId, false, 180)`。** 0.6s 延时后触发相同的飞行动画。
+
+**唯一区别:** `fbY = 180` 固定值（因为没有正确答案和解析的Y偏移）。
+
+---
+
+## 7. AI气泡反应系统 (_showAiBubble)
+
+### 7.1 调用位置
+
+| 位置 | 场景 | sceneKey | fbY |
+|------|:----:|:---------:|:---:|
+| `_createChaosOverlay` | 初始进入 | `easy` | 180 |
+| `_handleOptionClick` (答对) | 答对后 | `correct` | fbY+10 |
+| `_handleOptionClick` (答错) | 答错后 | `wrong` | fbY+10 |
+| 超时处理 | 超时 | — | 无气泡 |
+
+### 7.2 气泡布局 (白色卡片左侧)
+
+```
+        ┌─────────────────────────────────────────────────────┐
+        │  🔥 搞事情！答题挑战                        得分: 3  │  ← 卡片顶部
+        │                                                     │
+  😎    ├─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─  │
+ 王怼怼 │  ◀ ┌──────────────────────────────────────┐          │  ← 气泡
+        │     │  「送分题，给人类的怜悯。」          │          │
+        │     └──────────────────────────────────────┘          │
+        │                                                     │
+        │      题目/答案/按钮区域                              │
+        └─────────────────────────────────────────────────────┘
+```
+
+### 7.3 精确坐标
+
+| 元素 | X | Y | 尺寸 | Depth |
+|------|---|----|:------:|:-----:|
+| AI头像圆圈 | 80 | y+16 | radius=22 | 302 |
+| 头像文字 (😎/😊) | 80 | y+16 | 18px, center(0.5) | 303 |
+| AI名字 | 105 | y-4 | 12px #fff bold | 302 |
+| 气泡背景 | 230 | y+10 | w=min(540, 200+lineLen*10) h=36 | 302 |
+| 三角箭头 | bubbleX | bubbleY+h/2 | size=12×12 | 302 |
+| 气泡文字 | 244 | y+28 | 14px #FFFFFF, origin(0,0.5) | 303 |
+
+**参数 `y`** = 传递给 `_showAiBubble` 的 `fbY + 10`
+
+### 7.4 气泡样式
+
+| 属性 | 值 |
+|------|-----|
+| 背景填色 | 0x1B5E20 (深绿), alpha 0.85 |
+| 边框颜色 | 0x66BB6A (亮绿), alpha 0.5, 1.5px |
+| 圆角 | 12px |
+| 箭头 | 左侧三角，指向头像 |
+| 宽度 | `Math.min(540, 200 + line.length * 10)` (自适应) |
+| 高度 | 36px (固定，单行) |
+
+### 7.5 气泡队列系统 (全局)
+
+```javascript
+var bubbleQueue = [];            // 全局队列
+var BUBBLE_QUEUE_MAX = 3;       // 最大队列长度
+var bubbleShowing = false;      // 队列处理中标记
+```
+
+**队列处理流程:**
+```
+_showAiBubble(aiId, sceneKey, y)
+  ├─ 从台词池 pickAiLine(aiId, sceneKey) 获取台词
+  └─ 构造渲染任务 → bubbleQueue.push({ render: renderBubble })
+      ├─ if (queue.length > 3) queue.shift()  // 丢弃最旧
+      └─ if (!bubbleShowing) processBubbleQueue()
+
+processBubbleQueue()
+  ├─ if queue.length === 0 → bubbleShowing = false; return;
+  ├─ bubbleShowing = true
+  ├─ item = queue.shift()
+  └─ item.render()
+      ├─ 销毁旧气泡元素
+      ├─ 创建新气泡各类元素
+      └─ 3.5秒后自动销毁 → processBubbleQueue()
+
+气泡销毁:
+  └─ time.delayedCall(3500, function() {
+      destroy所有chaosBubbleElements
+      processBubbleQueue()
+  })
+```
+
+**关键行为:**
+- 新气泡渲染时立即销毁旧气泡 (`chaosBubbleElements` 全部 destroy)
+- 显示时长: 3.5秒 (3500ms)
+- 队列最大3个，超出丢弃旧任务
+- 每个气泡渲染完后自动处理下一个
+
+### 7.6 出牌气泡vs搞事情气泡
+
+本文档只覆盖搞事情气泡 (`_showAiBubble`)。出牌气泡 `_showPlayBubble` 是独立系统，在 `AIBubble.md` 中描述。
+
+区别:
+
+| 属性 | 搞事情气泡 | 出牌气泡 |
+|:-----|:----------:|:--------:|
+| 函数 | `_showAiBubble` | `_showPlayBubble` |
+| 位置 | 白色卡片内部 (x=80,y动态) | 出牌区上方 (y=96) |
+| 宽度 | max 540px | max 280px |
+| 头像 | 无外边框 | 有外边框 |
+| 箭头 | 固定左侧 | 左右镜像 |
+| 时长 | 3.5秒 | 4~5秒 |
+| 销毁后 | 处理队列 | 处理队列 |
+
+---
+
+## 8. 倒计时动画
+
+### 8.1 实现方式
+
+**当前代码中没有可视化的进度条，** 而是使用 Phaser 的 `time.delayedCall(30000, callback)` 实现30秒超时触发。
+
+```javascript
+// 在 _renderQuestion 末尾:
+self.chaosTimeoutTimer = self.time.delayedCall(30000, function() {
+  self._handleChaosTimeout(aiId);
+});
+```
+
+### 8.2 清除条件
+
+```javascript
+// _handleOptionClick 入口
+if (self.chaosTimeoutTimer) {
+  self.chaosTimeoutTimer.remove();
+  self.chaosTimeoutTimer = null;
+}
+// _destroyChaos 中
+if (self.chaosTimeoutTimer) {
+  self.chaosTimeoutTimer.remove();
+  self.chaosTimeoutTimer = null;
+}
+```
+
+**三种清除时机:**
+1. 玩家点击选项 → 清除
+2. 关闭搞事情 → 清除
+3. 30秒到自动触发 → 清除在 `_handleChaosTimeout` 内部（触发后无需清除）
+
+### 8.3 倒计时条设计 (未实现 → 需求新增)
+
+**当前代码没有UI进度条，以下为设计建议:**
+
+| 属性 | 值 |
+|------|-----|
+| 位置 | 白色卡片顶部 (150, 55) w=660 h=4 |
+| 背景 | fill 0x000000, alpha 0.2 |
+| 填充 | 渐变: 绿(#4ECDC4) → 黄(#FFD93D) → 红(#FF6B35) |
+| 动画 | 每帧更新宽度 (660 → 0)，30秒内线性缩小 |
+
+**实现方案 (新增到 _renderQuestion):**
+```javascript
+// 创建背景
+var timerBarBg = self.add.graphics();
+timerBarBg.fillStyle(0x000000, 0.2);
+timerBarBg.fillRoundedRect(150, 55, 660, 4, 2).setDepth(301);
+
+// 创建计时条填充
+var timerBar = self.add.graphics();
+timerBar.fillStyle(0x4ECDC4, 1);
+timerBar.fillRoundedRect(150, 55, 660, 4, 2).setDepth(301);
+
+// 每100ms更新
+self.chaosTimerEvent = self.time.addEvent({
+  delay: 100,
+  callback: function() {
+    elapsed += 100;
+    var progress = 1 - (elapsed / 30000);
+    if (progress <= 0) {
+      timerEvent.remove();
+      return;
+    }
+    // 颜色渐变
+    var color;
+    if (progress > 0.66) color = 0x4ECDC4;
+    else if (progress > 0.33) color = 0xFFD93D;
+    else color = 0xFF6B35;
+    
+    timerBar.clear();
+    timerBar.fillStyle(color, 1);
+    timerBar.fillRoundedRect(150, 55, 660 * progress, 4, 2);
+  },
+  loop: true
+});
+```
+
+---
+
+## 9. 回退题目逻辑
+
+### 9.1 触发条件
+
+```javascript
+_showChaosQuestion(aiId, aiName, type):
+  if (isAPIMode && typeof ApiClient !== 'undefined') {
+    ApiClient.generateChaosQuestion(type || 'random', 'normal', 1)
+      .then(function(res) {
+        if (res.success && res.questions && res.questions.length > 0)
+          self._renderQuestion(res.questions[0], aiId);
+        else
+          self._renderFallbackQuestion(aiId);
+      })
+      .catch(function() {
+        self._renderFallbackQuestion(aiId);
+      });
+  } else {
+    self._renderFallbackQuestion(aiId);
+  }
+```
+
+**三种降级场景:**
+1. API返回 `success: false` 或 `questions` 空数组
+2. API HTTP错误 / 网络超时
+3. `isAPIMode = false` 或 `ApiClient` 未定义
+
+### 9.2 内置题库 (4道)
+
+| # | 题目 | 选项 | 正确 | 题型 | 解析 |
+|:-:|------|------|:----:|:----:|------|
+| 1 | The word "abandon" means: | A=放弃 B=接受 C=建立 D=发现 | A | vocabulary | abandon 意为"放弃" |
+| 2 | "I'm feeling under the weather" 意思: | A=在天气下面 B=生病了 C=喜欢不同天气 D=傻傻笨笨 | B | expression | "Under the weather"=生病不舒服 |
+| 3 | 哪个动物几乎不患癌症？ | A=鲨鱼 B=大象 C=裸鼹鼠 D=乌龟 | C | trivia | 裸鼹鼠体内有特殊透明质酸 |
+| 4 | 哪种方法能让切洋葱不流泪？ | A=冷冻30分 B=含口水 C=戴泳镜 D=微波10秒 | C | life_hack | 戴泳镜是最直接物理方法 |
+
+### 9.3 渲染
+
+```javascript
+_renderFallbackQuestion(aiId):
+  var q = fallbackQuestions[Math.floor(Math.random() * 4)];
+  q.questionType = '本地题库';    // 覆盖类型标记
+  self._renderQuestion(q, aiId); // 复用标准渲染函数
+```
+
+### 9.4 数据兼容
+
+回退题目的数据格式与API格式一致，直接传给 `_renderQuestion`，无需额外处理:
+
+```javascript
+{
+  question: "...",
+  options: { A: "...", B: "...", C: "...", D: "..." },
+  answer: "A" | "B" | "C" | "D",
+  explanation: "...",
+  questionType: "本地题库"
+}
+```
+
+---
+
+## 10. 底部按钮 (_showSwapButtons)
+
+### 10.1 按钮布局
+
+| 按钮 | 文字 | X | Y | W | H | 颜色 | 圆角 | Depth |
+|:----:|:----:|:---:|:---:|:-:|:-:|:----:|:----:|:-----:|
+| "再来一题" | 🔄 再来一题 | 220 | btnY | 220 | 40 | 0x4ECDC4 (青) | 10px | 305 |
+| "关掉回牌" | ✖ 关掉回牌 | 510 | btnY | 220 | 40 | 0xFF6B6B (红) | 10px | 305 |
+
+**按钮文字样式:** 13px, #FFFFFF, bold, center(0.5)
+
+### 10.2 btnY 计算
+
+```javascript
+// 答对时
+self._showSwapButtons(aiId, Math.max(fbY + 60, 280));
+// 答错时
+self._showSwapButtons(aiId, Math.max(fbY + 60, 251));
+// 超时时 (调用答错分支, fbY=180)
+self._showSwapButtons(aiId, Math.max(180 + 60, 251));  // = 251
+```
+
+**典型值:**
+- 答对(fbY=180): btnY = max(240, 280) = 280
+- 答错(fbY=208): btnY = max(268, 251) = 268
+- 答错(fbY=236): btnY = max(296, 251) = 296
+- 超时(fbY=180): btnY = max(240, 251) = 251
+
+### 10.3 "再来一题" 行为
+
+```javascript
+againBg.on('pointerup', function() {
+  self.chaosQuestionAnswered = false;       // 重置答题状态
+  self._clearQuestionArea();                // 清空反馈UI
+  var aiId2 = Math.random() < 0.5 ? 'duidui' : 'tiantian';  // 随机选AI
+  self._showChaosQuestion(aiId2, 
+    aiId2 === 'duidui' ? '王怼怼' : '苏甜甜');
+});
+```
+
+**关键点:**
+- `chaosQuestionAnswered = false` 重置，新题可答题
+- 随机切换AI（50%概率），AI可能变化
+- `chaosScore` 跨题累计（不重置）
+
+### 10.4 "关掉回牌" 行为
+
+```javascript
+closeBg.on('pointerup', function() {
+  self._destroyChaos();         // 销毁所有chaos元素
+  // → gameState = PLAYER_TURN
+  // → setStatusText("搞事情结束，继续出牌")
+});
+```
+
+---
+
+## 11. 销毁与状态恢复
+
+### 11.1 _clearQuestionArea — 保留基础元素
+
+```javascript
+GameScene.prototype._clearQuestionArea = function() {
+  // 保留 chaosElements[0..4]:
+  //   [0] overlay
+  //   [1] cardBg
+  //   [2] chaosTitle
+  //   [3] chaosScoreText
+  //   [4] closeBtnBg
+  // ← 注意: 索引5(closeBtnText) 是否销毁取决于保留策略
+  // 实际代码: 销毁索引 ≥5 的全部元素
+  for (var ci = 5; ci < self.chaosElements.length; ci++) {
+    if (self.chaosElements[ci]) self.chaosElements[ci].destroy();
+  }
+  self.chaosElements = self.chaosElements.slice(0, 5);
+};
+```
+
+**索引5的原意:** 是关闭按钮文字 "✖"，但代码中在题型选择阶段会保留主标题 (索引2) 和分数 (索引3) 以及关闭按钮背景 (索引4)。关闭按钮文字 (索引5) 会被清除——但这不影响关闭按钮的功能，因为交互区域在背景上。
+
+### 11.2 _destroyChaos — 完全销毁
+
+```javascript
+GameScene.prototype._destroyChaos = function() {
+  var self = this;
+
+  // 销毁所有chaos气泡元素
+  if (self.chaosBubbleElements) {
+    self.chaosBubbleElements.forEach(function(el) {
+      if (el) el.destroy();
+    });
+    self.chaosBubbleElements = [];
+  }
+
+  // 销毁所有chaos UI元素
+  self.chaosElements.forEach(function(el) {
+    if (el) el.destroy();
+  });
+  self.chaosElements = [];
+
+  // 清除计时器
+  if (self.chaosTimeoutTimer) {
+    self.chaosTimeoutTimer.remove();
+    self.chaosTimeoutTimer = null;
+  }
+
+  // 恢复引用
+  self.chaosOverlay = null;
+  self.chaosCardBg = null;
+  self.chaosTitle = null;
+  self.chaosQText = null;
+  self.chaosScoreText = null;
+
+  // 恢复音效和游戏状态
+  SoundManager.resumeAll();
+  self.gameState = GAME_STATE.PLAYER_TURN;
+
+  // 显示状态文字
+  var selfRound = self.round || 1;
+  var maxRounds = self.maxRounds || 10;
+  self.setStatusText('搞事情结束，继续出牌  第 ' + selfRound + '/' + maxRounds + ' 回合');
+};
+```
+
+---
+
+## 12. 边角情况全表
+
+### 12.1 手牌不足
+
+| 场景 | 代码行为 |
+|:-----|---------|
+| 答对后玩家手牌为空 | `_showSwapUI` 检查 `self.playerHand.length === 0` → 降级调用 `_showSwapResult(aiId, false, fbY)` |
+| 答对后AI手牌为空 | `_showSwapUI` 检查 `aiHand.length === 0` → 降级调用 `_showSwapResult(aiId, false, fbY)` |
+| 答错后玩家手牌为空 | `_showSwapResult` 直接 `return`，不执行任何操作，不显示底部按钮（因为函数 return 后不会调用 `_showSwapButtons`） |
+
+**⚠️ 注意:** 答错后玩家手牌为空时，`_showSwapResult` 直接 return，会**卡住**（不显示底部按钮，也无法继续游戏）。这是一个代码中的潜在问题。
+
+### 12.2 API失败
+
+| 场景 | 行为 |
+|:-----|------|
+| API HTTP error (4xx/5xx) | .catch → `_renderFallbackQuestion` |
+| API 网络超时 | .catch → `_renderFallbackQuestion` |
+| API 成功但 questions 空 | 检查 `res.questions.length > 0` → 否则回退 |
+| ApiClient 未定义 | `isAPIMode` 检查 → 直接 `_renderFallbackQuestion` |
+| ApiClient.generateDialogue 失败 | .catch → 回退本地台词池 `pickAiLine` |
+
+### 12.3 连击防护
+
+| 防护点 | 机制 |
+|:-------|------|
+| "搞事情"按钮 | `gameState !== PLAYER_TURN && gameState !== CHAOS_MODE` 守卫 |
+| 题型选择 | `chaosTypeSelection` 布尔守卫，点击后立即设为 false |
+| 选项点击 | `chaosQuestionAnswered` 布尔守卫，点击后立即设为 true |
+| 换牌交互 | 确认按钮检查 `selectedPlayerCardIdx >= 0 && selectedBackIdx >= 0` |
+
+### 12.4 多轮叠加
+
+| 场景 | 行为 |
+|:------|------|
+| 连续"再来一题" N次 | 每次随机选AI，题目不重复（API随机），分数累计 |
+| 搞事情分数跨回合 | `chaosScore` 只在 `init()` 中重置为0，跨回合不重置 |
+| 关闭后立即再开 | 正常进入（`gameState` 已恢复），无状态残留 |
+
+### 12.5 超时与其他操作的竞态
+
+| 场景 | 处理 |
+|:------|------|
+| 超时触发前0.1秒点击选项 | `_handleOptionClick` 中清除计时器 → normal处理 |
+| 玩家在超时触发前关闭 | `_destroyChaos` 中清除计时器 → 安全关闭 |
+| 超时触发后气泡队列堆积 | 气泡队列独立运行，不影响后续流程 |
+
+### 12.6 渲染冲突
+
+| 场景 | 处理 |
+|:------|------|
+| `_clearQuestionArea` 中关闭按钮文字被误删 | 索引5元素（closeBtnText）被销毁，但无负面影响（交互在背景上） |
+| 多次调用 `_createChaosOverlay` | 检查 `if (this.chaosOverlay) return` — 防重复创建 |
+| 换牌UI和题目UI叠加 | 换牌UI使用独立 depth 350-355 层级，不冲突 |
+
+---
+
+## 13. 数据结构与变量
+
+### 13.1 GameScene 上挂载的属性
+
+| 属性名 | 类型 | 初始值 | 用途 |
+|--------|:----:|:------:|------|
+| `chaosScore` | number | 0 | 累计搞事情得分，跨回合持久化 |
+| `chaosElements` | Array | [] | 所有chaos UI元素的引用数组 |
+| `chaosBubbleElements` | Array | [] | 气泡元素的引用数组 |
+| `chaosOverlay` | Graphics | null | 遮罩对象引用 |
+| `chaosCardBg` | Graphics | null | 白色卡片背景引用 |
+| `chaosTitle` | Text | null | 标题文字引用 |
+| `chaosQText` | Text | null | 题目文字引用（保留兼容） |
+| `chaosScoreText` | Text | null | 得分文字引用 |
+| `chaosTypeSelection` | boolean | false | 题型选择是否激活 |
+| `chaosQuestionAnswered` | boolean | false | 当前题目是否已答 |
+| `chaosTimeoutTimer` | TimerEvent | null | 30秒超时计时器引用 |
+
+### 13.2 全局变量
+
+| 变量名 | 类型 | 初始值 | 用途 |
+|--------|:----:|:------:|------|
+| `bubbleQueue` | Array | [] | 气泡队列（共享，出牌气泡也用） |
+| `BUBBLE_QUEUE_MAX` | number | 3 | 队列最大长度 |
+| `bubbleShowing` | boolean | false | 队列是否正在处理 |
+
+### 13.3 chaoselements 索引约定
+
+```
+[0]  overlay (遮罩)                 — 永久保留
+[1]  cardBg (白色卡片背景)            — 永久保留
+[2]  chaosTitle (标题)               — 永久保留
+[3]  chaosScoreText (分数)           — 永久保留
+[4]  closeBtnBg (关闭按钮背景)        — 永久保留
+[5]  closeBtnText (关闭按钮"✖")      — 在 _clearQuestionArea 时被销毁
+[5+) 所有临时元素                     — 可安全清除
+```
+
+**注意:** 由于索引5的元素在 `_clearQuestionArea` 中被销毁（`slice(0,5)`），每次 `_showTypeSelection` 和 `_renderQuestion` 后会重新创建标题和关闭按钮。好在 `_createChaosOverlay` 只调用一次，后续只有 `_clearQuestionArea` 清理临时区域。
+
+---
+
+## 14. 台词池 (AI_LINES)
+
+### 14.1 王怼怼 (duidui)
+
+性格: 毒舌、高冷、不承认玩家实力
+
+| sceneKey | 台词 | 语气 |
+|:---------|------|:----:|
+| easy | "送分题，给人类的怜悯。" | 居高临下 |
+| | "这道题简单到我都懒得看。" | 轻蔑 |
+| correct | "哼，蒙对的吧？" | 勉强承认 |
+| | "这次算你走运。" | 心有不甘 |
+| | "哟，还真答对了？" | 惊讶不失面子 |
+| | "人类的水平也就这样了。" | 嘴硬 |
+| wrong | "哈哈哈哈哈！果然不出所料！" | 幸灾乐祸 |
+| | "这种题都会选错？你是来斗地主还是来斗笨的？" | 落井下石 |
+| | "不出我所料，你的水平跟牌技一样。" | 嘲讽拉满 |
+| close | "行吧，回来打牌。" | 无所谓 |
+
+### 14.2 苏甜甜 (tiantian)
+
+性格: 可爱、元气、容易激动
+
+| sceneKey | 台词 | 语气 |
+|:---------|------|:----:|
+| easy | "这道题送你啦！不客气！" | 大方 |
+| | "啊啊啊这题我知道我知道！" | 兴奋 |
+| | "嘿嘿我好想告诉你答案——但我不能！" | 纠结 |
+| correct | "哇塞！你真的会！！！" | 惊喜 |
+| | "太棒啦！你是我见过最聪明的人类！" | 狂夸 |
+| | "你你你你太厉害了叭！！" | 结巴赞美 |
+| wrong | "啊啊啊错了！我……裂……开……了……😭" | 崩溃 |
+| | "不是吧！这简直……好玩！哈哈哈哈哈！" | 反向开心 |
+| | "我是为你选了这个题的，结果……😭" | 委屈 |
+| close | "回来打牌啦！哈哈哈！" | 开心 |
+
+### 14.3 台词选取函数
+
+```javascript
+// 从 AI_LINES 中选台词
+function pickAiLine(aiId, sceneKey) {
+  var lines = AI_LINES[aiId] && AI_LINES[aiId][sceneKey];
+  if (!lines || lines.length === 0) return "...";
+  return lines[Math.floor(Math.random() * lines.length)];
+}
+
+// 数据结构
+var AI_LINES = {
+  duidui: {
+    easy: ["送分题，给人类的怜悯。", ...],
+    correct: ["哼，蒙对的吧？", ...],
+    wrong: ["哈哈哈哈哈！果然不出所料！", ...],
+    close: ["行吧，回来打牌。", ...]
+  },
+  tiantian: {
+    easy: ["这道题送你啦！不客气！", ...],
+    correct: ["哇塞！你真的会！！！", ...],
+    wrong: ["啊啊啊错了！我……裂……开……了……😭", ...],
+    close: ["回来打牌啦！哈哈哈！", ...]
+  }
+};
+```
+
+---
+
+## 15. 验收标准
+
+### 15.1 触发与入口
+
+| # | 验收条件 | 优先级 |
+|:-:|----------|:------:|
+| E1 | "搞事情"按钮在 `PLAYER_TURN` 状态下可点击 | P0 |
+| E2 | 点击"搞事情"按钮 → 遮罩显示 → AI气泡出现 → 题型选择界面 | P0 |
+| E3 | 非 `PLAYER_TURN` 状态下按钮无响应 | P0 |
+| E4 | 点击后所有出牌音效暂停 | P1 |
+
+### 15.2 题型选择
+
+| # | 验收条件 | 优先级 |
+|:-:|----------|:------:|
+| T1 | 4张题型卡片按2×2网格排列，坐标精确 | P0 |
+| T2 | 卡片 hover 态切换颜色 (浅蓝 #F0F4FF → 深蓝 #E0EAFF + 紫色边框) | P0 |
+| T3 | 点击卡片 → 隐藏副标题 → 恢复主标题 → 开始出题 | P0 |
+| T4 | 题型选择期间主标题被隐藏，不重叠 | P1 |
+
+### 15.3 题目渲染
+
+| # | 验收条件 | 优先级 |
+|:-:|----------|:------:|
+| Q1 | 题型标签 (图标+名称) 显示在 (220,97) | P0 |
+| Q2 | 题目文本显示在 (220,114)，自动换行（wordWrap 600px） | P0 |
+| Q3 | 4个选项按2×2网格排列，坐标精确 | P0 |
+| Q4 | 每个选项左侧有圆形标记 (A/B/C/D) | P0 |
+| Q5 | 选项点击后立即锁定（`chaosQuestionAnswered` 防连点） | P0 |
+
+### 15.4 答案处理
+
+| # | 验收条件 | 优先级 |
+|:-:|----------|:------:|
+| A1 | 答对 → chaosScore+1 → 得分文字刷新 → 播放胜利音效 | P0 |
+| A2 | 答错 → 得分不变 → 显示正确答案 → 播放失败音效 | P0 |
+| A3 | 超时30秒 → 自动关闭题目 → 显示超时提示 → 走AI抢牌 | P0 |
+| A4 | 正确/错误/超时反馈文字位置正确，不重叠 | P0 |
+| A5 | 反馈区域含解析说明（如有）| P0 |
+
+### 15.5 换牌 (答对盲选)
+
+| # | 验收条件 | 优先级 |
+|:-:|----------|:------:|
+| S1 | 答对后弹出换牌遮罩 (depth 350)，可交互 | P0 |
+| S2 | 展示玩家手牌正面（可选牌）+ AI牌背（3~5张盲选）| P0 |
+| S3 | 选中玩家牌+选中牌背后，确认按钮变实色 | P0 |
+| S4 | 点击确认 → 翻牌揭示 → 飞入动画 → 牌交换 | P0 |
+| S5 | 抽中真牌: 显示 "🔄 用[♠K]换了AI的[♥A]" | P0 |
+| S6 | 没抽中: 揭示AI真牌位置，显示 "😅 没抽到AI的牌" | P0 |
+| S7 | 跳过交换 → 降级为AI抢牌 | P0 |
+| S8 | AI或玩家手牌为空 → 降级为AI抢牌 | P0 |
+
+### 15.6 换牌 (答错/超时)
+
+| # | 验收条件 | 优先级 |
+|:-:|----------|:------:|
+| R1 | 答错/超时后 0.6秒 延时触发AI抢牌动画 | P0 |
+| R2 | 卡牌从手牌位置飞向AI（王怼怼→(80,160), 苏甜甜→(880,200)）| P0 |
+| R3 | 飞行动画：旋转10°, 缩放至0.4, 700ms, Back.easeIn | P0 |
+| R4 | 到达后翻牌揭示（背面 → 正面），修改数据 | P0 |
+| R5 | 显示 "😈 王怼怼 从你手中拿走了 [♠K]" | P0 |
+| R6 | 结果文字3.5秒后自动销毁 | P0 |
+| R7 | 玩家手牌为空时直接return（不卡住）| P1 |
+
+### 15.7 AI气泡
+
+| # | 验收条件 | 优先级 |
+|:-:|----------|:------:|
+| B1 | 初始进入时显示 "easy" 台词气泡 | P0 |
+| B2 | 答对/答错后显示对应台词 (correct/wrong) | P0 |
+| B3 | 气泡样式符合规范：深绿背景 #1B5E20, 圆角12px, 左侧三角箭头 | P0 |
+| B4 | 气泡宽度自适应 (max 540px), 高度固定36px | P0 |
+| B5 | 气泡显示3.5秒后自动销毁 | P0 |
+| B6 | 队列机制：最多3个任务排队，旧任务被覆盖 | P0 |
+| B7 | 王怼怼/苏甜甜使用不同头像颜色和台词池 | P0 |
+
+### 15.8 倒计时
+
+| # | 验收条件 | 优先级 |
+|:-:|----------|:------:|
+| C1 | 题目渲染时开始30秒倒计时 | P0 |
+| C2 | 30秒内点击选项 → 计时器清除 | P0 |
+| C3 | 30秒未点击 → 自动触发超时处理 | P0 |
+| C4 | 关闭搞事情 → 计时器清除 | P0 |
+
+### 15.9 回退题目
+
+| # | 验收条件 | 优先级 |
+|:-:|----------|:------:|
+| F1 | API不可用时自动降级为本地题库 | P0 |
+| F2 | 4道内置题目覆盖4种题型 | P0 |
+| F3 | 随机选取，可多次触发不同题目 | P0 |
+| F4 | 回退题目渲染样式与API题完全一致 | P0 |
+
+### 15.10 底部按钮与恢复
+
+| # | 验收条件 | 优先级 |
+|:-:|----------|:------:|
+| B1 | 换牌后显示"再来一题"/"关掉回牌"两个按钮 | P0 |
+| B2 | "再来一题" → 随机选AI，重置答题状态，出新题 | P0 |
+| B3 | "关掉回牌" → 完全销毁chaos，恢复 PLAYER_TURN | P0 |
+| B4 | 关闭后音效恢复 | P0 |
+| B5 | 关闭后statusText显示"搞事情结束，继续出牌" | P0 |
+
+### 15.11 边界情况
+
+| # | 验收条件 | 优先级 |
+|:-:|----------|:------:|
+| EC1 | 答对手牌为空 → 降级AI抢牌（不卡UI）| P0 |
+| EC2 | 答错手牌为空 → 不卡住（当前代码需要修复）| P1 |
+| EC3 | 快速连点选项 → 只响应一次 | P0 |
+| EC4 | 多次"再来一题" → 分数累计 | P0 |
+| EC5 | 关闭后重新点"搞事情" → 正常进入 | P0 |
+| EC6 | API失败+手牌为空 → 链式降级 | P1 |
+| EC7 | 超时触发同时关闭 → 安全退出 | P0 |
+| EC8 | 换牌过程中再次点击"搞事情" → 无响应（遮罩阻挡）| P0 |
+
+---
+
+## 附录: 代码函数索引
+
+| 函数 | 文件 | 行号 | 功能简述 |
+|------|:----:|:----:|---------|
+| `doAction()` | game.js | 1336 | 底部功能按钮分发 |
+| `_createChaosOverlay(aiId, callback)` | game.js | 1447 | 创建遮罩+白色卡片 |
+| `_showTypeSelection(aiId, aiName)` | game.js | 1358 | 题型选择2×2网格 |
+| `_showChaosQuestion(aiId, aiName, type)` | game.js | 1506 | 尝试API/回退，出题 |
+| `_renderQuestion(q, aiId)` | game.js | 1530 | 渲染题目+4选项+倒计时 |
+| `_handleOptionClick(self, optBg, optKey, aiId, q)` | game.js | 1619 | 选项点击处理 |
+| `_handleChaosTimeout(aiId)` | game.js | ~1708 | 30秒超时处理 |
+| `_showSwapUI(aiId, fbY)` | game.js | 1724 | 答对盲选换牌 |
+| `_showSwapResult(aiId, isCorrect, fbY)` | game.js | 1685 | 答错AI抢牌动画 |
+| `_showSwapButtons(aiId, btnY)` | game.js | 1895 | 底部"再来一题/关掉" |
+| `_showAiBubble(aiId, sceneKey, y)` | game.js | 2185 | 搞事情AI气泡 |
+| `_clearQuestionArea()` | game.js | 2206 | 清理临时UI元素 |
+| `_destroyChaos()` | game.js | 2270 | 完全销毁所有chaos元素 |
+| `_renderFallbackQuestion(aiId)` | game.js | 1924 | 4道内置回退题目 |
+| `createActionButtons(scene)` | game.js | ~880 | 创建底部5个功能按钮 |
+
+```
+
+---
+
+## `docs/ChaoShiQing.md` (22,671 字节)
+
+```markdown
+# PRD：搞事情 (Chaos Mode) 系统设计文档
+
+| 属性 | 值 |
+|------|-----|
+| 文档版本 | v1.0 |
+| 游戏画布 | 960×600 (Phaser 3, 横屏) |
+| 涉及场景 | `GameScene` |
+| 状态常量 | `GAME_STATE.CHAOS_MODE` |
+| 功能入口 | "搞事情"按钮 → `doAction()` |
+| 依赖服务 | `ApiClient.generateChaosQuestion()`, `ApiClient.generateDialogue()` |
+| 降级方案 | 内置题库（4道回退题目）+ 本地台词池 |
+
+---
+
+## 1. 触发入口
+
+### 1.1 "搞事情"按钮
+
+布局：底部功能按钮栏第4个按钮（紫色 #7C4DFF）
+
+| 属性 | 值 |
+|------|-----|
+| 按钮标签 | `搞事情` |
+| 按钮区域 | `[startX + 3*(bw+gap), btnY, bw, bh]` |
+| **坐标值** | x=`530`, y=`442`, w=`72`, h=`48` |
+| 颜色 | `0x7C4DFF` (紫色) |
+| 圆角 | `8px` |
+| 层级 | depth=`100` |
+| 点击事件 | `scene.doAction()` |
+
+按钮在 `createActionButtons(scene)` 中创建，共5个按钮（出牌/提示/不出/搞事情/底牌查看），从 `startX = (960 - totalW)/2` 开始横向排列，间距 `gap=14`。
+
+### 1.2 doAction() 流程
+
+```
+"搞事情"按钮点击
+  └─ doAction()
+       ├─ 检查状态: gameState 必须为 PLAYER_TURN 或 CHAOS_MODE
+       ├─ SoundManager.pauseAll()       ← 暂停出牌音效
+       ├─ gameState = CHAOS_MODE
+       ├─ chaosScore 初始化（0，持久化跨回合）
+       ├─ setStatusText("选题型...")
+       ├─ 随机选择被搞AI: aiId ∈ {duidui, tiantian}
+       ├─ _createChaosOverlay(aiId, callback)
+       └─ callback → _showTypeSelection(aiId, aiName)
+```
+
+**验收标准：**
+- [ ] 非 PLAYER_TURN 或 CHAOS_MODE 状态下按钮无响应
+- [ ] 点击后出牌音效暂停
+- [ ] gameState 立即切换为 CHAOS_MODE
+- [ ] 遮罩层动画出现
+
+---
+
+## 2. 遮罩层 (_createChaosOverlay)
+
+```javascript
+GameScene.prototype._createChaosOverlay(aiId, callback)
+```
+
+创建层级结构（depth 300起）：
+
+| 元素 | 类型 | 坐标 (x, y, w, h) | depth | 说明 |
+|------|------|---------------------|-------|------|
+| 半透明遮罩 | Graphics rect | `(0, 0, 960, 600)` | 300 | `fillStyle(0x000000, 0.75)` |
+| 白色卡片背景 | Graphics roundedRect | `(150, 55, 660, 320)` | 301 | `fillStyle(0xFFFFFF)`, 圆角12px |
+| 内发光边框 | Graphics roundedRect | `(154, 58, 660, 320)` | 301 | `fillStyle(0x000000, 0.08)`, 圆角12px |
+| **标题 "🔥 搞事情！答题挑战"** | Text | `(480, 77)` origin `(0.5, 0)` | 302 | fontSize `19px`, color `#FF6B35`, bold |
+| **得分显示** | Text | `(660, 77)` | 302 | fontSize `12px`, color `#333333` |
+| **AI 台词气泡** | Graphics + Text | 见第7节 | 302-303 | 链接到 `_showAiBubble` |
+| **关闭按钮"✖"** | Graphics + Text | `(720, 72)` w=`20` h=`28` | 302-303 | 颜色 `0xE53935` (红色)，圆角10px |
+
+### 关闭按钮行为
+
+点击关闭按钮 → `_destroyChaos()`:
+```javascript
+GameScene.prototype._destroyChaos()
+├─ 销毁 chaosElements 中所有对象
+├─ 销毁 chaosBubbleElements
+├─ 置空引用: overlay, cardBg, title, scoreText 等
+├─ SoundManager.resumeAll()
+├─ gameState = PLAYER_TURN
+└─ setStatusText("搞事情结束，继续出牌")
+```
+
+**验收标准：**
+- [ ] 遮罩覆盖全屏，禁止点击下层UI
+- [ ] 白色卡片背景居中（150~810, 55~375）
+- [ ] 标题显示 "🔥 搞事情！答题挑战"
+- [ ] 得分初始显示 "得分: 0"
+- [ ] 关闭按钮可点击，完全销毁所有 chaos 元素，恢复 gameState
+
+---
+
+## 3. 题型选择 (_showTypeSelection)
+
+### 3.1 布局
+
+题型选择面板在白色卡片内以 **2×2 网格** 展示，覆盖 y=77 至 y=375 区域。
+
+| 元素 | 坐标 (x, y) | depth | 说明 |
+|------|------------|-------|------|
+| 副标题 "📋 选个题型，开始搞事情" | `(480, 77)` origin `(0.5)` | 302 | 覆盖主标题（hide） |
+| 题型卡片0 (vocabulary) | 左上: `(220, 107)` w=`260` h=`88` | 302 | |
+| 题型卡片1 (expression) | 右上: `(500, 107)` w=`260` h=`88` | 302 | |
+| 题型卡片2 (trivia) | 左下: `(220, 181)` w=`260` h=`88` | 302 | |
+| 题型卡片3 (life_hack) | 右下: `(500, 181)` w=`260` h=`88` | 302 | |
+
+### 3.2 四种题型
+
+| id | 标签 | 图标 | 描述 | 卡片左上坐标 |
+|----|------|------|------|------------|
+| `vocabulary` | 四六级单词 | 📚 | 看释义选单词，AI给你出牌 | `(220, 107)` |
+| `expression` | 口语表达 | 💬 | 地道俚语挑战，口语达人 | `(500, 107)` |
+| `trivia` | 冷知识 | 🧠 | 奇怪的知识增加了 | `(220, 181)` |
+| `life_hack` | 生活常识 | 🏠 | 生活小窍门，你真的会吗 | `(500, 181)` |
+
+### 3.3 题型卡片样式
+
+| 属性 | 默认态 | Hover态 | 点击后 |
+|------|--------|---------|--------|
+| 填充色 | `#F0F4FF` | `#E0EAFF` | 销毁 |
+| 边框色 | `#CCD8FF` (1.5px) | `#7C4DFF` (2px) | 销毁 |
+| 圆角 | 10px | 10px | 销毁 |
+
+### 3.4 卡片内部布局（以 vocabulary 为例）
+
+```
+(220, 107) ┌─────────────────────────┐
+            │ 📚  四六级单词           │
+            │      看释义选单词...      │
+            └─────────────────────────┘
+                  260px
+```
+
+- 图标: `(cx + 12, cy + 12)` fontSize 26px
+- 标签: `(cx + 58, cy + 14)` fontSize 14px, color `#222222`, bold
+- 描述: `(cx + 58, cy + 40)` fontSize 10px, color `#888888`
+
+### 3.5 选择后行为
+
+```javascript
+_showTypeSelection → pointerdown → 
+├─ chaosTypeSelection = false
+├─ 恢复主标题 chaosTitle visibility
+├─ 销毁索引 ≥5 的 chaosElements（保留基础5个: 遮罩/背景/标题/分数/关闭）
+├─ _showChaosQuestion(aiId, aiName, typeId)
+```
+
+**验收标准：**
+- [ ] 4张题型卡片按2×2网格排列，位置精确
+- [ ] hover态切换颜色（浅蓝→深蓝边框）
+- [ ] 点击后销毁题型选择UI，保留基础元素
+- [ ] 正确传递 selected type 到出题函数
+
+---
+
+## 4. 题目渲染 (_renderQuestion)
+
+### 4.1 触发
+
+```javascript
+_showChaosQuestion(aiId, aiName, type) →
+├─ 尝试 API: ApiClient.generateChaosQuestion(type, 'normal', 1)
+├─ 成功 → _renderQuestion(res.questions[0], aiId)
+└─ 失败 → _renderFallbackQuestion(aiId)
+```
+
+### 4.2 题目区域布局（在白色卡片内）
+
+| 元素 | 坐标 | depth | 说明 |
+|------|------|-------|------|
+| 题型标签 | `(220, 97)` | 302 | 图标+类型名，color `#FF6B35`, bold, 13px |
+| 题目文本 | `(220, 114)` | 302 | fontSize `14px`, color `#222222`, wordWrap `600px` |
+| 选项A | 左上: `(175, 155)` w=`290` h=`64` | 302 | |
+| 选项B | 右上: `(480, 155)` w=`290` h=`64` | 302 | |
+| 选项C | 左下: `(175, 230)` w=`290` h=`64` | 302 | |
+| 选项D | 右下: `(480, 230)` w=`290` h=`64` | 302 | |
+
+### 4.3 选项样式
+
+| 属性 | 默认态 |
+|------|--------|
+| 背景填充 | `#F5F5F5` |
+| 边框 | `#CCCCCC` (1.5px) |
+| 圆角 | 8px |
+| 文本 | fontSize `13px`, color `#333333`, wordWrap `opW - 55` |
+| 标记圆 | 左侧圆圈 `#4ECDC4`, radius `11px`, 中心 `(gx + 20, gy + 32)` |
+| 标记文字 | A/B/C/D, fontSize `12px`, color `#FFFFFF`, bold |
+
+### 4.4 数据结构
+
+```javascript
+// API 返回格式
+{
+  question: "The word \"abandon\" means:",
+  options: { A: "放弃", B: "接受", C: "建立", D: "发现" },
+  answer: "A",
+  explanation: "abandon 意为\"放弃\"，是四级心词汇。",
+  questionType: "vocabulary"
+}
+
+// 内置回退格式（_renderFallbackQuestion）
+{
+  question: "...",
+  options: { A: "...", B: "...", C: "...", D: "..." },
+  answer: "A",
+  explanation: "...",
+  questionType: "本地题库"
+}
+```
+
+### 4.5 答题锁定
+
+```javascript
+chaosQuestionAnswered = false;  // 渲染时复位
+// 点击选项时:
+if (self.chaosQuestionAnswered) return;  // 防止连点
+self.chaosQuestionAnswered = true;
+```
+
+**验收标准：**
+- [ ] 题目文本自适应换行（wordWrap 600px）
+- [ ] 4个选项按2×2网格排列，精确位置
+- [ ] 每个选项左侧有圆形标记（A/B/C/D）
+- [ ] 点击后立即锁定（chaosQuestionAnswered = true），不再响应后续点击
+
+---
+
+## 5. 答案处理 (_handleOptionClick)
+
+### 5.1 判断逻辑
+
+```javascript
+var answer = optBg.getData('answer');
+var isCorrect = (optKey === answer);
+```
+
+### 5.2 正确回答流程
+
+```
+答对了 →
+├─ chaosScore +1, 更新得分显示 "得分: N"
+├─ SoundManager.win() 播放胜利音效
+├─ _clearQuestionArea() 清空题目区域（保留前5个基础元素）
+├─ 显示反馈 ✓ 绿色 "+1"
+│   ├─ 反馈图标: (480, 103)  resultIcon + "答对了！+1"
+│   └─ fontSize 20px, color #4CAF50, bold
+├─ 如果有 explanation → 显示解析（y=180起，wordWrap 500px）
+├─ _showAiBubble(aiId, 'correct', fbY+10)
+├─ _showSwapUI(aiId, fbY)  ← 弹出换牌界面（玩家选AI的牌）
+```
+
+### 5.3 错误回答流程
+
+```
+答错了 →
+├─ 得分不变
+├─ SoundManager.lose() 播放失败音效
+├─ _clearQuestionArea()
+├─ 显示反馈 ✗ 红色 "答错了！"
+│   ├─ 反馈图标: (480, 103)  resultIcon + "答错了！"
+│   └─ fontSize 20px, color #E53935, bold
+├─ 显示正确答案 (y=180):
+│   "正确答案: A. 放弃"
+│   fontSize 12px, color #4CAF50, bold, wordWrap 500px
+├─ 如果有 explanation → 显示解析
+├─ _showAiBubble(aiId, 'wrong', fbY+10)
+└─ _showSwapResult(aiId, false, fbY)  ← AI从玩家拿一张牌
+```
+
+### 5.4 反馈显示坐标
+
+| 元素 | 坐标 | 说明 |
+|------|------|------|
+| 结果图标 | `(480, 103)` origin `(0.5)` | "✅ 答对了！" 或 "❌ 答错了！" |
+| 正确答案文本 | `(220, 180)` | 仅答错时显示 |
+| 解析说明 | `(220, 208)` 或 `(220, 258)` | 根据长度自适应y偏移 |
+
+**验收标准：**
+- [ ] 答对得分+1，得分文字实时刷新
+- [ ] 答错显示正确答案
+- [ ] 正误反馈有不同音效
+- [ ] 反馈区域正确显示，不与后续UI重叠
+
+---
+
+## 6. UI 元素汇总
+
+### 6.1 所有 Chaos 元素层级总表
+
+| depth | 元素 | 作用域 |
+|-------|------|--------|
+| 300 | 半透明遮罩 (overlay) | 全程 |
+| 301 | 白色卡片背景 (cardBg) | 全程 |
+| 302 | 标题、分数、题型卡片、题目、选项背景、气泡背景等 | 变化 |
+| 303 | 题型图标、标签、选项标记圈、选项文字、气泡头像 | 变化 |
+| 304 | 选项标记字母 | 仅题目阶段 |
+| 305 | 反馈图标、解析文字、底部按钮 | 仅反馈阶段 |
+| 306 | 底部按钮文字 | 仅反馈阶段 |
+| 310 | 换牌消息 | 仅换牌阶段 |
+| 350-355 | 换牌UI遮罩+卡片+按钮 | 仅换牌阶段 |
+
+### 6.2 chaosElements 数组管理
+
+```javascript
+// 索引约定（持久保留前5个）
+[0] overlay          → 半透明遮罩
+[1] cardBg           → 白色卡片背景（含内外两个 Graphics）
+[2] chaosTitle       → "🔥 搞事情！答题挑战"
+[3] chaosScoreText   → "得分: N"
+[4] closeBtnBg       → 关闭按钮背景
+[5] closeBtnText     → "✖"
+// [5+) 临时元素，_clearQuestionArea 会销毁索引≥5的全部
+```
+
+### 6.3 清除函数
+
+```javascript
+_clearQuestionArea() → 保留 chaosElements[0..4]，销毁 [5..end]
+_destroyChaos()     → 销毁所有 chaosElements + chaosBubbleElements
+```
+
+---
+
+## 7. AI 气泡 (_showAiBubble)
+
+### 7.1 气泡布局
+
+出现在题目卡片左侧，位于白色卡片区域 y=180 以下：
+
+| 元素 | 坐标 | depth |
+|------|------|-------|
+| AI 头像圆圈 | `(80, y+16)` radius=`22px` | 302 |
+| 头像文字（😎/😊） | `(80, y+16)` | 303 |
+| AI 名字 | `(105, y-4)` | 302 |
+| 台词气泡背景 | `(230, y+10)` 自适应宽度 | 302 |
+| 三角形箭头 | 气泡左侧指向头像 | 302 |
+| 台词文本 | `(244, y+28)` | 303 |
+
+王怼怼：头像颜色 `0x4FC3F7`（蓝）
+苏甜甜：头像颜色 `0xFFB74D`（橙）
+
+### 7.2 气泡样式
+
+| 属性 | 值 |
+|------|-----|
+| 背景颜色 | `0x1B5E20` (深绿) alpha `0.85` |
+| 边框颜色 | `0x66BB6A` (亮绿) alpha `0.5` |
+| 圆角 | 12px |
+| 宽度 | `Math.min(540, 200 + line.length * 10)` |
+| 高度 | 36px |
+| 箭头 | 左侧三角形指向头像 |
+
+### 7.3 气泡内容（按场景 key）
+
+| sceneKey | 触发时机 | 示例 |
+|----------|---------|------|
+| `easy` | 初始显示 | "送分题，给人类的怜悯。" |
+| `correct` | 答对 | "哼，蒙对的吧？" |
+| `wrong` | 答错 | "哈哈哈哈哈！果然不出所料！" |
+| `close` | 关闭 | "行吧，回来打牌。" |
+
+### 7.4 气泡队列系统
+
+```javascript
+var bubbleQueue = [];       // 全局队列
+var BUBBLE_QUEUE_MAX = 3;   // 最大队列长度
+var bubbleShowing = false;   // 队列处理中标记
+
+_showAiBubble(aiId, sceneKey, y) →
+├─ 构造 queuedTask ← pickAiLine(aiId, sceneKey)
+├─ bubbleQueue.push({ render: queuedTask })
+├─ if (queue > BUBBLE_QUEUE_MAX) queue.shift()
+└─ if (!bubbleShowing) processBubbleQueue()
+
+processBubbleQueue() →
+├─ bubbleShowing = true
+├─ bubbleQueue.shift().render()
+└─ render → 3.5秒后自动销毁 → processBubbleQueue()
+```
+
+**验收标准：**
+- [ ] 气泡显示3.5秒后自动消失
+- [ ] 队列机制确保气泡不重叠
+- [ ] 最多3个任务排队，超出丢弃旧任务
+- [ ] 头像+气泡箭头指向正确
+
+---
+
+## 8. 换牌回牌 (_showSwapUI / _showSwapResult)
+
+### 8.1 答对换牌 (_showSwapUI)
+
+弹出半透明遮罩（depth 350），显示交互式换牌界面：
+
+| 元素 | 坐标 (x, y, w, h) | 说明 |
+|------|---------------------|------|
+| 换牌遮罩 | `(0, 0, 960, 600)` | 半透明黑 `0x000000, 0.6` |
+| 标题 | `(480, 120)` origin `(0.5)` | "🔄 换牌挑战 — 交出你的一张牌，猜猜AI藏了哪张" |
+| 提示文字 | `(480, 142)` | "选你的牌交出 → 猜AI的一张牌背(盲猜模式) → 点确认交换" |
+| AI牌标签 | `(480, 175)` | "{AI名} 的手牌（点击选一张）" |
+| AI牌区域 | y=`200` 横向排列 | 38×54px, 间距26px |
+| 玩家牌标签 | `(480, 300)` | "你的手牌（点击选一张）" |
+| 玩家牌区域 | y=`330` 横向排列 | 44×64px, 间距30px |
+| 确认按钮 | `(240, 390)` w=`200` h=`44` | "✅ 确认交换" |
+| 取消按钮 | `(520, 390)` w=`200` h=`44` | "✖ 跳过交换" |
+
+**交互逻辑：**
+1. 点击玩家牌 → 高亮变大（+6px）
+2. 点击AI牌 → 高亮变大（+6px）
+3. 两张都选中 → 确认按钮变实色
+4. 点击确认 → 交换手牌 → 销毁换牌UI → 显示交换成功消息（3.5秒自动消失）→ 显示底部按钮
+5. 点击跳过 → 销毁换牌UI → 显示底部按钮
+
+**边界情况：** 如果玩家或 AI 手牌为空 → 直接跳转 `_showSwapResult(aiId, false, fbY)`
+
+### 8.2 答错换牌 (_showSwapResult)
+
+```javascript
+_showSwapResult(aiId, false, fbY) →
+├─ AI从玩家手牌随机取一张
+├─ 显示 "😈 {AI名} 从你手中拿走了一张牌！" (480, 184)
+├─ 显示 "[花色牌面]" (480, 206)  ← 3秒后自动消失
+├─ 玩家手牌重渲染
+└─ _showSwapButtons(aiId, max(fbY + 60, 251))
+```
+
+**边界情况：**
+- [ ] 玩家手牌为空 → 函数直接 return，不执行换牌
+- [ ] AI手牌为空 → `_showSwapUI` 跳过换牌界面
+
+### 8.3 底部按钮 (_showSwapButtons)
+
+| 按钮 | 坐标 | 尺寸 | 颜色 | 文字 |
+|------|------|------|------|------|
+| "🔄 再来一题" | `(220, btnY)` | 220×40 | `0x4ECDC4` (青色) | 13px, 白色, bold |
+| "✖ 关掉回牌" | `(510, btnY)` | 220×40 | `0xFF6B6B` (红色) | 13px, 白色, bold |
+
+**btnY 计算：**
+- 答对时: `Math.max(fbY + 60, 280)`
+- 答错时: `Math.max(fbY + 60, 251)`
+
+**"再来一题" 行为：**
+```javascript
+├─ chaosQuestionAnswered = false
+├─ _clearQuestionArea()
+├─ 随机选择新 AI（Math.random() < 0.5 ? duidui : tiantian）
+└─ _showChaosQuestion(aiId, aiName)
+```
+
+**"关掉回牌" 行为：**
+```javascript
+├─ _destroyChaos()
+├─ gameState = PLAYER_TURN
+└─ statusText = "搞事情结束，继续出牌"
+```
+
+**验收标准：**
+- [ ] 答对：出现换牌界面，选两张牌后确认可交换
+- [ ] 答错：AI 自动从玩家手牌取一张
+- [ ] 换牌后玩家手牌重新渲染
+- [ ] AI 手牌计数更新
+- [ ] 底部两个按钮功能正常
+- [ ] 玩家手牌为空时跳过换牌
+
+---
+
+## 9. 回退题目 (_renderFallbackQuestion)
+
+### 9.1 触发条件
+
+- `ApiClient.generateChaosQuestion()` 返回失败
+- `ApiClient` 未定义（本地模式）
+- API 返回成功但 `questions` 数组为空
+
+### 9.2 内置题库
+
+| # | 题目 | 正确答案 | 类型 |
+|---|------|----------|------|
+| 1 | The word "abandon" means: (A=放弃 B=接受 C=建立 D=发现) | A | vocabulary |
+| 2 | "I'm feeling under the weather" 意思: (A=在天气下面 B=生病了 C=喜欢不同天气 D=傻傻笨笨) | B | expression |
+| 3 | 哪个动物几乎不患癌症？(A=鲨鱼 B=大象 C=裸鼹鼠 D=乌龟) | C | trivia |
+| 4 | 哪种方法能让切洋葱不流泪？(A=冷冻30分钟 B=含一口水 C=戴泳镜 D=微波10秒) | C | life_hack |
+
+### 9.3 数据格式
+
+```javascript
+{
+  question: "...",
+  options: { A: "...", B: "...", C: "...", D: "..." },
+  answer: "A" | "B" | "C" | "D",
+  explanation: "...",
+  questionType: "本地题库"
+}
+```
+
+随机选择1道，调用 `_renderQuestion(q, aiId)` 渲染。
+
+**验收标准：**
+- [ ] API 不可用时自动降级为本地题库
+- [ ] 4道题目覆盖4种题型
+- [ ] 随机选取，不与API题冲突
+
+---
+
+## 10. 边界情况与容错
+
+### 10.1 API 失败
+
+| 场景 | 行为 |
+|------|------|
+| API 返回 HTTP 错误 | 降级 → `_renderFallbackQuestion` |
+| API 返回成功但 questions 为空 | 降级 → `_renderFallbackQuestion` |
+| API 超时 | 降级 → `_renderFallbackQuestion` |
+| ApiClient.generateDialogue 不可用 | 本地台词池 `pickAiLine(aiId, event)` |
+| ApiClient 全局未定义 | `isAPIMode = false`，全程本地模式 |
+
+### 10.2 答题状态保护
+
+```javascript
+// 防连点标志（_renderQuestion 中初始化）
+this.chaosQuestionAnswered = false;
+
+// 选项点击检查（_handleOptionClick 入口）
+if (self.chaosQuestionAnswered) return;
+self.chaosQuestionAnswered = true;
+```
+
+### 10.3 手牌为空的情况
+
+```javascript
+// _showSwapResult 中
+if (self.playerHand.length === 0) return;
+
+// _showSwapUI 中
+if (!aiHand || aiHand.length === 0 || !self.playerHand || self.playerHand.length === 0) {
+  self._showSwapResult(aiId, false, fbY);
+  return;
+}
+```
+
+### 10.4 状态恢复
+
+```javascript
+// 关闭搞事情 → _destroyChaos()
+├─ 销毁所有 chaos 元素
+├─ SoundManager.resumeAll()    // 恢复出牌音效
+├─ gameState = PLAYER_TURN     // 恢复出牌状态
+└─ setStatusText("搞事情结束，继续出牌")
+```
+
+### 10.5 气泡队列溢出
+
+```javascript
+if (bubbleQueue.length > BUBBLE_QUEUE_MAX) bubbleQueue.shift();
+```
+队列最多3个任务，超出时丢弃最旧的任务。
+
+### 10.6 其他边界
+
+| 场景 | 处理 |
+|------|------|
+| 多次快速点击"搞事情"按钮 | `gameState !== PLAYER_TURN` 时 return |
+| 答题中玩家手牌变空 | 换牌阶段检查长度，空则跳过 |
+| AI 手牌在答题过程中变空 | `_showSwapUI` 时检查，跳转至 `_showSwapResult` |
+| 题型选择后快速点击关闭 | `_destroyChaos` 安全销毁所有元素 |
+| 换牌过程中关闭 | 跳过换牌直接显示底部按钮 |
+
+---
+
+## 11. 动画参数汇总
+
+| 动画 | 位置/对象 | 参数 |
+|------|----------|------|
+| 气泡显示 | 台词气泡 | 3.5秒后自动 `destroy`（出牌气泡4~5秒） |
+| 换牌消息 | "🔥 交换成功" | 3.5秒后自动 `destroy` |
+| 答错消息 | "😈 AI从你手中..." | 3秒后自动 `destroy` |
+| 遮罩出现 | overlay | 即时，无渐变动画 |
+| 气泡队列调度 | 所有气泡 | 队列中串行处理，上一个销毁再处理下一个 |
+
+---
+
+## 12. 验收测试用例
+
+| # | 测试场景 | 预期结果 | 优先级 |
+|---|---------|---------|--------|
+| T1 | 点击"搞事情"按钮 | 遮罩出现→题型选择界面 | P0 |
+| T2 | 点击关闭按钮 | 完全退出chaos，恢复出牌 | P0 |
+| T3 | 选择任意题型 | 销毁题型选择，加载题目 | P0 |
+| T4 | 答对题目 | 得分+1，进入换牌界面 | P0 |
+| T5 | 答错题目 | 得分不变，AI随机拿牌 | P0 |
+| T6 | 换牌操作（答对） | 玩家选牌+AI选牌→确认→交换成功 | P0 |
+| T7 | 点击"再来一题" | 换AI出题，可无限循环 | P0 |
+| T8 | 点击"关掉回牌" | 完全退出chaos，恢复出牌 | P0 |
+| T9 | API 不可用时进入chaos | 使用本地题库，正常完成流程 | P0 |
+| T10 | 快速连点选项 | 只响应一次，chaosQuestionAnswered锁定 | P0 |
+| T11 | 玩家手牌为0时换牌 | 跳过换牌/取牌，直接显示底部按钮 | P1 |
+| T12 | AI 手牌为0时答对换牌 | 跳过`_showSwapUI` | P1 |
+| T13 | 多轮"再来一题" | 每次随机换AI，分数累计 | P1 |
+| T14 | 气泡队列超过3个 | 丢弃最旧任务，保持队列长度≤3 | P1 |
+| T15 | 在CHAOS_MODE时再次点击按钮 | 无响应（状态保护） | P2 |
+
+---
+
+## 13. 相关数据结构
+
+### 13.1 GameScene 新增属性
+
+```javascript
+// Chaos mode 属性
+this.chaosScore = 0;              // 累计搞事情得分（跨回合持久化）
+this.chaosElements = [];          // 所有chaos UI元素引用
+this.chaosBubbleElements = [];    // 气泡元素引用
+this.chaosOverlay = null;         // 遮罩 Graphics
+this.chaosCardBg = null;          // 白色卡片背景
+this.chaosTitle = null;           // 标题 Text
+this.chaosQText = null;           // 题目 Text（保留兼容）
+this.chaosScoreText = null;       // 得分 Text
+this.chaosTypeSelection = false;  // 题型选择是否激活
+this.chaosQuestionAnswered = false; // 当前题目是否已作答
+```
+
+### 13.2 全局变量
+
+```javascript
+var bubbleQueue = [];       // 气泡队列
+var BUBBLE_QUEUE_MAX = 3;   // 队列最大长度
+var bubbleShowing = false;   // 队列是否正在处理
+```
+
+---
+
+## 14. 台词池（AI_LINES）
+
+### 王怼怼（毒舌型）
+
+| key | 示例台词 |
+|-----|---------|
+| correct | "哼，蒙对的吧？" / "这次算你走运。" |
+| wrong | "哈哈哈哈哈！果然不出所料！" / "这种题都会选错？你是来斗地主还是来斗笨的？" |
+| easy | "送分题，给人类的怜悯。" |
+| close | "行吧，回来打牌。" |
+
+### 苏甜甜（可爱型）
+
+| key | 示例台词 |
+|-----|---------|
+| correct | "哇塞！你真的会！！！" / "太棒啦！你是我见过最聪明的人类！" |
+| wrong | "啊啊啊错了！我……裂……开……了……😭" / "不是吧！这简直……好玩！哈哈哈哈哈！" |
+| easy | "这道题送你啦！不客气！" |
+| close | "回来打牌啦！哈哈哈！" |
+
+完整台词池见 `AI_LINES` 全局对象（~50条台词）。
+
+```
+
+---
+
+## `docs/Gameplay-detailed.md` (42,522 字节)
+
+```markdown
+# 出牌系统 (Gameplay) — 超详细设计文档
+
+**版本:** v2.0  
+**作者:** 产品经理  
+**日期:** 2026-05-02  
+**基准画布:** 960×600 横屏 (Phaser 3 Scale.FIT)  
+**对应源码:** `src/client/js/game.js` (2897行)  
+**依赖:** `src/client/js/CardEngine.js` (牌型识别/校验)  
+
+---
+
+## 目录
+
+1. [状态机总览](#1-状态机总览)
+2. [手牌选择交互](#2-手牌选择交互)
+3. [动作按钮状态](#3-动作按钮状态)
+4. [玩家出牌流程](#4-玩家出牌流程)
+5. [玩家不出流程](#5-玩家不出流程)
+6. [提示系统](#6-提示系统)
+7. [AI回合流程](#7-ai回合流程)
+8. [过牌与出牌权流转](#8-过牌与出牌权流转)
+9. [出牌显示](#9-出牌显示)
+10. [赢牌检测与结算](#10-赢牌检测与结算)
+11. [出牌记录系统](#11-出牌记录系统)
+12. [UI变化全记录](#12-ui变化全记录)
+13. [边界情况](#13-边界情况)
+14. [验收标准](#14-验收标准)
+
+---
+
+## 1. 状态机总览
+
+### 1.1 完整状态流转
+
+```
+                    ┌──────────┐
+                    │   INIT    │  scene.restart 或 浏览器刷新
+                    └────┬─────┘
+                         │ delay 800ms
+                         ▼
+                    ┌──────────┐
+                    │ BIDDING  │  叫分阶段
+                    └────┬─────┘
+                         │ finishBidding / localAssignLandlord
+                         │ delay 1200ms
+                         ▼
+        ┌───────────────────────────────────────┐
+        │              PLAYER_TURN               │  ← 核心状态
+        │  可: 出牌(doPlayerPlay)                  │
+        │      提示(doHint)                        │
+        │      不出(doPlayerPass)                  │
+        │      搞事情(doAction)                    │
+        └──────────┬───────────┬──────────────────┘
+                   │           │
+          doPlayerPlay │    doAction (搞事情)
+                   ▼           ▼
+        ┌──────────────┐  ┌─────────────┐
+        │  VALIDATING   │  │ CHAOS_MODE  │  ← 搞事情遮罩层
+        │  API验证牌型   │  └─────────────┘
+        └──────┬───────┘       │ _destroyChaos
+               │ valid         │
+               ▼               ▼
+        ┌──────────────┐  PLAYER_TURN
+        │  WAITING_AI   │  (恢复)
+        │  AI思考1.2s   │
+        │  AI出牌/pass  │
+        └──────┬───────┘
+               │
+         ┌─────┴─────┐
+         │           │
+    AI出牌+继续      AI手牌空
+         │           │
+         ▼           ▼
+    WAITING_AI   ROUND_END
+    或 PLAYER_    (结算面板)
+    TURN
+```
+
+### 1.2 状态枚举 (代码)
+
+```javascript
+var GAME_STATE = {
+  INIT: 'INIT',           // 初始/发牌
+  BIDDING: 'BIDDING',     // 叫分阶段
+  PLAYER_TURN: 'PLAYER_TURN', // 玩家可出牌
+  VALIDATING: 'VALIDATING',   // 出牌验证
+  WAITING_AI: 'WAITING_AI',   // 等待AI出牌
+  ROUND_END: 'ROUND_END',     // 牌局结束
+  CHAOS_MODE: 'CHAOS_MODE'    // 搞事情模式
+};
+```
+
+### 1.3 关键状态变量
+
+| 变量 | 类型 | 初始值 | 说明 |
+|:----|:----:|:------:|------|
+| `gameState` | string | `INIT` | 当前游戏阶段 |
+| `lastPlay` | array | null | 上家出的牌组 |
+| `lastPlayInfo` | object | null | 上家出牌的牌型信息 |
+| `lastPlayPlayer` | string | null | `'player'`/`'ai1'`/`'ai2'` |
+| `passCount` | number | 0 | 连续pass计数 (≥2时重置) |
+| `selectedCards` | array | [] | 当前选中手牌索引 |
+| `playerHand` | array | [] | 玩家手牌 (Card数组) |
+| `ai1Hand` | array | [] | AI1王怼怼手牌 |
+| `ai2Hand` | array | [] | AI2苏甜甜手牌 |
+| `cardDomElements` | array | [] | 手牌图片DOM引用 |
+| `totalBombs` | number | 0 | 炸弹累计 (影响结算) |
+| `playHistory` | array | [] | 出牌记录 (max 8条) |
+
+---
+
+## 2. 手牌选择交互
+
+### 2.1 手牌渲染 (renderPlayerHand)
+
+**精确代码 (renderPlayerHand, ~408-460):**
+
+```javascript
+var n = hand.length, cw = 56, ch = 80;
+var overlap = n > 6 ? Math.min(33, (700 - cw) / (n - 1)) : 33;
+var totalWidth = cw + (n - 1) * overlap;
+var startX = 180 + (700 - totalWidth) / 2;
+var baseY = 345;
+```
+
+| 属性 | 值 |
+|:----:|:---:|
+| 牌宽 (cw) | **56 px** |
+| 牌高 (ch) | **80 px** |
+| 重叠量 (overlap) | **恒等于33** (n≤19时 700-56=644, 644/(n-1) > 33) |
+| 底边Y (baseY) | **345** |
+| 起始X | `180 + (700 - totalWidth) / 2` |
+| 弧线偏移 | `(t-0.5)² × 36`, 两端比中间高**9px** |
+| depth | **110** |
+
+### 2.2 选中/取消逻辑
+
+```
+点击手牌 (pointerdown)
+  │
+  ├─ gameState !== PLAYER_TURN
+  │   └─ showToast("现在不是你的出牌阶段") → return
+  │
+  ├─ 已选中 (getData('selected') === true)
+  │   ├─ card.y += 16              // 复位
+  │   ├─ setData('selected', false)
+  │   ├─ selectedCards.splice(idx, 1)  // 从选中数组移除
+  │   └─ SoundManager.deselectCard()   // cardSlide1-3, vol 0.5
+  │
+  └─ 未选中 (getData('selected') === false)
+      ├─ card.y -= 16              // 上移16px
+      ├─ setData('selected', true)
+      ├─ selectedCards.push(idx)   // 加入选中数组
+      └─ SoundManager.selectCard()    // cardSlide1-3, vol 0.6
+```
+
+**选中状态图示:**
+```
+  ╔═══════════════════╗     ║
+  ║     选中牌        ║     ║  其他牌
+  ║   (y-16=329)     ║     ║  (y=345)
+  ╚═══════════════════╝     ║
+                    ╔═══════╝
+                    ║  16px差
+```
+
+### 2.3 辅助方法
+
+```javascript
+_clearCardSelection():
+  // 遍历所有 cardDomElements
+  // 若 selected 为 true:
+  //   y = origY (复位)
+  //   selected = false
+
+_highlightCard(el):
+  // el.selected = true
+  // el.y = origY - 16
+```
+
+### 2.4 手牌图片管理
+
+```javascript
+// 渲染时创建
+var img = self.add.image(cx, cy, key).setDisplaySize(cw, ch).setDepth(110);
+img.setInteractive();
+img.setData('cardIdx', ii);
+img.setData('card', card);
+img.setData('selected', false);
+img.setData('origY', cy);
+self.cardDomElements.push(img);
+self.handCards.push(img);
+
+// 重新渲染时
+for (var di = 0; di < this.cardDomElements.length; di++) {
+  var old = this.cardDomElements[di];
+  if (old) { if (old.img) old.img.destroy(); old.destroy(); }
+}
+this.cardDomElements = [];
+this.handCards = [];
+```
+
+---
+
+## 3. 动作按钮状态
+
+### 3.1 按钮创建 (createActionButtons)
+
+```javascript
+var bw = 72, bh = 48, gap = 14;
+var totalW = bw * 5 + gap * 4;   // = 416
+var startX = (960 - totalW) / 2; // = 272
+var btnY = 442;
+```
+
+| 按钮 | 标签 | 颜色 (hex) | X | 回调函数 | 状态要求 |
+|:----:|:----:|:----------:|:--:|:---------|:---------|
+| 出牌 | `出牌` | `#4ECDC4` (青) | 272 | `doPlayerPlay()` | PLAYER_TURN |
+| 提示 | `提示` | `#FFD93D` (黄) | 358 | `doHint()` | PLAYER_TURN |
+| 不出 | `不出` | `#FF6B6B` (红) | 444 | `doPlayerPass()` | PLAYER_TURN + 有lastPlay |
+| 搞事情 | `搞事情` | `#7C4DFF` (紫) | 530 | `doAction()` | PLAYER_TURN 或 CHAOS_MODE |
+| 底牌查看 | `底牌查看` | `#78909C` (灰蓝) | 616 | `showBottomCards()` | 任意 |
+
+**按钮样式:** 72×48，圆角8px，文字13px bold白色，depth 100(背景)/101(文字)
+
+### 3.2 按钮显示/隐藏
+
+```javascript
+hideActionButtons():   // 叫分阶段、结算时调用
+  for each in actionButtons: destroy()
+  actionButtons = []
+
+showActionButtons():
+  hideActionButtons()
+  createActionButtons(this)   // 重新创建5个按钮
+```
+
+### 3.3 不出按钮守卫
+
+`doPlayerPass()` 入口检查:
+```javascript
+if (!this.lastPlay || this.lastPlay.length === 0) {
+  showToast(this, '自由出牌阶段不能跳过');
+  return;
+}
+```
+
+**不出按钮在任何时候都可点击**, 但守卫在 `doPlayerPass` 内，自由出牌阶段会提示不能跳过。
+
+### 3.4 出牌按钮守卫
+
+`doPlayerPlay()` 入口检查链:
+```
+1. gameState !== PLAYER_TURN → Toast
+2. selectedCards.length === 0 → Toast "请先选择手牌"
+3. identifyType(playCards) === INVALID → Toast "非法牌型组合"
+4. lastPlay存在且 canBeat === false → Toast "不能压过上家的牌"
+```
+
+---
+
+## 4. 玩家出牌流程
+
+### 4.1 doPlayerPlay() — 入口
+
+```
+doPlayerPlay()
+  │
+  ├─ [guard 1] gameState !== PLAYER_TURN → toast + return
+  ├─ [guard 2] selectedCards.length === 0 → toast + return
+  │
+  ├─ playCards = selectedCards.map(idx => playerHand[idx])
+  ├─ info = Doudizhu.identifyType(playCards)
+  ├─ [guard 3] info.type === INVALID → toast + return
+  │
+  ├─ [guard 4] lastPlay 存在且长度>0
+  │   └─ !Doudizhu.canBeat(playCards, lastPlay) → toast + return
+  │
+  ├─ gameState = VALIDATING
+  ├─ setStatusText("验证中...")
+  │
+  ├─ [API模式]
+  │   ├─ ApiClient.verifyPlay(playCards, lastPlay, playerHand)
+  │   ├─ res.valid === true → confirmPlay(playCards, info)
+  │   ├─ res.valid === false → toast(res.error) + gameState = PLAYER_TURN
+  │   └─ catch → confirmPlay(playCards, info)  // 降级本地验证
+  │
+  └─ [本地模式] → confirmPlay(playCards, info)
+```
+
+### 4.2 confirmPlay() — 确认出牌
+
+```
+confirmPlay(playCards, info)
+  │
+  ├─ 构建 playSet (suit:rank → count) 用于快速匹配
+  │
+  ├─ 从 playerHand 移除已出牌:
+  │   for j = playerHand.length-1 to 0:
+  │     if match(playSet): splice(j, 1), playSet[key]--
+  │
+  ├─ 更新出牌状态:
+  │   lastPlay = playCards
+  │   lastPlayInfo = info
+  │   lastPlayPlayer = 'player'
+  │   passCount = 0
+  │
+  ├─ 视觉反馈:
+  │   displayPlay(playCards, 'player')      // 出牌区显示
+  │   setStatusText("已出 " + typeName)
+  │   selectedCards = []
+  │   renderPlayerHand()                    // 移除已出牌
+  │
+  ├─ 记录+音效:
+  │   addPlayHistory('player', playCards)
+  │   SoundManager.playCard()               // cardPlace1-3, vol 0.8
+  │
+  ├─ 炸弹检测:
+  │   if (info.type === BOMB || ROCKET):
+  │     totalBombs++
+  │
+  ├─ 赢牌检测:
+  │   if (playerHand.length === 0):
+  │     SoundManager.win()                  // cardPlace3, vol 0.9
+  │     renderRoundEndPanel('player')
+  │     return
+  │
+  └─ 切换AI回合:
+      gameState = WAITING_AI
+      delay 600ms → doAITurn(0)            // 轮到王怼怼
+```
+
+### 4.3 间隔时间
+
+| 动作 | 延迟 | 说明 |
+|:----|:----:|:-----|
+| 玩家出牌 → AI1回合 | 600ms | confirmPlay末尾 |
+| AI回合 → 下一个AI | 1200ms | handleAIPlay/localAIPlay |
+| AI1过 → AI2回合 | 1200ms | handleAIPass |
+| 玩家不出 → AI2回合 | 800ms | doPlayerPass |
+| 两轮过 → 出牌权移交 | 800ms | doPlayerPass (玩家) |
+| 两轮过 → AI出牌 | 1200ms | handleAIPass (AI) |
+
+---
+
+## 5. 玩家不出流程
+
+### 5.1 doPlayerPass() — 入口
+
+```
+doPlayerPass()
+  │
+  ├─ [guard] gameState !== PLAYER_TURN → return (静默)
+  ├─ [guard] !lastPlay || lastPlay.length === 0
+  │   └─ toast("自由出牌阶段不能跳过") → return
+  │
+  ├─ passCount++
+  ├─ showToast("不出")
+  ├─ setStatusText("你选择不出")
+  ├─ selectedCards = []                     // 清空选牌
+  ├─ addPlayHistory('player', true)         // true=pass
+  │
+  ├─ [passCount >= 2] 两轮都过
+  │   ├─ passCount = 0, lastPlay = null, lastPlayInfo = null
+  │   ├─ 出牌权归 lastPlayPlayer
+  │   │   ├─ lastPlayPlayer === 'player':
+  │   │   │   gameState = PLAYER_TURN
+  │   │   │   setStatusText("两家都过，轮到你自由出牌")
+  │   │   │
+  │   │   └─ lastPlayPlayer === 'ai1'/'ai2':
+  │   │       aiIdx = (lastPlayPlayer==='ai1')?0:1
+  │   │       gameState = WAITING_AI
+  │   │       delay 800ms → doAITurn(aiIdx)
+  │   └─ return
+  │
+  └─ [passCount === 1] 一轮过
+      ├─ gameState = WAITING_AI
+      └─ delay 800ms → doAITurn(1)   // 轮到苏甜甜
+```
+
+### 5.2 passCount 流转示意图
+
+```
+初始: passCount=0, lastPlayPlayer=null
+
+场景A: 玩家出3 → AI1出4 → AI2不出 → 玩家不出
+  passCount: 0 → (玩家出)0 → (AI1出)0 → (AI2过)1 → (玩家过)2→0
+  → 两家都过 (player过+AI2过)，出牌权归 lastPlayPlayer='ai1' 王怼怼
+
+场景B: 玩家出3 → AI1不出 → AI2不出
+  passCount: 0 → (玩家出)0 → (AI1过)1 → (AI2过)2→0
+  → 两家都过 (AI1过+AI2过)，出牌权归 lastPlayPlayer='player' 玩家
+
+场景C: 玩家不出 → AI1出4 → AI2不出
+  passCount: 0 → (玩家过)1 → (AI1出)0 → (AI2过)1
+  → 仅AI2一轮过，轮到玩家：gameState = PLAYER_TURN
+```
+
+---
+
+## 6. 提示系统
+
+### 6.1 doHint() — 入口
+
+```
+doHint()
+  │
+  ├─ [guard] gameState !== PLAYER_TURN → return
+  ├─ setStatusText("计算可出牌型...")
+  │
+  ├─ [API模式]
+  │   ├─ ApiClient.findPlays(playerHand, lastPlay)
+  │   ├─ res.total === 0 → toast("没有能出的牌") + return
+  │   ├─ else:
+  │   │   highlightHint(res.plays[0])
+  │   │   setStatusText("提示: " + typeName + " (共N种)")
+  │   └─ catch → localHint()  // 降级
+  │
+  └─ [本地模式] → localHint()
+```
+
+### 6.2 localHint() — 本地提示
+
+```
+localHint()
+  │
+  ├─ plays = Doudizhu.findValidPlays(playerHand, lastPlay)
+  ├─ [plays.length === 0]:
+  │   toast("没有能出的牌")
+  │   setStatusText("没有能出的牌")
+  │   return
+  │
+  ├─ hintPlay = plays[0]  // 取最弱推荐 (typeSortOrder最小)
+  ├─ _clearCardSelection()
+  ├─ selectedCards = []
+  │
+  ├─ 构建 hintRanks:
+  │   for hintPlay中的每张牌: hintRanks[suit:rank] = true
+  │
+  ├─ 匹配并高亮:
+  │   for cardDomElements:
+  │     if match hintRanks: _highlightCard() + push selectedCards
+  │
+  └─ setStatusText("提示: " + HAND_TYPE_NAMES[info.type])
+```
+
+### 6.3 highlightHint() — API提示高亮
+
+```javascript
+highlightHint(hint):
+  _clearCardSelection()
+  selectedCards = []
+  if (!hint.cards) return
+  for cardDomElements中的每张牌:
+    for hint.cards中的每张牌:
+      if (suit匹配 && rank匹配):
+        _highlightCard()
+        selectedCards.push(idx)
+        break
+```
+
+### 6.4 提示用例
+
+| 场景 | lastPlay | 推荐策略 | 效果 |
+|:----|:---------|:---------|:-----|
+| 自由出牌 | null | 最小单张 (3) | 选中单张3 |
+| 上家出K | [K] | 找能压过K的最小牌 (A/2/小王/大王/炸弹) | 选中A |
+| 上家出顺子 | 34567 | 找能压过的最小顺子 | 选中45678 |
+| 上家出炸弹 | 4个8 | 找更大炸弹或火箭 | 选中4个10或火箭 |
+| 无牌可出 | — | Toast "没有能出的牌" | 状态文字更新 |
+
+---
+
+## 7. AI回合流程
+
+### 7.1 doAITurn(aiIndex) — 入口
+
+**aiIndex:** `0` = 王怼怼 (AI1), `1` = 苏甜甜 (AI2)
+
+```
+doAITurn(aiIndex)
+  │
+  ├─ hand = (aiIndex===0) ? ai1Hand : ai2Hand
+  ├─ aiName = (aiIndex===0) ? "王怼怼" : "苏甜甜"
+  │
+  ├─ gameState = WAITING_AI
+  ├─ setStatusText(aiName + " 思考中...")
+  ├─ SoundManager.aiThink()
+  │
+  ├─ [手牌为空检查]
+  │   if (hand.length === 0):
+  │     renderRoundEndPanel('ai1'/'ai2')
+  │     return
+  │
+  ├─ [API模式] delay 1200ms:
+  │   ├─ ApiClient.aiPlay(hand, lastPlay)
+  │   ├─ res.canPlay === false || !res.choice → handleAIPass(aiIndex, aiName)
+  │   ├─ else → handleAIPlay(aiIndex, aiName, res)
+  │   └─ catch → localAIPlay(aiIndex, aiName)
+  │
+  └─ [本地模式] → localAIPlay(aiIndex, aiName)
+```
+
+**API调用:** `ApiClient.aiPlay(hand, lastPlay)`  
+**返回格式:**
+```json
+{
+  "canPlay": true,
+  "choice": { "cards": [{suit, rank}, ...], "typeName": "单张" }
+}
+// 或
+{
+  "canPlay": false,
+  "choice": null
+}
+```
+
+### 7.2 handleAIPlay() — AI出牌
+
+```
+handleAIPlay(aiIndex, aiName, res)
+  │
+  ├─ 匹配出牌:
+  │   apiCards = res.choice.cards
+  │   for apiCards中的每张牌:
+  │     for hand中的每张牌:
+  │       if (suit+rank匹配): push到playCards, splice移除
+  │
+  ├─ [匹配失败处理]:
+  │   if (playCards.length !== apiCards.length):
+  │     if (有部分匹配 && 部分牌型有效): 使用部分匹配
+  │     else: localAIPlay(aiIndex, aiName) → return
+  │
+  ├─ 更新状态:
+  │   lastPlay = playCards
+  │   lastPlayInfo = info
+  │   lastPlayPlayer = (aiIndex===0) ? 'ai1' : 'ai2'
+  │   passCount = 0
+  │
+  ├─ 视觉反馈:
+  │   displayPlay(playCards, 'ai1'/'ai2')
+  │   setStatusText(aiName + " 出了 " + typeName)
+  │   updateAICount(aiIndex)           // 更新顶部剩余张数
+  │   addPlayHistory('ai1'/'ai2', playCards)
+  │
+  ├─ 气泡:
+  │   bubbleKey = (炸弹/火箭) ? 'bomb' : 'play'
+  │   _showPlayBubble('duidui'/'tiantian', bubbleKey, typeName)
+  │
+  ├─ 炸弹检测:
+  │   if (BOMB/ROCKET): totalBombs++
+  │
+  ├─ [赢牌检测]:
+  │   if (hand.length === 0):
+  │     renderRoundEndPanel('ai1'/'ai2')
+  │     return
+  │
+  └─ 下一个:
+      ├─ AI1出 → delay 1200ms → doAITurn(1)  // 轮到苏甜甜
+      └─ AI2出 → gameState = PLAYER_TURN
+                 SoundManager.playerTurn()   // chipsCollide1-3
+                 setStatusText("轮到你出牌")
+```
+
+### 7.3 handleAIPass() — AI不出
+
+```
+handleAIPass(aiIndex, aiName)
+  │
+  ├─ passCount++
+  ├─ setStatusText(aiName + " 不出")
+  ├─ updateAICount(aiIndex)
+  ├─ addPlayHistory('ai1'/'ai2', true)
+  ├─ _showPlayBubble('duidui'/'tiantian', 'pass', '')
+  │
+  ├─ [两轮都过 passCount >= 2]:
+  │   ├─ passCount = 0, lastPlay = null
+  │   ├─ 出牌权归 lastPlayPlayer:
+  │   │   ├─ lastPlayPlayer === 'player':
+  │   │   │   gameState = PLAYER_TURN
+  │   │   │   setStatusText("两家都过，轮到你自由出牌")
+  │   │   │
+  │   │   └─ lastPlayPlayer === 'ai1'/'ai2':
+  │   │       delay 1200ms → doAITurn(aiIdx)
+  │   └─ return
+  │
+  ├─ [一轮过]:
+  │   ├─ AI1过 → delay 1200ms → doAITurn(1)   // 轮到苏甜甜
+  │   └─ AI2过 → gameState = PLAYER_TURN
+  │              setStatusText("轮到你出牌")
+  └─ return
+```
+
+### 7.4 localAIPlay() — 本地AI策略
+
+```
+localAIPlay(aiIndex, aiName)
+  │
+  ├─ plays = Doudizhu.findValidPlays(hand, lastPlay)
+  │
+  ├─ [无牌可出] → handleAIPass(aiIndex, aiName) → return
+  │
+  ├─ chosen = plays[0]   // typeSortOrder最小的
+  │
+  ├─ [自由出牌优化]:
+  │   if (!lastPlay || lastPlay.length === 0):
+  │     遍历 plays 找 singlePlay (length===1的第一个)
+  │     if (找到): chosen = singlePlay
+  │
+  ├─ 从 hand 中移除 chosen 的牌 (splice)
+  ├─ 更新 lastPlay/lastPlayPlayer/passCount/displayPlay
+  ├─ setStatusText, updateAICount, addPlayHistory
+  ├─ _showPlayBubble('duidui'/'tiantian', 'play'/'bomb', typeName)
+  ├─ 炸弹检测: totalBombs++
+  │
+  ├─ [赢牌: hand.length === 0] → renderRoundEndPanel → return
+  │
+  └─ 下一个:
+      ├─ AI1 → delay 1200ms → doAITurn(1)
+      └─ AI2 → gameState = PLAYER_TURN, playerTurn音效
+```
+
+**AI策略优先级 (typeSortOrder):**
+
+| 排序 | 牌型 | 说明 |
+|:----:|:----:|------|
+| 0 | SINGLE | 单张 (最优先出) |
+| 1 | PAIR | 对子 |
+| 2 | TRIPLE | 三张 |
+| 3 | TRIPLE_PLUS_ONE | 三带一 |
+| 4 | TRIPLE_PLUS_TWO | 三带二 |
+| 5 | STRAIGHT | 顺子 |
+| 6 | CONSECUTIVE_PAIRS | 连对 |
+| 7 | AIRPLANE | 飞机 |
+| 8 | AIRPLANE_PLUS_SINGLES | 飞机带单 |
+| 9 | AIRPLANE_PLUS_PAIRS | 飞机带对 |
+| 10 | FOUR_PLUS_TWO | 四带二 |
+| 11 | FOUR_PLUS_TWO_PAIRS | 四带两对 |
+| 12 | BOMB | 炸弹 |
+| 13 | ROCKET | 火箭 |
+
+**AI本地策略特点:**
+- 自由出牌时优先出最小单张
+- 接牌时选 plays[0] (type排序最小的牌型)
+- 不区分手牌强弱，不主动放牌或压牌
+- 简单贪心策略
+
+---
+
+## 8. 过牌与出牌权流转
+
+### 8.1 完整流转图
+
+```
+假设叫分顺序: 玩家(地主) → AI1(王怼怼) → AI2(苏甜甜)
+
+玩家出牌 → AI1 → AI2 → (循环)
+
+玩家出牌 (lastPlayPlayer='player', passCount=0)
+  │
+  ├─ AI1出牌 (lastPlayPlayer='ai1', passCount=0)
+  │   └─ AI2出牌 (lastPlayPlayer='ai2', passCount=0)
+  │       └─ 玩家出牌 (循环)
+  │
+  ├─ AI1过 (passCount=1)
+  │   └─ AI2出牌 (passCount=0)
+  │       └─ 玩家出牌
+  │
+  ├─ AI1过 (passCount=1)
+  │   └─ AI2过 (passCount=2→0, lastPlayPlayer='player')
+  │       └─ 玩家自由出牌 (reset)
+  │
+  └─ AI1出牌 (passCount=0)
+      └─ AI2过 (passCount=1)
+          └─ 玩家过 (passCount=2→0, lastPlayPlayer='ai1')
+              └─ AI1自由出牌 (reset)
+```
+
+### 8.2 passCount 计数谁
+
+`passCount` 记录**连续pass**的次数：
+- 每次有人**出牌** → passCount = 0
+- 每次有人**不出** → passCount++
+- passCount ≥ 2 → 重置 (两轮都过)
+
+### 8.3 出牌权 (lastPlayPlayer)
+
+**规则:** 两轮都过后，上一轮**最后出牌的人**获得自由出牌权。
+
+```javascript
+if (passCount >= 2) {
+  passCount = 0;
+  lastPlay = null;  // 清除上家牌
+  // 出牌权归 lastPlayPlayer
+}
+```
+
+### 8.4 7种流转路径
+
+| # | 路径 | 时间 | 过程 |
+|:-:|:-----|:----:|:-----|
+| 1 | 玩家→AI1→AI2→玩家(循环) | 600+1200+0ms | 正常循环出牌 |
+| 2 | 玩家→AI1过→AI2→玩家 | 600+1200+0ms | AI1pass |
+| 3 | 玩家→AI1→AI2过→玩家 | 600+1200+0ms | AI2pass → 玩家回合 |
+| 4 | 玩家→AI1过→AI2过→玩家自由出牌 | 600+1200+800ms | 两AI都过 |
+| 5 | 玩家过→AI1→AI2→玩家 | 800+1200+0ms | 玩家pass |
+| 6 | 玩家过→AI1过→AI2过→AI1自由出牌 | 800+1200+1200ms | 玩家+AI1过, 归AI1 |
+| 7 | 玩家出牌→AI1→AI2过→玩家过→AI1自由出牌 | 600+1200+0+800ms | 2轮不同pass源 |
+
+### 8.5 流转时间汇总
+
+| 起点 | 终点 | 延迟 | 代码位置 |
+|:----|:-----|:----:|:---------|
+| 玩家出牌 | AI1 (doAITurn(0)) | 600ms | confirmPlay |
+| 玩家不出(1次) | AI2 (doAITurn(1)) | 800ms | doPlayerPass |
+| 玩家不出(2次) | lastPlayPlayer (出牌权者) | 800ms | doPlayerPass |
+| AI出牌 | 下一个AI/玩家 | 1200ms | handleAIPlay/localAIPlay |
+| AI不出(1次) | 下一个AI/玩家 | 1200ms | handleAIPass |
+| AI不出(2次) | lastPlayPlayer (出牌权者) | 1200ms | handleAIPass |
+
+---
+
+## 9. 出牌显示
+
+### 9.1 displayPlay(cards, player) — 精确坐标
+
+```javascript
+var positions = {
+  player: { x: 360, y: 195, w: 50, h: 72, origin: 0.5 },
+  ai1:    { x: 280, y: 133, w: 42, h: 60, origin: 0.5 },
+  ai2:    { x: 680, y: 133, w: 42, h: 60, origin: 0.5 }
+};
+```
+
+| 角色 | 中心X | Y | 牌宽 | 牌高 | depth |
+|:----:|:-----:|:-:|:----:|:----:|:-----:|
+| 玩家 | 360 | 195 | 50 | 72 | 21 |
+| 王怼怼 (AI1) | 280 | 133 | 42 | 60 | 21 |
+| 苏甜甜 (AI2) | 680 | 133 | 42 | 60 | 21 |
+
+### 9.2 重叠量公式
+
+```javascript
+var overlap = Math.min(pos.w * 0.6, (480 - pos.w) / Math.max(n - 1, 1));
+```
+
+| 玩家 | w×0.6 | 上限值 (单张时) | 单张 / 4张 / 多张 |
+|:----:|:-----:|:---------------:|:----------------:|
+| 玩家 | 30 | ∞ (n=1) | 单张=any, 4张=min(30, 143..) |
+| AI | 25.2 | ∞ (n=1) | 同左 |
+
+### 9.3 起始X计算
+
+```javascript
+var totalW = pos.w + (n - 1) * overlap;
+var startX = pos.x - totalW / 2;
+```
+
+### 9.4 清理逻辑
+
+`displayPlay` 每次调用先销毁旧的出牌图片数组:
+```javascript
+var gfxKey = player === 'player' ? 'myPlayCardsGfx' :
+             (player === 'ai1' ? 'ai1PlayCardsGfx' : 'ai2PlayCardsGfx');
+var oldGfx = this[gfxKey];
+if (oldGfx) {
+  for (var gi = 0; gi < oldGfx.length; gi++) oldGfx[gi].destroy();
+}
+this[gfxKey] = [];
+```
+
+---
+
+## 10. 赢牌检测与结算
+
+### 10.1 检测时机 (6处)
+
+| 触发函数 | 条件 | 调用 |
+|:---------|:----|:-----|
+| `confirmPlay()` | `playerHand.length === 0` | `renderRoundEndPanel('player')` |
+| `doAITurn()` | `hand.length === 0` (入口检查) | `renderRoundEndPanel('ai1'/'ai2')` |
+| `handleAIPlay()` | `hand.length === 0` (出牌后) | `renderRoundEndPanel('ai1'/'ai2')` |
+| `localAIPlay()` | `hand.length === 0` (出牌后) | `renderRoundEndPanel('ai1'/'ai2')` |
+| `handleAIPass()` | 无直接检查 (pass不会导致手牌空) | — |
+| `doPlayerPass()` | 无直接检查 | — |
+
+### 10.2 renderRoundEndPanel(winner)
+
+**winner 参数:** `'player'` | `'ai1'` | `'ai2'`
+
+**状态设置:**
+```javascript
+this.gameState = GAME_STATE.ROUND_END;
+```
+
+**结算面板结构详见 `Layout-detailed.md` 第11章**, 核心参数:
+
+| 元素 | 位置 | 尺寸 |
+|:----|:-----|:-----|
+| 半透明遮罩 | (0,0) | 960×600 |
+| 结算卡片 | (200,60) | 560×480 |
+| 得分子面板 | (240,142) | 480×260 |
+
+**计分公式 (代码):**
+```javascript
+var baseScore = self.isLandlord ? 30 : 20;
+var bombMult = self.totalBombs || 0;
+var chaosScore = self.chaosScore || 0;
+var chaosBonus = chaosScore * 10;
+var remainingCards = (对手剩余手牌之和);
+var handBonus = remainingCards * 2;
+var subTotal = baseScore + chaosBonus + handBonus;
+var multiplier = Math.pow(2, bombMult);
+var totalScore = subTotal * multiplier;
+```
+
+**动画序列:**
+| 时间 | 动作 |
+|:----:|:-----|
+| 0ms | 遮罩淡入 (300ms) |
+| 300ms | 卡片+得分面板淡入 |
+| 400ms | 标题弹入 scale 0.3→1.0 (Back.easeOut) |
+| 700ms | 总得分+分隔线淡入 |
+| 900+n×150ms | 各细项逐行淡入 |
+| 1500ms | 分隔线2淡入 |
+| 1600ms | 用时文字淡入 |
+| 1800ms | 两个按钮淡入 |
+
+---
+
+## 11. 出牌记录系统
+
+### 11.1 创建 (createPlayHistoryArea)
+
+```javascript
+// 右上角面板
+var bg = scene.add.graphics();
+bg.fillStyle(0x000000, 0.2);
+bg.fillRoundedRect(800, 60, 150, 140, 6).setDepth(200);
+
+// 标题
+scene.add.text(808, 65, '出牌', {
+  fontSize: '9px', color: '#81C784'  // depth 201
+});
+
+// 内容区域
+scene.playHistoryText = scene.add.text(808, 76, '', {
+  fontSize: '9px', color: '#C8E6C9',
+  lineSpacing: 3, wordWrap: { width: 135 }  // depth 201
+});
+```
+
+| 属性 | 值 |
+|:----:|:---:|
+| 面板位置 | (800, 60) w=150 h=140 |
+| 面板圆角 | 6px |
+| 标题 | (808, 65) 9px `#81C784` |
+| 内容 | (808, 76) 9px `#C8E6C9`, lineSpacing 3, wordWrap 135px |
+| depth | 200(背景) / 201(文字) |
+
+### 11.2 添加记录 (addPlayHistory)
+
+```javascript
+addPlayHistory(player, cardsOrPass):
+  labels = { player: '你', ai1: '王怼怼', ai2: '苏甜甜' }
+  
+  if (cardsOrPass === true):
+    // 不出
+    entry = { text: '王怼怼: 不出', pass: true }
+  else if (cardsOrPass.length > 0):
+    // 出牌
+    display = cardsOrPass.map(c => RANK_NAME_MAP[c.rank]).join(' ')
+    entry = { text: '你: 3 4 5 6 7', cards: cardsOrPass }
+  else: return  // 空记录忽略
+  
+  playHistory.push(entry)
+  if (playHistory.length > 8):
+    playHistory = playHistory.slice(-8)  // 保留最近8条
+  
+  renderPlayHistory()
+```
+
+**显示规则:** 从 `Math.max(0, length-6)` 开始显示最近6条。
+
+**牌面名映射 (RANK_NAME_MAP):**
+```
+0:'3' 1:'4' 2:'5' 3:'6' 4:'7' 5:'8' 6:'9'
+7:'10' 8:'J' 9:'Q' 10:'K' 11:'A' 12:'2' 13:'小王' 14:'大王'
+```
+
+**示例显示:**
+```
+你: 3 4 5 6 7
+王怼怼: 不出
+苏甜甜: K
+你: A
+王怼怼: 不出
+苏甜甜: 2
+```
+
+---
+
+## 12. UI变化全记录
+
+### 12.1 叫分结束 → 出牌阶段
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ 第1/10回 [王怼怼]剩余20张 轮到你出牌（自由出牌） [苏甜甜]剩余17张  │
+├──────────────────────────────────────────────────────────────┤
+│                       底牌: ? ? ?                             │
+│                                                              │
+│      [出牌区 — 空]             出牌记录面板 (800,60)           │
+│                                                              │
+│      [手牌区 — 20张/17张]                                     │
+│                                                              │
+│  [出牌] [提示] [不出] [搞事情] [底牌查看]                       │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### 12.2 玩家出牌后
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ 第1/10回 [王怼怼]剩余20张 已出 顺子  [苏甜甜]剩余17张            │
+├──────────────────────────────────────────────────────────────┤
+│                      底牌: ? ? ?                              │
+│                                                              │
+│    你: ┌3┐┌4┐┌5┐┌6┐┌7┐   你: 3 4 5 6 7                      │
+│         (360,195)                                            │
+│                                                              │
+│      [手牌 — 已移除出的牌]                                      │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### 12.3 AI思考中
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ 第1/10回 [王怼怼]剩余20张 王怼怼思考中... [苏甜甜]剩余17张       │
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│    你: ┌3┐┌4┐┌5┐┌6┐┌7┐                                     │
+│                                                              │
+│      [手牌 — 不可点击]                                        │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### 12.4 AI出牌后
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ 第1/10回 [王怼怼]剩余19张 王怼怼出了 对子 [苏甜甜]剩余17张       │
+├──────────────────────────────────────────────────────────────┤
+│      王怼怼: ┌K┐┌K┐                                         │
+│           (280,133)                                          │
+│    你: ┌3┐┌4┐┌5┐┌6┐┌7┐                                     │
+│                                                              │
+│      [手牌]                                                   │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### 12.5 两轮都过 (玩家pass+AI1pass)
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ 第1/10回 [王怼怼]剩余19张 两家都过，轮到苏甜甜 [苏甜甜]剩余17张  │
+├──────────────────────────────────────────────────────────────┤
+│                        [出牌区清空]                            │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### 12.6 win检测 → 结算
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│              ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓                │
+│              ▓    🎉 你赢了！         ▓                        │
+│              ▓    [总分: +184]        ▓                        │
+│              ▓                        ▓                        │
+│              ▓  ★ 基础底分 +30        ▓                        │
+│              ▓  🧨 炸弹翻倍 ×4 (2个)  ▓                        │
+│              ▓  🔥 搞事情得分 +50     ▓                        │
+│              ▓  🃏 手牌奖励 +12       ▓                        │
+│              ▓                        ▓                        │
+│              ▓  [🔄 再来一局] [🏠 返回]▓                        │
+│              ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓                │
+└──────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 13. 边界情况
+
+### 13.1 非法操作全表
+
+| 操作 | 检查位置 | 结果 |
+|:----|:---------|:-----|
+| 非PLAYER_TURN时点手牌 | renderPlayerHand pointerdown | Toast "现在不是你的出牌阶段" |
+| 未选牌点"出牌" | doPlayerPlay | Toast "请先选择手牌" |
+| 非法牌型点"出牌" | doPlayerPlay → identifyType(INVALID) | Toast "非法牌型组合" |
+| 不能压过上家点"出牌" | doPlayerPlay → canBeat(false) | Toast "不能压过上家的牌" |
+| 自由出牌阶段点"不出" | doPlayerPass → !lastPlay | Toast "自由出牌阶段不能跳过" |
+| API验证不通过 | doPlayerPlay → res.valid=false | Toast res.error, 恢复PLAYER_TURN |
+| BIDDING/WAITING_AI时点动作按钮 | doPlayerPlay 等守卫 | 静默return |
+
+### 13.2 API异常降级
+
+| API函数 | 降级行为 |
+|:--------|:---------|
+| `ApiClient.verifyPlay` | 直接调用 `confirmPlay` (本地验证) |
+| `ApiClient.findPlays` | 调用 `localHint()` |
+| `ApiClient.aiPlay` | 调用 `localAIPlay()` |
+
+### 13.3 AI出牌匹配失败
+
+`handleAIPlay` 中的匹配失败处理:
+
+```javascript
+if (playCards.length !== apiCards.length) {
+  if (playCards.length > 0) {
+    var partialInfo = Doudizhu.identifyType(playCards);
+    if (partialInfo.type !== 'INVALID') {
+      // 使用部分匹配 (控制台警告)
+    } else {
+      localAIPlay(aiIndex, aiName); // 降级
+      return;
+    }
+  } else {
+    localAIPlay(aiIndex, aiName); // 降级
+    return;
+  }
+}
+```
+
+### 13.4 炸弹累计
+
+```javascript
+if (info.type === 'BOMB' || info.type === 'ROCKET') this.totalBombs++;
+```
+
+炸弹累计在3处: `confirmPlay`, `handleAIPlay`, `localAIPlay`
+
+`totalBombs` 在 `init()` 中初始化为0:
+```javascript
+this.totalBombs = 0;
+```
+
+**炸弹统计范围:** 仅统计本局中所有玩家(玩家+AI1+AI2)打出的炸弹和火箭总数。
+
+### 13.5 搞事情中断
+
+搞事情激活时 `gameState = CHAOS_MODE`。关闭后:
+```javascript
+_destroyChaos():
+  // ... 销毁UI元素
+  SoundManager.resumeAll()
+  gameState = PLAYER_TURN
+  setStatusText("搞事情结束，继续出牌  第 X/10 回合")
+```
+
+恢复后 `gameState` 变为 `PLAYER_TURN`，功能按钮立即可用。
+
+### 13.6 其他
+
+| 场景 | 处理 |
+|:----|:------|
+| AI手牌为空入口检查 | `doAITurn` 首行 → 直接结算 |
+| 玩家手牌为空出牌检查 | `confirmPlay` 末尾 → 玩家赢 |
+| API未定义 | `isAPIMode` 检查 → 始终走本地 |
+| 初始gameState = INIT | create()末尾 delay 800ms → BIDDING |
+| scene.restart() | 重新执行 init() → 所有状态重置 |
+
+---
+
+## 14. 验收标准
+
+### 14.1 选牌交互
+
+| # | 验收条件 | 预期结果 | 来源 |
+|:-:|----------|---------|:----:|
+| H1 | 手牌以56×80渲染，弧形排列 | 弧线最高点(baseY=345)居中，两端高9px | renderPlayerHand |
+| H2 | 点击牌 → 上移16px, 点击其他牌不触发 | y=329, 选中状态标记 | renderPlayerHand |
+| H3 | 再次点击已选中的牌 → 复位 | y=345, 取消选中 | renderPlayerHand |
+| H4 | 非PLAYER_TURN点手牌 | Toast "现在不是你的出牌阶段" | renderPlayerHand |
+| H5 | 选牌后重渲染 (出牌/redeal) | 所有牌reset, selectedCards清空 | confirmPlay |
+
+### 14.2 出牌按钮
+
+| # | 验收条件 | 预期结果 | 来源 |
+|:-:|----------|---------|:----:|
+| P1 | 未选牌点"出牌" | Toast "请先选择手牌" | doPlayerPlay |
+| P2 | 选非法牌型点"出牌" | Toast "非法牌型组合" | doPlayerPlay |
+| P3 | 上家出K, 选3点"出牌" | Toast "不能压过上家的牌" | doPlayerPlay |
+| P4 | 自由出牌阶段点"不出" | Toast "自由出牌阶段不能跳过" | doPlayerPass |
+| P5 | 合法出牌 → 牌从手牌移除, 出牌区显示 | 手牌数-1, 出牌区正确渲染 | confirmPlay |
+
+### 14.3 AI回合
+
+| # | 验收条件 | 预期结果 | 来源 |
+|:-:|----------|---------|:----:|
+| A1 | 玩家出牌后AI1 600ms开始思考 | 状态文字 "王怼怼思考中..." | confirmPlay |
+| A2 | AI思考1.2s后出牌或pass | 出牌区显示AI牌或状态"不出" | doAITurn |
+| A3 | AI出牌后更新剩余张数 | 顶部 "剩余 N 张" 正确更新 | updateAICount |
+| A4 | AI出炸弹时播放bomb气泡 | 气泡显示bomb台词 | handleAIPlay |
+| A5 | AI无牌可出时自动pass | 状态"王怼怼 不出" | handleAIPass |
+
+### 14.4 提示系统
+
+| # | 验收条件 | 预期结果 | 来源 |
+|:-:|----------|---------|:----:|
+| T1 | 自由出牌点击"提示" | 选中最小单张(3) | localHint |
+| T2 | 上家出牌后点击"提示" | 选中能压过的最小牌型 | localHint |
+| T3 | 无牌可出点击"提示" | Toast "没有能出的牌" | localHint |
+| T4 | 提示后选中牌高亮(y-16) | 选中状态可见 | _highlightCard |
+
+### 14.5 过牌与流转
+
+| # | 验收条件 | 预期结果 | 来源 |
+|:-:|----------|---------|:----:|
+| F1 | 玩家过→AI1过→AI2自由出牌 | 出牌权归AI2 | handleAIPass |
+| F2 | AI1过→AI2过→玩家自由出牌 | 出牌权归玩家 | handleAIPass |
+| F3 | 自由出牌后，lastPlay清空 | 玩家可出任何牌 | passCount≥2逻辑 |
+| F4 | 出牌区在两轮都过后清空 | 无任何出牌显示 | passCount≥2逻辑 |
+
+### 14.6 赢牌与结算
+
+| # | 验收条件 | 预期结果 | 来源 |
+|:-:|----------|---------|:----:|
+| W1 | 玩家出完最后一张牌 | 结算面板弹出 "🎉 你赢了！" | confirmPlay |
+| W2 | AI出完所有牌 | 结算面板弹出 "😅 AI名称获胜！" | handleAIPlay |
+| W3 | 炸弹累计正确 | totalBombs计数影响结算乘数 | confirmPlay等 |
+
+### 14.7 出牌记录
+
+| # | 验收条件 | 预期结果 | 来源 |
+|:-:|----------|---------|:----:|
+| R1 | 玩家出牌后右上角更新 | "你: 3 4 5 6 7" | addPlayHistory |
+| R2 | AI出牌后右上角更新 | "王怼怼: K" | addPlayHistory |
+| R3 | 不出记录 | "王怼怼: 不出" | addPlayHistory |
+| R4 | 最多保留8条, 显示6条 | 翻页测试 | renderPlayHistory |
+
+### 14.8 状态机
+
+| # | 验收条件 | 预期结果 | 来源 |
+|:-:|----------|---------|:----:|
+| S1 | PLAYER_TURN → ("出牌") → VALIDATING → WAITING_AI | 状态正确过渡 | doPlayerPlay |
+| S2 | WAITING_AI → (AI2出牌) → PLAYER_TURN | 玩家可操作 | handleAIPlay |
+| S3 | PLAYER_TURN → ("搞事情") → CHAOS_MODE → PLAYER_TURN | 恢复后状态正确 | doAction |
+| S4 | 各状态下手牌不可选 | Toast提示 | renderPlayerHand |
+
+---
+
+## 附录: 函数索引
+
+| 函数 | 行号 | 功能 | 关键参数 |
+|:----|:----:|:-----|:---------|
+| `renderPlayerHand()` | ~408 | 渲染手牌 | cw=56, ch=80, baseY=345 |
+| `_clearCardSelection()` | ~465 | 清空选中 | y = origY |
+| `_highlightCard(el)` | ~470 | 高亮单牌 | y = origY - 16 |
+| `doPlayerPlay()` | ~950 | 玩家出牌入口 | validate + confirm |
+| `confirmPlay()` | ~990 | 确认出牌 | lastPlay, passCount, AI turn |
+| `doPlayerPass()` | ~1025 | 玩家不出 | passCount+1, flow routing |
+| `doHint()` | ~1060 | 提示入口 | API/local |
+| `localHint()` | ~1085 | 本地提示 | plays[0], highlight |
+| `highlightHint(hint)` | ~1115 | API提示高亮 | hint.cards匹配 |
+| `doAITurn(aiIndex)` | ~1130 | AI回合入口 | 0=AI1, 1=AI2 |
+| `handleAIPlay()` | ~1170 | AI出牌处理 | API cards匹配 |
+| `handleAIPass()` | ~1230 | AI不出处理 | passCount≥2 check |
+| `localAIPlay()` | ~1260 | 本地AI策略 | plays[0], min single |
+| `updateAICount(aiIndex)` | ~1315 | 更新顶部牌数 | "剩余 N 张" |
+| `displayPlay()` | ~1325 | 出牌区显示 | 3个预设位置 |
+| `renderRoundEndPanel(winner)` | 2463 | 结算面板 | player/ai1/ai2 |
+| `addPlayHistory()` | ~2740 | 出牌记录 | max 8条 |
+| `createPlayHistoryArea()` | 2697 | 出牌记录面板 | (800,60) 150×140 |
+
+```
+
+---
+
+## `docs/Gameplay.md` (18,154 字节)
+
+```markdown
+# PRD：出牌系统（Gameplay）
+
+> **版本**: v1.0  
+> **设计者**: 产品经理  
+> **更新日期**: 2026-05-02  
+> **画布尺寸**: 960 × 600 横屏
+
+---
+
+## 1. 系统概述
+
+出牌系统是斗地主游戏的核心玩法模块，覆盖从手牌渲染、选牌、出牌验证、AI 出牌、提示、赢牌结算到出牌记录的完整闭环。系统基于 Phaser 3 实现，牌型识别与校验依赖 `CardEngine.js`。
+
+### 1.1 状态机
+
+```
+PLAYER_TURN ──doPlayerPlay()──→ VALIDATING ──confirmPlay()──→ WAITING_AI
+     ↑                                                     │
+     │                  passCount ≥ 2  或  AI出完          │
+     └──────────────────────────────────────────────────────┘
+```
+
+- **PLAYER_TURN**: 玩家可出牌、提示、不出、搞事情
+- **VALIDATING**: 玩家点击"出牌"后校验合法性
+- **WAITING_AI**: 等待 AI 出牌（1.2s 延迟），AI 可调用 API 或本地算法
+- **ROUND_END**: 任意玩家手牌数为 0 时触发
+
+---
+
+## 2. 手牌渲染与卡牌选择
+
+### 2.1 手牌布局
+
+**文件**: `game.js:createHandArea()` → `game.js:renderPlayerHand()`
+
+| 属性 | 值 |
+|------|-----|
+| 手牌区域背景 | `fillRoundedRect(20, 300, 920, 115, 10)` |
+| 手牌区域底色 | `#000000` (alpha 0.15) |
+| 手牌区域深度 | `10` |
+| 区域标题 | `yourHandText @ (68, 305)`，字号 11px，颜色 `#A5D6A7` |
+| 单张卡牌尺寸 | 56 × 80 (width × height) |
+| 卡牌重叠 (overlap) | `n > 6 ? Math.min(33, (700 - cw) / (n - 1)) : 33` |
+| 起始 X | `startX = 180 + (700 - totalWidth) / 2` |
+| 基础 Y | `345` |
+| 弧形偏移 | `arcOffset = Math.pow((i / (n - 1)) - 0.5, 2) * 36`，使手牌呈微弧排列 |
+| 卡牌深度 | `110` |
+| 卡牌图片 key | `getCardImageKey(card)` 返回 `card{Suits}{RankNames}` |
+
+### 2.2 选中/取消选中逻辑
+
+**文件**: `game.js:renderPlayerHand()` — `pointerdown` 事件
+
+**数据结构**:
+```javascript
+this.selectedCards = []  // 存储被选中牌的 cardDomElements 索引
+```
+
+**交互流程**:
+1. 玩家点击卡牌（`pointerdown`）
+2. 检查 `gameState === GAME_STATE.PLAYER_TURN`，否则显示 toast"现在不是你的出牌阶段"
+3. 获取 `cardIdx`、`selected` 状态
+4. **取消选中（已选中 → 点击）**:
+   - `card.y += 16`（恢复原位）
+   - `card.setData('selected', false)`
+   - 从 `selectedCards` 数组中移除该索引
+   - 播放 `SoundManager.deselectCard()`
+5. **选中（未选中 → 点击）**:
+   - `card.y -= 16`（Y 方向上移 16px）
+   - `card.setData('selected', true)`
+   - 向 `selectedCards.push(idx)`
+   - 播放 `SoundManager.selectCard()`
+
+**辅助方法**:
+```javascript
+_clearCardSelection()   // 遍历 cardDomElements，清除所有选中状态，y 复位
+_highlightCard(el)      // 将单张牌置为选中：y = origY - 16，selected = true
+```
+
+---
+
+## 3. 出牌逻辑
+
+### 3.1 动作按钮
+
+**文件**: `game.js:createActionButtons()`
+
+按钮位于 `Y = 442`，横向等距排列：
+
+| 按钮 | 标签 | 颜色值 | 尺寸 | 回调 |
+|------|------|--------|------|------|
+| 出牌 | 出牌 | `0x4ECDC4` | 72×48 | `scene.doPlayerPlay()` |
+| 提示 | 提示 | `0xFFD93D` | 72×48 | `scene.doHint()` |
+| 不出 | 不出 | `0xFF6B6B` | 72×48 | `scene.doPlayerPass()` |
+| 搞事情 | 搞事情 | `0x7C4DFF` | 72×48 | `scene.doAction()` |
+| 底牌查看 | 底牌查看 | `0x78909C` | 72×48 | `scene.showBottomCards()` |
+
+按钮间距 `gap = 14`，起始 X `startX = (960 - totalW) / 2`，其中 `totalW = 72 * 5 + 14 * 4 = 416`。
+
+按钮深度 `100`，文字深度 `101`，字号 `13px`，白色粗体。
+
+### 3.2 `doPlayerPlay()` — 玩家出牌入口
+
+1. **状态检查**: `gameState !== PLAYER_TURN` → toast 提示
+2. **选牌检查**: `selectedCards.length === 0` → toast"请先选择手牌"
+3. **牌型识别**: `Doudizhu.identifyType(playCards)`
+   - **非法组合**: `info.type === INVALID` → toast"非法牌型组合"
+4. **压牌校验**: 如果 `lastPlay` 存在且非空 → `Doudizhu.canBeat(playCards, lastPlay)`
+   - **不能压过**: toast"不能压过上家的牌"
+5. **状态切换**: `gameState = VALIDATING`
+6. **API 验证** (若为 API 模式): `ApiClient.verifyPlay(playCards, lastPlay, playerHand)`
+   - `res.valid` === true → 调用 `confirmPlay(playCards, info)`
+   - `res.valid` === false → toast 错误信息，`gameState` 恢复 `PLAYER_TURN`
+   - API 失败 → 回退本地验证，直接调用 `confirmPlay(playCards, info)`
+
+### 3.3 `confirmPlay()` — 确认出牌
+
+1. **构建已出牌集合**: `playSet` (key = `suit:rank`)，记录每张牌的出现次数
+2. **从手牌移除**: 逆序遍历 `playerHand`，匹配则 `splice(j, 1)`
+3. **更新出牌状态**:
+   - `lastPlay = playCards`
+   - `lastPlayInfo = info`
+   - `lastPlayPlayer = 'player'`
+   - `passCount = 0`
+4. **显示出的牌**: `displayPlay(playCards, 'player')`
+5. **状态文本**: `setStatusText('已出 ' + HAND_TYPE_NAMES[info.type])`
+6. **清空选牌**: `selectedCards = []`，`renderPlayerHand()`
+7. **出牌记录**: `addPlayHistory('player', playCards)`
+8. **音效**: `SoundManager.playCard()`
+9. **炸弹检测**: `info.type === 'BOMB' || info.type === 'ROCKET'` → `totalBombs++`
+10. **赢牌检测**: `playerHand.length === 0` → `renderRoundEndPanel('player')`
+11. **状态切换**: `gameState = WAITING_AI`，延时 600ms 后调用 `doAITurn(0)` (AI1)
+
+### 3.4 `doPlayerPass()` — 玩家不出
+
+1. **状态检查**: `gameState !== PLAYER_TURN` → return
+2. **自由出牌检查**: `!lastPlay || lastPlay.length === 0` → toast"自由出牌阶段不能跳过"
+3. **记录**: `passCount++`，toast"不出"
+4. **清空选牌**: `selectedCards = []`
+5. **出牌记录**: `addPlayHistory('player', true)`（true = pass）
+6. **两轮都过逻辑** (`passCount >= 2`):
+   - 重置 `passCount = 0`，`lastPlay = null`
+   - 出牌权交给上一轮最后出牌者（非当前 pass 者）
+   - 若最后出牌者是玩家 → 状态回到 `PLAYER_TURN`
+   - 若最后出牌者是 AI → 调用 `doAITurn(lastAiIdx)`
+7. **仅一轮过**: `gameState = WAITING_AI`，延时 800ms 调用 `doAITurn(1)` (AI2)
+
+---
+
+## 4. 出牌显示 `displayPlay()`
+
+**文件**: `game.js:displayPlay(cards, player)`
+
+### 4.1 布局坐标
+
+| 玩家 | X | Y | 卡牌尺寸 w×h | origin |
+|------|---|---|---------------|--------|
+| player (你) | 360 | **195** | 50×72 | 0.5 |
+| ai1 (王怼怼) | 280 | **133** | 42×60 | 0.5 |
+| ai2 (苏甜甜) | 682 | **133** | 42×60 | 0.5 |
+
+### 4.2 渲染逻辑
+
+1. **清除旧牌**: 遍历并销毁 `myPlayCardsGfx` / `ai1PlayCardsGfx` / `ai2PlayCardsGfx`
+2. **计算重叠**: `overlap = Math.min(50 * 0.6, (480 - 50) / Math.max(n - 1, 1))`
+3. **居中呈现**: `startX = pos.x - totalW / 2`
+4. **每张牌**: `add.image(pcx, pos.y, cardImageKey).setDisplaySize(pos.w, pos.h).setDepth(21)`
+5. **卡片深度**: `21`
+
+---
+
+## 5. AI 出牌系统
+
+### 5.1 AI 回合调度 `doAITurn(aiIndex)`
+
+**参数**: `aiIndex` — 0 代表王怼怼 (ai1)，1 代表苏甜甜 (ai2)
+
+**流程**:
+1. **获取手牌**: `hand = this.ai1Hand` 或 `this.ai2Hand`
+2. **设置状态**: `gameState = WAITING_AI`，状态文本 `"{AI名称} 思考中..."`
+3. **手牌为空检测**: 若 `hand.length === 0` → 调用 `renderRoundEndPanel('ai1'/'ai2')`
+4. **API 模式**: 延时 **1200ms**（`this.time.delayedCall(1200, ...)`）
+   - 调用 `ApiClient.aiPlay(hand, lastPlay)`
+   - `res.canPlay === false` → `handleAIPass(aiIndex, aiName)`
+   - 有出牌 → `handleAIPlay(aiIndex, aiName, res)`
+   - API 失败 → 降级调用 `localAIPlay(aiIndex, aiName)`
+5. **本地模式**: 直接调用 `localAIPlay(aiIndex, aiName)`
+
+### 5.2 AI 出牌 `handleAIPlay()`
+
+1. **匹配出牌**: 根据 API 返回的 `cards` 从 AI 手牌中 `splice` 移除
+2. **匹配失败处理**: 若实际匹配张数 !== 返回张数：
+   - 尝试部分匹配（已成功匹配且牌型有效则使用）
+   - 否则降级到 `localAIPlay()`
+3. **更新出牌状态**: `lastPlay`, `lastPlayInfo`, `lastPlayPlayer`, `passCount = 0`
+4. **显示**: `displayPlay(playCards, 'ai1'/'ai2')`
+5. **更新手牌数量**: `updateAICount(aiIndex)`
+6. **出牌记录**: `addPlayHistory('ai1'/'ai2', playCards)`
+7. **气泡**: `_showPlayBubble('duidui'/'tiantian', 'play'/'bomb', info.type)`
+8. **炸弹检测**: `totalBombs++`
+9. **赢牌检测**: 若 `hand.length === 0` → `renderRoundEndPanel('ai1'/'ai2')`
+10. **下一个 AI 或玩家**:
+    - AI1 出完 → 延时 **1200ms** → `doAITurn(1)` (AI2)
+    - AI2 出完 → `gameState = PLAYER_TURN`，等待玩家出牌
+
+### 5.3 AI 不出 `handleAIPass()`
+
+1. `passCount++`
+2. 状态文本 `"{AI名称} 不出"`
+3. 出牌记录: `addPlayHistory('ai1'/'ai2', true)`
+4. 气泡: `_showPlayBubble('duidui'/'tiantian', 'pass', '')`
+5. **两轮都过** (`passCount >= 2`): 与玩家 pass 逻辑对称，出牌权归上一轮最后出牌者
+6. AI1 过 → 延时 **1200ms** → `doAITurn(1)` (AI2)
+7. AI2 过 → `gameState = PLAYER_TURN`
+
+### 5.4 本地 AI 策略 `localAIPlay()`
+
+**文件**: `game.js:localAIPlay(aiIndex, aiName)`
+
+**出牌枚举**: `Doudizhu.findValidPlays(hand, lastPlay)`
+
+**策略排序**（按类型升序，越小越优先）:
+```
+single(0) < pair(1) < triple(2) < triple_plus_one(3) < triple_plus_two(4) < 
+straight(5) < consecutive_pairs(6) < airplane(7) < airplane_plus_singles(8) < 
+airplane_plus_pairs(9) < four_plus_two(10) < four_plus_two_pairs(11) < 
+bomb(12) < rocket(13)
+```
+
+**自由出牌策略**: 若 `!lastPlay || lastPlay.length === 0`，且枚举结果中有单张，选最小的单张（`plays[pi].length === 1`）
+
+**AI 回合间隔**: AI1 出完 → 1200ms → AI2 → 1200ms → 玩家
+
+---
+
+## 6. 提示系统
+
+### 6.1 `doHint()` — 提示入口
+
+1. **状态检查**: `gameState !== PLAYER_TURN` → return
+2. **API 模式**: 调用 `ApiClient.findPlays(playerHand, lastPlay)`
+   - `res.total === 0` → toast"没有能出的牌"
+   - 有结果 → `highlightHint(res.plays[0])`，状态文本 `"提示: {typeName} (共{total}种)"`
+   - API 失败 → 降级 `localHint()`
+3. **本地模式**: `localHint()`
+
+### 6.2 `localHint()` — 本地提示
+
+```javascript
+var plays = Doudizhu.findValidPlays(playerHand, lastPlay)
+if (plays.length === 0) → toast"没有能出的牌"
+var hintPlay = plays[0]  // 取最弱的推荐
+```
+
+1. `_clearCardSelection()` 清空当前选牌
+2. 构建 `hintRanks` 字典 (`suit:rank" → true`)
+3. 遍历 `cardDomElements`，匹配则 `_highlightCard()` + 索引加入 `selectedCards`
+4. 状态文本显示 `"提示: {HAND_TYPE_NAMES[info.type]}"`
+
+### 6.3 `highlightHint(hint)` — 高亮 API 返回的提示
+
+根据 `hint.cards` 数组，匹配手牌位置，选中并高亮，与 `localHint()` 结构一致。
+
+---
+
+## 7. 赢牌检测与结算面板
+
+### 7.1 检测时机
+
+- `confirmPlay()` 中 `playerHand.length === 0`
+- `handleAIPlay()` 中 AI 手牌 `hand.length === 0`
+- `handleAIPass()` 中 AI 手牌空
+- `localAIPlay()` 中 AI 手牌空
+- `doAITurn()` 中 AI 手牌空
+
+### 7.2 `renderRoundEndPanel(winner)`
+
+**参数**: `winner` — `'player'` | `'ai1'` | `'ai2'`
+
+**状态**: `gameState = ROUND_END`
+
+**结算面板结构** (全部深度 ≥ 400):
+
+| 元素 | 位置 | 描述 |
+|------|------|------|
+| 半透明遮罩 | 0, 0 ~ 960, 600 | `fillStyle(0x000000, 0)` → 渐变 alpha 0.65 |
+| 结算卡片背景 | 200, 60, 560×480 | `fillStyle(0x1A1A2E, 0.92)`，金色/红色描边 |
+| 标题 | 480, 90 | 🎉 你赢了！/ 😅 你输了，金色/红色 |
+| AI 获胜副标题 | 480, 120 | 红色 16px |
+| 得分面板 | 240, 142, 480×260 | 半透明深色 |
+| 得分细项 | Y=235, 步进 25 | 基础底分、炸弹翻倍、搞事情得分、手牌奖励 |
+
+**计分公式**:
+```
+baseScore = isLandlord ? 30 : 20
+chaosBonus = chaosScore * 10
+handBonus = (对手剩余手牌总数) * 2
+subTotal = baseScore + chaosBonus + handBonus
+multiplier = Math.pow(2, totalBombs)
+totalScore = subTotal * multiplier
+```
+
+**动画序列**:
+
+| 时间点 | 动画 |
+|--------|------|
+| 0.3s | 背景卡片、得分面板淡入 (0.3s) |
+| 0.4s | 标题弹入 (scale 0.3→1.0, Back.easeOut) |
+| 0.7s | 总得分标签、数字、分隔线淡入 |
+| 0.9s + idx×0.15s | 各得分细项逐行淡入 |
+| 1.5s | 第二条分隔线淡入 |
+| 1.6s | 底部小字淡入 |
+| 1.8s | "再来一局" "返回首页" 按钮弹入 |
+
+**按钮**:
+- "再来一局" @ (290, 370, 170×44) → `scene.restart()`
+- "返回首页" @ (500, 370, 170×44) → `window.location.reload()`
+
+---
+
+## 8. 出牌记录系统
+
+### 8.1 创建记录区域
+
+**文件**: `game.js:createPlayHistoryArea(scene)`
+
+| 属性 | 值 |
+|------|-----|
+| 面板位置 | `fillRoundedRect(800, 60, 150, 140, 6)` |
+| 面板底色 | `0x000000` (alpha 0.2) |
+| 面板深度 | 200 |
+| 标题 | "出牌" @ (808, 65), 9px, `#81C784` |
+| 记录文本 | `playHistoryText` @ (808, 76), 9px, `#C8E6C9`, wordWrap 135px |
+| 深度 | 201 |
+
+### 8.2 `addPlayHistory(player, cardsOrPass)`
+
+- `player`: `'player'` → "你", `'ai1'` → "王怼怼", `'ai2'` → "苏甜甜"
+- `cardsOrPass === true`: 标记为"不出"
+- `cardsOrPass` 是数组: 用 `RANK_NAME_MAP[c.rank]` 映射映射每个牌的显示名
+- 保留最近 **8 条**记录
+
+### 8.3 `renderPlayHistory()`
+
+取最近 6 条合并显示，格式:
+```
+你: 3 4 5 6 7
+王怼怼: 不出
+苏甜甜: J Q K A 2
+```
+
+---
+
+## 9. CardEngine 牌型系统
+
+**文件**: `src/client/js/CardEngine.js`
+
+### 9.1 牌型枚举 `HAND_TYPES`
+
+| 常量 | 中文名 | 说明 |
+|------|--------|------|
+| `SINGLE` | 单张 | 1 张牌 |
+| `PAIR` | 对子 | 2 张同 rank |
+| `TRIPLE` | 三张 | 3 张同 rank |
+| `TRIPLE_PLUS_ONE` | 三带一 | 3 张同 rank + 1 张单牌 |
+| `TRIPLE_PLUS_TWO` | 三带二 | 3 张同 rank + 2 张同 rank |
+| `STRAIGHT` | 顺子 | ≥5 张连续，3~A，每张 1 张 |
+| `CONSECUTIVE_PAIRS` | 连对 | ≥3 对连续，3~A |
+| `AIRPLANE` | 飞机 | ≥2 个三张连续，3~A |
+| `AIRPLANE_PLUS_SINGLES` | 飞机带单 | 飞机 + 单张 × 翅膀数 |
+| `AIRPLANE_PLUS_PAIRS` | 飞机带对 | 飞机 + 对 × 翅膀数 |
+| `BOMB` | 炸弹 | 4 张同 rank |
+| `ROCKET` | 火箭 | 小王 + 大王 |
+| `FOUR_PLUS_TWO` | 四带二 | 4 张同 rank + 2 张单牌 |
+| `FOUR_PLUS_TWO_PAIRS` | 四带两对 | 4 张同 rank + 2 个对子 |
+| `INVALID` | 非法 | 无法识别的组合 |
+
+### 9.2 出牌校验 `canBeat(current, last)`
+
+1. 火箭 > 一切
+2. 炸弹 > 非炸弹、非火箭
+3. 同类型比较 rank（顺子/连对/飞机还需长度相同）
+4. 不同型不可比较（除非被炸弹/火箭覆盖）
+
+### 9.3 `findValidPlays(hand, lastPlay)`
+
+- 全部枚举后按类型排序（单张→火箭）
+- `lastPlay` 为空 → 返回所有合法牌型
+- `lastPlay` 存在 → 仅返回能压过的
+
+### 9.4 `typeSortOrder()` — AI 出牌优先级
+
+```
+SINGLE(0) → PAIR(1) → TRIPLE(2) → ... → BOMB(12) → ROCKET(13)
+```
+
+---
+
+## 10. 状态管理与边界情况
+
+### 10.1 全局状态枚举 `GAME_STATE`
+
+```javascript
+INIT → BIDDING → PLAYER_TURN → VALIDATING → WAITING_AI → ROUND_END
+                                       ↕
+                                  CHAOS_MODE
+```
+
+### 10.2 边界情况
+
+| 场景 | 处理 |
+|------|------|
+| 非法牌型组合 | `identifyType` 返回 `INVALID` → toast"非法牌型组合" |
+| 不能压过上家 | `canBeat` → false → toast"不能压过上家的牌" |
+| 自由出牌阶段无法 pass | `!lastPlay` → toast"自由出牌阶段不能跳过" |
+| 不是玩家回合尝试出牌 | `gameState` 检查 → toast"现在不是你的出牌阶段" |
+| 未选牌点击"出牌" | `selectedCards.length === 0` → toast"请先选择手牌" |
+| AI 手牌为空 | 在 `doAITurn()` 开头检测 → `renderRoundEndPanel()` |
+| API 调用失败 | catch 中降级到本地模式 (`localHint()`/`localAIPlay()`) |
+| API 返回的牌与手牌不匹配 | `handleAIPlay()` 中 partial match 或降级 |
+| 无合法出牌 | `findValidPlays` 返回空数组 → pass |
+| 炸弹数量累计 | `totalBombs++`，影响结算倍率 |
+| 出牌记录超限 | 保留最近 8 条 |
+| 搞事情中断出牌 | `_destroyChaos()` 恢复 `PLAYER_TURN` |
+
+---
+
+## 11. 音效系统
+
+依赖 `SoundManager`，使用 Web Audio API 控制播放：
+
+| 事件 | 方法 | 音效文件 |
+|------|------|----------|
+| 出牌 | `SoundManager.playCard()` | `cardPlace1~3` (随机) |
+| 选中卡牌 | `SoundManager.selectCard()` | `cardSlide1~3` (随机) |
+| 取消选中 | `SoundManager.deselectCard()` | `cardSlide1~3` (随机，音量略低) |
+| 轮到玩家 | `SoundManager.playerTurn()` | `chipsCollide1~3` (随机) |
+| 胜利 | `SoundManager.win()` | `cardPlace3` |
+| 失败 | `SoundManager.lose()` | `cardSlide1` |
+| 搞事情答对 | `SoundManager.win()` | `cardPlace3` |
+| 搞事情答错 | `SoundManager.lose()` | `cardSlide1` |
+
+---
+
+## 12. 验收标准
+
+| # | 验收条件 | 测试方法 |
+|---|----------|----------|
+| 1 | 手牌正确渲染，3~A ~ 2 排序，弧形排列 | 刷新页面查看手牌 |
+| 2 | 点击卡牌 Y 方向 +16px，再点击恢复 | 点击任意卡牌两次 |
+| 3 | 选牌后点击"出牌"，合法则移除手牌并在出牌区显示 | 选牌→出牌 |
+| 4 | 非法牌型 toast"非法牌型组合" | 选 3 张不同 rank → 出牌 |
+| 5 | 不能压过 toast"不能压过上家的牌" | 上家出 K，出小牌 |
+| 6 | 自由出牌阶段"不出"按钮被禁用 | 开局点击"不出" |
+| 7 | 两轮都过，出牌权归上一轮最后出牌者 | 玩家过 → AI1 过 → 观察 |
+| 8 | AI 思考 1.2s 后出牌或 pass | 观察状态文本变化 |
+| 9 | 提示系统展示最小合法出牌 | 点击"提示" |
+| 10 | 手牌出完 → 结算面板弹出 | 出完最后一张牌 |
+| 11 | 结算面板含正确计分、炸弹倍率、手牌奖励 | 观察面板数值 |
+| 12 | 出牌记录正确显示在右侧 | 观察右侧面板 |
+| 13 | 状态机不允许玩家在 AI 回合出牌 | AI 回合时点击卡牌 |
+| 14 | API 失败时自动降级本地模式 | 断开后端后操作 |
+| 15 | "搞事情"关闭后恢复出牌 | 搞事情→关闭→出牌 |
+
+```
+
+---
+
+## `docs/Layout-detailed.md` (45,529 字节)
+
+```markdown
+# 布局与视觉系统 — 超详细设计文档
+
+**版本:** v2.0  
+**作者:** 产品经理  
+**日期:** 2026-05-02  
+**基准画布:** 960×600 横屏 (Phaser 3 Scale.FIT)  
+**对应源码:** `src/client/js/game.js` (2897行)  
+**依赖文件:** `src/client/js/CardEngine.js`  
+
+> ⚠️ **代码对齐说明**: 本文档所有坐标、颜色、depth 值直接从 `game.js` 中提取，与代码有一致性。如有与旧版 `Layout.md` 不一致之处，以此版为准。
+
+---
+
+## 目录
+
+1. [画布与缩放配置](#1-画布与缩放配置)
+2. [背景系统](#2-背景系统)
+3. [顶部状态栏](#3-顶部状态栏)
+4. [AI 头像与信息](#4-ai-头像与信息)
+5. [中央出牌区](#5-中央出牌区)
+6. [手牌区](#6-手牌区)
+7. [底牌系统](#7-底牌系统)
+8. [底部功能按钮](#8-底部功能按钮)
+9. [叫分UI](#9-叫分ui)
+10. [出牌记录面板](#10-出牌记录面板)
+11. [结算面板](#11-结算面板)
+12. [Toast 通知](#12-toast-通知)
+13. [搞事情模式 UI](#13-搞事情模式-ui)
+14. [全屏与自适应](#14-全屏与自适应)
+15. [色彩系统](#15-色彩系统)
+16. [字体规范](#16-字体规范)
+17. [Z轴深度层级](#17-z轴深度层级)
+18. [动画与过渡参数](#18-动画与过渡参数)
+19. [交互区域全表](#19-交互区域全表)
+20. [与旧文档的差异说明](#20-与旧文档的差异说明)
+21. [验收标准](#21-验收标准)
+
+---
+
+## 1. 画布与缩放配置
+
+| 属性 | 代码值 | 来源行 |
+|------|--------|:------:|
+| width | 960 | GameConfig |
+| height | 600 | GameConfig |
+| backgroundColor | `#1B5E20` | GameConfig |
+| 缩放模式 | `Phaser.Scale.FIT` | GameConfig.scale.mode |
+| 居中 | `Phaser.Scale.CENTER_BOTH` | GameConfig.scale.autoCenter |
+| 渲染器 | `Phaser.AUTO` | GameConfig.type |
+| DOM 容器 | `'game-container'` | GameConfig.parent |
+| DOM 创建 | `{ createContainer: true }` | GameConfig.dom |
+
+### 1.1 全屏缩放切换
+
+| 模式 | 缩放模式 | 效果 |
+|:----:|:---------:|------|
+| 非全屏 | `Phaser.Scale.FIT` | 等比缩放，保留完整画面，可能留绿边 |
+| 全屏中 | `Phaser.Scale.FILL` | 填满屏幕，允许左右裁剪（不裁顶部/底部按钮区域） |
+
+### 1.2 全屏切换逻辑
+
+```javascript
+// 全屏按钮 (x=940, y=24)
+fsBtn.on('pointerdown', function() {
+  var el = document.documentElement;
+  if (document.fullscreenElement || document.webkitFullscreenElement) {
+    if (document.exitFullscreen) document.exitFullscreen();
+    else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+  } else {
+    if (el.requestFullscreen) el.requestFullscreen();
+    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+  }
+});
+```
+
+**缩放自适应函数** `zoomCanvasToFill()`:
+
+```javascript
+function zoomCanvasToFill() {
+  var container = document.getElementById('game-container');
+  if (document.fullscreenElement || document.webkitFullscreenElement) {
+    container.style.width = window.innerWidth + 'px';
+    container.style.height = window.innerHeight + 'px';
+    container.style.position = 'fixed';
+    container.style.top = '0';
+    container.style.left = '0';
+    game.scale.mode = Phaser.Scale.FILL;
+    game.scale.refresh();
+  } else {
+    container.style.width = '';
+    container.style.height = '';
+    container.style.position = '';
+    container.style.top = '';
+    container.style.left = '';
+    game.scale.mode = Phaser.Scale.FIT;
+    game.scale.refresh();
+  }
+}
+```
+
+事件绑定: `fullscreenchange`, `webkitfullscreenchange`, `resize` → `zoomCanvasToFill()`
+
+### 1.3 首次点击自动全屏
+
+```javascript
+var autoFSdone = false;
+self.input.once('pointerdown', function() {
+  if (autoFSdone) return;
+  autoFSdone = true;
+  var el = document.documentElement;
+  if (el.requestFullscreen) el.requestFullscreen().catch(function(){});
+  else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+});
+```
+
+**行为:** 首次点击画布任何位置，自动触发一次全屏请求。用户拒绝后 `.catch` 静默处理，不再重复请求。
+
+---
+
+## 2. 背景系统
+
+### 2.1 渐变底色 (drawTableBackground)
+
+```javascript
+function drawTableBackground(scene) {
+  var W = 960, H = 600;
+  var bg = scene.add.graphics();
+  bg.fillGradientStyle(0x1B5E20, 0x1B5E20, 0x0D3B0F, 0x0D3B0F, 1);
+  bg.fillRect(0, 0, W, H);
+  // ...
+}
+```
+
+| 角 | 颜色 | Alpha |
+|:---:|:----:|:-----:|
+| 左上 | `#1B5E20` | 1.0 |
+| 右上 | `#1B5E20` | 1.0 |
+| 左下 | `#0D3B0F` | 1.0 |
+| 右下 | `#0D3B0F` | 1.0 |
+
+渐变从顶部向下由亮绿(`#1B5E20`)渐变到深绿(`#0D3B0F`)。
+
+### 2.2 中心光晕
+
+| 图层 | 形状 | 圆心X | 圆心Y | 宽 | 高 | 颜色 | Alpha | depth |
+|:----:|:----:|:-----:|:-----:|:--:|:--:|:----:|:-----:|:-----:|
+| 1 | Ellipse | 480 | 260 | 320 | 354 | `#2E7D32` | 0.15 | — |
+| 2 | Ellipse | 480 | 260 | 240 | 360 | `#388E3C` | 0.1 | — |
+
+**注意：** `W/2 = 480`，`H/2 - 40 = 260`（中心偏上40px）
+
+### 2.3 外圈圆角边框
+
+```
+lineStyle(2, 0x4CAF50, 0.3)
+strokeRoundedRect(13, 52, 934, 470, 9)
+// 934 = 960 - 26, 470 = 600 - 130
+```
+
+| 属性 | 值 |
+|:----:|:---:|
+| X | 13 |
+| Y | 52 |
+| W | 934 (960-26) |
+| H | 470 (600-130) |
+| 圆角 | 9 |
+| 颜色 | `#4CAF50` |
+| Alpha | 0.3 |
+| 线宽 | 2px |
+
+### 2.4 装饰矩形
+
+```
+// 大内框
+strokeRect(400, 177, 118, 166)  // cx-80, cy-83, 118×166
+// 小内框
+strokeRect(432, 201, 96, 118)   // cx-48, cy-59, 96×118
+```
+
+其中 `cx = 480, cy = 260`。
+
+| 元素 | X | Y | W | H | 颜色 | Alpha | 线宽 |
+|:----:|:-:|:-:|:-:|:-:|:----:|:-----:|:----:|
+| 装饰矩形1 | 400 | 177 | 118 | 166 | `#66BB6A` | 0.15 | 1px |
+| 装饰矩形2 | 432 | 201 | 96 | 118 | `#66BB6A` | 0.15 | 1px |
+
+### 2.5 四角装饰圆
+
+四个角坐标: `(35,63)`, `(925,63)`, `(35,543)`, `(925,543)`
+
+每个角画3层同心圆:
+- r=9, color `#4CAF50`, alpha 0.18
+- r=10, color `#4CAF50`, alpha 0.18
+- r=5, color `#4CAF50`, alpha 0.18
+
+### 2.6 中心装饰圆
+
+```
+// cy = 250 (cx-10 = 470 不对? 代码: diamond.strokeCircle(cx, cy - 10, 67))
+// cy = cx - 10 = 480 - 10? 不，是 cx, cy-10，等于是 (480, 250)
+```
+
+| 元素 | 圆心X | 圆心Y | 半径 | 颜色 | Alpha | 线宽 |
+|:----:|:-----:|:-----:|:----:|:----:|:-----:|:----:|
+| 中心装饰圆1 | 480 | 250 | 67 | `#66BB6A` | 0.08 | 1px |
+| 中心装饰圆2 | 480 | 250 | 93 | `#66BB6A` | 0.08 | 1px |
+
+---
+
+## 3. 顶部状态栏
+
+### 3.1 整体区域
+
+```
+Y: 0 ~ 56
+X: 0 ~ 960
+```
+
+### 3.2 背景
+
+```javascript
+var tb = scene.add.graphics();
+tb.fillStyle(0x000000, 0.3);
+tb.fillRect(0, 0, 960, 56).setDepth(10);
+```
+
+底部分隔线:
+```javascript
+var sep = scene.add.graphics();
+sep.lineStyle(1, 0x66BB6A, 0.2);
+sep.lineBetween(0, 56, 960, 56).setDepth(11);
+```
+
+### 3.3 状态栏元素坐标 (深度=11)
+
+| 元素 | 内容 | X | Y | fontSize | color | fontStyle | origin |
+|:----:|:----:|:-:|:-:|:--------:|:-----:|:---------:|:------:|
+| 回合 | `第 1/10 回合` | 12 | 9 | 12px | `#E8F5E9` | bold | (0) |
+| 状态 | 动态文字 | 480 | 8 | 10px | `#A5D6A7` | bold | (0.5, 0) |
+| AI1名称 | `王怼怼` | 200 | 9 | 10px | `#E8F5E9` | bold | (0) |
+| AI1牌数 | `剩余 17 张` | 200 | 22 | 10px | `#A5D6A7` | normal | (0) |
+| AI2名称 | `苏甜甜` | 720 | 9 | 10px | `#E8F5E9` | bold | (0) |
+| AI2牌数 | `剩余 17 张` | 720 | 22 | 10px | `#A5D6A7` | normal | (0) |
+| 全屏按钮 | `⛶` | 940 | 24 | 22px | `#FFFFFF` | normal | (1, 0.5) |
+
+**字体族统一:** `'"PingFang SC","Microsoft YaHei",sans-serif'`
+
+**全屏按钮样式:**
+```
+backgroundColor: '#00000066',
+padding: { x: 8, y: 6 },
+depth: 200
+```
+
+---
+
+## 4. AI 头像与信息
+
+### 4.1 makeAvatarImage 函数
+
+```javascript
+function makeAvatarImage(scene, key, x, y, bgColor, name) {
+  var g = scene.add.graphics();
+  g.fillStyle(bgColor, 1);
+  g.fillRoundedRect(x - 20, y - 20, 40, 40, 10);          // 底色 40×40 圆角10
+  g.lineStyle(2, 0xFFFFFF, 0.8);
+  g.strokeRoundedRect(x - 28, y - 28, 56, 56, 10);         // 外框 56×56 圆角10, alpha 0.8
+  var img = scene.add.image(x, y, key).setDisplaySize(34, 34).setDepth(12);
+  return img;
+}
+```
+
+**⚠️ 与旧Layout.md差异:**
+- 头像图片实际显示尺寸为 **34×34**（不是36×36）
+- 外框白色描边为 **56×56**（不是视觉上的头像框）
+- 头像底色填满 40×40 圆角矩形
+
+### 4.2 精确坐标
+
+| AI | 类型 | 头像中心 | 底色 | 外框尺寸 | 名称X,Y | 牌数X,Y |
+|:--:|:----:|:--------:|:----:|:--------:|:-------:|:--------:|
+| 王怼怼 (AI1) | 左侧 | (176, 20) | `#4FC3F7` | 56×56 | (200, 9) | (200, 22) |
+| 苏甜甜 (AI2) | 右侧 | (788, 20) | `#FFB74D` | 56×56 | (720, 9) | (720, 22) |
+
+---
+
+## 5. 中央出牌区
+
+### 5.1 背景
+
+```javascript
+var cx = 480;
+var playBg = scene.add.graphics();
+playBg.fillStyle(0x000000, 0.1);
+playBg.fillRoundedRect(160, 59, 640, 206, 10).setDepth(10);
+```
+
+| 属性 | 值 |
+|:----:|:---:|
+| X | 160 |
+| Y | 59 |
+| W | 640 |
+| H | 206 |
+| 圆角 | 10px |
+| 填充 | `#000000` alpha 0.1 |
+| depth | 10 |
+
+### 5.2 区域标签
+
+| 标签 | 内容 | X | Y | fontSize | color | alpha | depth | origin |
+|:----:|:----:|:-:|:-:|:--------:|:-----:|:-----:|:-----:|:------:|
+| 出牌区标签 | `出牌区` | 480 | 218 | 10px | `#66BB6A` | 0.4 | 11 | 0.5 |
+| AI1出牌标签 | `王怼怼：` | 182 | 65 | 10px | `#A5D6A7` | 1 | 11 | — |
+| AI2出牌标签 | `苏甜甜：` | 690 | 65 | 10px | `#A5D6A7` | 1 | 11 | — |
+| 玩家出牌标签 | `你出：` | 480 | 270 | 10px | `#A5D6A7` | 1 | 11 | 0.5 |
+
+### 5.3 出牌位置 (displayPlay)
+
+```javascript
+var positions = {
+  player: { x: 360, y: 195, w: 50, h: 72, origin: 0.5 },
+  ai1:    { x: 280, y: 133, w: 42, h: 60, origin: 0.5 },
+  ai2:    { x: 680, y: 133, w: 42, h: 60, origin: 0.5 }
+};
+```
+
+| 角色 | 出牌中心X | 出牌Y | 牌宽 | 牌高 | depth | 重叠量 |
+|:----:|:---------:|:-----:|:----:|:----:|:-----:|:------:|
+| 王怼怼 | 280 | 133 | 42 | 60 | 21 | min(w×0.6, (480-w)/(n-1)) |
+| 苏甜甜 | 680 | 133 | 42 | 60 | 21 | 同上 |
+| 玩家 | 360 | 195 | 50 | 72 | 21 | 同上 |
+
+**重叠量公式:**
+```javascript
+var overlap = Math.min(pos.w * 0.6, (480 - pos.w) / Math.max(n - 1, 1));
+// 王怼怼: overlap = min(25.2, (480-42)/(n-1))
+// 玩家: overlap = min(30, (480-50)/(n-1))
+```
+
+**起始X计算:**
+```javascript
+var totalW = pos.w + (n - 1) * overlap;
+var startX = pos.x - totalW / 2;
+```
+
+### 5.4 出牌标签管理
+
+`displayPlay` 函数使用 `ai1PlayCardsGraphics`, `ai2PlayCardsGraphics`, `myPlayCardsGraphics` 三个数组存储图片引用，每次调用时先销毁旧数组中的元素。
+
+---
+
+## 6. 手牌区
+
+### 6.1 背景
+
+```javascript
+var handBg = scene.add.graphics();
+handBg.fillStyle(0x000000, 0.15);
+handBg.fillRoundedRect(20, 300, 920, 115, 10).setDepth(10);
+```
+
+| 属性 | 值 |
+|:----:|:---:|
+| X | 20 |
+| Y | 300 |
+| W | 920 |
+| H | 115 |
+| 圆角 | 10px |
+| 填充 | `#000000` alpha 0.15 |
+| depth | 10 |
+
+### 6.2 手牌标签
+
+```javascript
+scene.add.text(68, 305, '你的手牌', {
+  fontSize: '11px', color: '#A5D6A7'
+}).setDepth(11);
+```
+
+### 6.3 手牌规格
+
+| 属性 | 值 |
+|:----:|:---:|
+| 牌宽 (cw) | **56 px** |
+| 牌高 (ch) | **80 px** |
+| 牌间距 (gap) | **4 px** — 均匀展开，无重叠 |
+| 底边基础Y (baseY) | **345** |
+| 选中缩放 | **scale(1.15)** |
+| depth | **110** |
+
+### 6.4 排列公式 (均匀展开)
+
+```javascript
+var n = hand.length, cw = 56, ch = 80, gap = 4;
+var totalWidth = cw * n + gap * (n - 1);
+var startX = 180 + (700 - totalWidth) / 2;
+var baseY = 345;
+
+for (var ii = 0; ii < n; ii++) {
+  var cx = startX + ii * (cw + gap) + cw / 2;
+  var cy = baseY;  // 直线排列，无弧线
+  var img = self.add.image(cx, cy, key).setDisplaySize(cw, ch).setDepth(110);
+}
+```
+
+### 6.5 选中/取消状态
+
+```javascript
+img.on('pointerdown', function() {
+  if (self.gameState !== GAME_STATE.PLAYER_TURN) {
+    showToast(self, '现在不是你的出牌阶段');
+    return;
+  }
+  var s = this.getData('selected');
+  if (s) {
+    // 取消选中
+    this.setScale(1.0);
+    this.setData('selected', false);
+    // 从 selectedCards 中移除
+  } else {
+    // 选中
+    this.setScale(1.15);
+    this.setData('selected', true);
+    // 加入 selectedCards
+  }
+});
+```
+
+| 操作 | 变化 | 音效 |
+|:----:|:----:|:----:|
+| 选中 | `scale(1.15)` 放大突出 | `SoundManager.selectCard()` (cardSlide1-3, vol 0.6) |
+| 取消选中 | `scale(1.0)` 恢复原尺寸 | `SoundManager.deselectCard()` (cardSlide1-3, vol 0.5) |
+
+---
+
+## 7. 底牌系统
+
+### 7.1 初始占位
+
+在 `createPlayArea` 中创建:
+
+```javascript
+scene.add.text(460, 60, '底牌: ? ? ?', {
+  fontSize: '8px', color: '#66BB6A', alpha: 0.4
+}).setDepth(11);
+```
+
+| 属性 | 值 |
+|:----:|:---:|
+| X | 460 |
+| Y | 60 |
+| fontSize | **8px** |
+| color | `#66BB6A` |
+| alpha | 0.4 |
+| depth | 11 |
+
+### 7.2 showBottomCards 函数
+
+```javascript
+GameScene.prototype.showBottomCards = function (cards) {
+  // 清除旧图片
+  if (this.bottomCardImgs) {
+    for (var bi = 0; bi < this.bottomCardImgs.length; bi++) this.bottomCardImgs[bi].destroy();
+  }
+  this.bottomCardImgs = [];
+  if (this.bottomCardText) this.bottomCardText.destroy();
+
+  if (!cards || cards.length === 0) {
+    this.bottomCardText = this.add.text(480, 72, '底牌: ? ? ?', {
+      fontSize: '8px', color: '#66BB6A', alpha: 0.4
+    }).setOrigin(0.5).setDepth(20);
+    return;
+  }
+  // B38: 取消显示底牌牌背图片，底牌直接融入地主手牌
+};
+```
+
+**行为:**
+- 无底牌(cards=null/空)时: 显示 "底牌: ? ? ?" 文字在 (480,72)，depth 20，带 origin(0.5)
+- 有底牌时: **不做任何展示**（设计决策B38），底牌直接融入地主手牌，通过 `renderPlayerHand()` 更新
+
+---
+
+## 8. 底部功能按钮
+
+### 8.1 按钮区域
+
+```javascript
+var bw = 72, bh = 48, gap = 14;
+var totalW = bw * 5 + gap * 4;           // = 416
+var startX = (960 - totalW) / 2;         // = 272
+var btnY = 442;
+```
+
+| 序号 | 标签 | 颜色 (hex) | X | Y | W | H | 圆角 | depth | 触发函数 |
+|:----:|:----:|:----------:|:-:|:-:|:-:|:-:|:----:|:-----:|:--------:|
+| 0 | `出牌` | `#4ECDC4` | 272 | 442 | 72 | 48 | 8 | 100 | `doPlayerPlay()` |
+| 1 | `提示` | `#FFD93D` | 358 | 442 | 72 | 48 | 8 | 100 | `doHint()` |
+| 2 | `不出` | `#FF6B6B` | 444 | 442 | 72 | 48 | 8 | 100 | `doPlayerPass()` |
+| 3 | `搞事情` | `#7C4DFF` | 530 | 442 | 72 | 48 | 8 | 100 | `doAction()` |
+| 4 | `底牌查看` | `#78909C` | 616 | 442 | 72 | 48 | 8 | 100 | `showBottomCards()` |
+
+### 8.2 按钮内部结构
+
+每个按钮由两部分组成:
+- **背景:** Graphics + fillRoundedRect + setInteractive + `setDepth(100)`
+- **文字:** Text, fontSize 13px, color `#FFFFFF`, fontStyle bold, origin(0.5), `setDepth(101)`
+
+文字微调: `y = btnY + bh/2 - 1` (向上偏移1px平衡视觉)
+
+### 8.3 点击交互
+
+点击区域使用 `new Phaser.Geom.Rectangle(bx, btnY, bw, bh)` 精确匹配按钮尺寸。
+
+点击状态:
+- **"底牌查看"** → `showBottomCards(scene.remainingCards)` — 展示底牌文字（如无底牌则显示 "底牌: ? ? ?"）
+
+### 8.4 隐藏/显示
+
+```javascript
+hideActionButtons()  // 叫分开始时调用，销毁所有actionButtons元素
+
+showActionButtons()  // 叫分结束后调用，重新调用createActionButtons
+```
+
+---
+
+## 9. 叫分UI
+
+### 9.1 整体布局
+
+```javascript
+var cx = 480;
+var uiY = 280;
+var bw = 96, bh = 52, gap = 12;
+var totalW = bw * 4 + gap * 3;     // = 420
+var startX = (960 - totalW) / 2;   // = 270
+```
+
+| 按钮 | 标签 | 颜色 (hex) | X | Y | W | H | 圆角 | depth |
+|:----:|:----:|:----------:|:-:|:-:|:-:|:-:|:----:|:-----:|
+| 不叫 | `不叫` | `#FF6B6B` | 270 | 280 | 96 | 52 | 10 | 200 |
+| 1分 | `1分` | `#4ECDC4` | 378 | 280 | 96 | 52 | 10 | 200 |
+| 2分 | `2分` | `#FFD93D` | 486 | 280 | 96 | 52 | 10 | 200 |
+| 3分 | `3分` | `#FF6B35` | 594 | 280 | 96 | 52 | 10 | 200 |
+
+### 9.2 辅助元素
+
+| 元素 | 内容 | X | Y | fontSize | color | depth |
+|:----:|:----:|:-:|:-:|:--------:|:-----:|:-----:|
+| 提示文字 | `请叫分` | 480 | 170 | 15px | `#FFFFFF` bold | 200 |
+| 强度提示 | `★ 手牌很强 (强度分: N)` | 480 | 260 | 10px | `#A5D6A7` | 200 |
+
+### 9.3 叫分按钮文字
+
+每个按钮的标签文字在按钮内居中，fontSize 14px, color `#FFFFFF`, fontStyle bold, depth 201。
+
+### 9.4 叫分交互
+
+```javascript
+bg.on('pointerup', function() {
+  self.handlePlayerBid(val);
+});
+```
+
+点击后自动 `hideBiddingUI()` 销毁所有叫分UI元素。
+
+---
+
+## 10. 出牌记录面板
+
+### 10.1 创建 (createPlayHistoryArea)
+
+```javascript
+function createPlayHistoryArea(scene) {
+  var bg = scene.add.graphics();
+  bg.fillStyle(0x000000, 0.2);
+  bg.fillRoundedRect(12, 58, 140, 240, 6).setDepth(200);
+
+  scene.add.text(20, 63, '出牌', {
+    fontSize: '9px', color: '#81C784'
+  }).setDepth(201);
+
+  scene.playHistoryText = scene.add.text(20, 74, '', {
+    fontSize: '9px', color: '#C8E6C9',
+    lineSpacing: 3, wordWrap: { width: 124 }
+  }).setDepth(201);
+}
+```
+
+| 元素 | X | Y | W | H | 圆角 | fontSize | color | depth |
+|:----:|:-:|:-:|:-:|:-:|:----:|:--------:|:-----:|:-----:|
+| 面板背景 | 12 | 58 | 140 | 240 | 6 | — | 黑0.2 | 200 |
+| 标题 | 20 | 63 | — | — | — | 9px | `#81C784` | 201 |
+| 内容 | 20 | 74 | 124(wordWrap) | — | — | 9px | `#C8E6C9` | 201 |
+
+### 10.2 记录格式
+
+```
+entry = { text: "你: 3 4 5 6 7", cards: [...] }   // 出牌
+entry = { text: "王怼怼: 不出", pass: true }      // 跳过
+```
+
+- 最大保留 **8条** (`playHistory.length > 8` 时 slice(-8))
+- 最多显示 **6条** (从 `Math.max(0, length-6)` 处开始显示)
+- 玩家颜色: `你`, AI1: `王怼怼`, AI2: `苏甜甜`
+
+---
+
+## 11. 结算面板
+
+### 11.1 函数签名
+
+```javascript
+GameScene.prototype.renderRoundEndPanel = function (winner)
+// winner: 'player' | 'ai1' | 'ai2'
+```
+
+### 11.2 层级结构
+
+```
+Depth 400:      整个半透明遮罩 (overlay) — 初始 alpha=0, 淡入至 0.65
+Depth 401:      结算卡片背景 (200,60 → 560×480)
+Depth 402:      标题、得分面板、分隔线
+Depth 403:      细项文字、总得分数字、按钮背景、用时文字
+Depth 404:      按钮文字
+```
+
+### 11.3 精确坐标
+
+| 元素 | 类型 | X | Y | W | H | 圆角 | 备注 |
+|:----:|:----:|:-:|:-:|:-:|:-:|:----:|------|
+| 半透明遮罩 | fillRect | 0 | 0 | 960 | 600 | — | 初始alpha 0 → 0.65 |
+| 结算卡片 | fillRoundedRect | 200 | 60 | 560 | 480 | 12 | fill `#1A1A2E` 0.92 |
+| 卡片边框 | strokeRoundedRect | 200 | 60 | 560 | 480 | 12 | 金色(赢) `#FFD700` / 红色(输) `#FF5252`, 0.8 |
+| 主标题 | text | 480 | 90 | — | — | — | 28px bold, origin(0.5) |
+| AI获胜副标题 | text | 480 | 120 | — | — | — | 16px `#FF5252`, origin(0.5) |
+| 得分面板 | fillRoundedRect | 240 | 142 | 480 | 260 | 8 | fill 黑 0.25 |
+| 总得分标题 | text | 480 | 155 | — | — | — | "💰 总得分", 14px, `#A5D6A7` |
+| 总得分数字 | text | 480 | 190 | — | — | — | `+N`, 36px bold, `#FFD700` |
+| 分隔线1 | lineBetween | (260,215) → (700,215) | — | — | — | line 1px, 白 0.1 |
+| 细项行1 | text | 270 | 235 | — | — | — | 13px |
+| 细项行2 | text | 270 | 260 | — | — | — | 13px |
+| 细项行3 | text | 270 | 285 | — | — | — | 13px |
+| 细项行4 | text | 270 | 310 | — | — | — | 13px |
+| 分隔线2 | lineBetween | (260,335) → (700,335) | — | — | — | line 1px, 白 0.1 |
+| 再来一局按钮 | fillRoundedRect | 290 | 370 | 170 | 44 | 8 | fill `#4ECDC4` |
+| 返回首页按钮 | fillRoundedRect | 500 | 370 | 170 | 44 | 8 | fill `#78909C` |
+| 按钮文字(左) | text | 375 | 392 | — | — | — | "🔄 再来一局", 15px bold |
+| 按钮文字(右) | text | 585 | 392 | — | — | — | "🏠 返回首页", 15px bold |
+| 本局用时 | text | 710 | 510 | — | — | — | 10px, `#888888` |
+
+### 11.4 得分计算公式 (代码级别)
+
+```javascript
+var baseScore = self.isLandlord ? 30 : 20;
+var bombMult = self.totalBombs || 0;
+var chaosScore = self.chaosScore || 0;
+var chaosBonus = chaosScore * 10;
+var remainingCards = (对手剩余手牌之和);
+var handBonus = remainingCards * 2;
+var subTotal = baseScore + chaosBonus + handBonus;
+var multiplier = Math.pow(2, bombMult);
+var totalScore = subTotal * multiplier;
+```
+
+**得分细项:**
+1. 基础底分 (★) : `+baseScore` (地主30/农民20), color `#C8E6C9`
+2. 炸弹翻倍 (🧨): `×multiplier (bombMult个)`, color `#FFD54F`
+3. 搞事情得分 (🔥): `+chaosBonus`, color `#FFAB91`
+4. 手牌奖励 (🃏): `+handBonus`, color `#A5D6A7`
+
+### 11.5 动画时间线
+
+| Time (ms) | 动作 | 属性变化 | 缓动 |
+|:---------:|------|:--------:|:----:|
+| 0 | 遮罩淡入 | alpha 0→0.65 | Linear, 300ms |
+| 300 | 结算卡片淡入 | alpha 0→1 | Linear, 300ms |
+| 300 | 得分面板淡入 | alpha 0→1 | Linear, 300ms |
+| 400 | 标题弹入 | scale 0.3→1.0, alpha 0→1 | Back.easeOut, 400ms |
+| 400 | AI副标题淡入 | alpha 0→1 | Linear, 300ms |
+| 700 | 总得分标题淡入 | alpha 0→1 | Linear, 200ms |
+| 700 | 总得分数字淡入 | alpha 0→1 | Linear, 300ms |
+| 700 | 分隔线1淡入 | alpha 0→1 | Linear, 200ms |
+| 900+n×150 | 各细项逐行淡入 (4行) | alpha 0→1 | Linear, 200ms/行 |
+| 1500 | 分隔线2淡入 | alpha 0→1 | Linear, 200ms |
+| 1600 | 用时文字淡入 | alpha 0→1 | Linear, 200ms |
+| 1800 | 两个按钮同时淡入 | alpha 0→1 | Linear, 200ms |
+
+**总动画时长:** 约 2.0 秒
+
+---
+
+## 12. Toast 通知
+
+### 12.1 实现
+
+```javascript
+function showToast(scene, message) {
+  var cx = 300;
+  var toastBg = scene.add.graphics();
+  toastBg.fillStyle(0x000000, 0.7);
+  toastBg.fillRoundedRect(cx - 100, 206, 200, 38, 10).setDepth(200);
+  var toastText = scene.add.text(cx, 225, message, {
+    fontSize: '13px', color: '#FFFFFF'
+  }).setOrigin(0.5).setDepth(201);
+  scene.time.delayedCall(1200, function() {
+    toastBg.destroy();
+    toastText.destroy();
+  });
+}
+```
+
+| 属性 | 值 |
+|:----:|:---:|
+| 背景位置 | (200, 206) |
+| 背景尺寸 | 200 × 38 |
+| 背景圆角 | 10px |
+| 背景填色 | `#000000`, alpha 0.7 |
+| 文字位置 | (300, 225), origin(0.5) |
+| 文字大小 | 13px |
+| 文字颜色 | `#FFFFFF` |
+| depth (背景) | 200 |
+| depth (文字) | 201 |
+| 自动消失 | **1200ms** 后 destroy |
+
+### 12.2 Toast 触发场景
+
+| 场景 | 消息 |
+|:----:|------|
+| 手牌不足选中 | "请先选择手牌" |
+| 非法牌型 | "非法牌型组合" |
+| 不能压过 | "不能压过上家的牌" |
+| 不是出牌阶段 | "现在不是你的出牌阶段" |
+| 自由出牌跳过 | "自由出牌阶段不能跳过" |
+| 不出 (确认) | "不出" |
+| 提示无可用牌 | "没有能出的牌" |
+| 重新发牌 | "重新发牌..." |
+
+---
+
+## 13. 搞事情模式 UI
+
+详细的搞事情UI坐标在 `ChaoShiQing-detailed.md` 中，本章仅摘要布局相关参数。
+
+### 13.1 遮罩与卡片 (createChaosOverlay)
+
+| 元素 | X | Y | W | H | 颜色 | 圆角 | depth |
+|:----:|:-:|:-:|:-:|:-:|:----:|:----:|:-----:|
+| 遮罩 | 0 | 0 | 960 | 600 | 黑 0.75 | — | 300 |
+| 白色卡片 | 150 | 55 | 660 | 320 | 白 | 12 | 301 |
+| 阴影层 | 154 | 58 | 660 | 320 | 黑 0.08 | 12 | 301 |
+| 标题 | 480 | 77 | — | — | `#FF6B35`, 19px bold | — | 302 |
+| 分数 | 660 | 77 | — | — | `#333333`, 12px | — | 302 |
+| 关闭按钮 | 720 | 72 | 20 | 28 | `#E53935`, 圆角10 | 10 | 302 |
+| 关闭文字 | 734 | 83 | — | — | `#FFFFFF`, 15px | — | 303 |
+
+### 13.2 题型选择卡片
+
+| 卡片 | X | Y | W | H | 圆角 | depth |
+|:----:|:-:|:-:|:-:|:-:|:----:|:-----:|
+| 所有卡片 | 220/500 | 107/181 | 260 | 88 | 10 | 302 |
+| 图标 | cx+12 | cy+12 | — | — | — | 303 |
+| 标签 | cx+58 | cy+14 | — | — | — | 303 |
+| 描述 | cx+58 | cy+40 | — | — | — | 303 |
+
+**默认态:** fill `#F0F4FF`, border 1.5px `#CCD8FF`  
+**Hover态:** fill `#E0EAFF`, border 2px `#7C4DFF`
+
+### 13.3 答题选项
+
+| 选项 | X | Y | W | H | 圆角 | depth |
+|:----:|:-:|:-:|:-:|:-:|:----:|:-----:|
+| A | 175 | 155 | 290 | 64 | 8 | 302 |
+| B | 480 | 155 | 290 | 64 | 8 | 302 |
+| C | 175 | 230 | 290 | 64 | 8 | 302 |
+| D | 480 | 230 | 290 | 64 | 8 | 302 |
+
+选项内容使用 wordWrap width=235, lineSpacing=1
+
+### 13.4 换牌界面
+
+| 遮罩 | depth 350, 黑0.6 |
+|:-----|:-----------------|
+| 标题 | (480, 90), 18px `#FFD700` |
+| 确认按钮 | (290, 310, 200×44) `#4ECDC4` |
+| 取消按钮 | (290, 360, 200×44) `#78909C` |
+| 飞牌动画 | duration 600ms, ease `Cubic.easeOut`, 旋转720° |
+
+---
+
+## 14. 全屏与自适应
+
+### 14.1 全屏切换
+
+| 操作 | 函数 |
+|:----:|:----:|
+| 进入全屏 | `el.requestFullscreen()` 或 `el.webkitRequestFullscreen()` |
+| 退出全屏 | `document.exitFullscreen()` 或 `document.webkitExitFullscreen()` |
+| 缩放自适应 | `zoomCanvasToFill()` |
+
+### 14.2 缩放模式对照
+
+| 状态 | scale.mode | 容器尺寸 | 效果 |
+|:----:|:----------:|:---------|------|
+| 非全屏 | FIT | 自适应 | 等比缩放，保留完整画面。高度撑满时两侧可能有绿边 |
+| 全屏 | FILL | 固定撑满 (`fixed` + `top:0 left:0`) | 填满全屏，允许左右裁剪，不裁顶部/底部按钮区域 |
+
+### 14.3 首次点击全屏
+
+- 触发条件：`self.input.once('pointerdown', ...)`
+- 仅触发一次（`autoFSdone` 守卫）
+- 用户拒绝时 `.catch(function(){})` 静默处理
+- 不阻塞游戏流程
+
+### 14.4 画布约束
+
+因为是 Phaser Scale.FIT + CENTER_BOTH，设计分辨率 960×600 在所有宽高比下都能完整显示，但在超宽屏（>16:9）时两侧会有深绿色背景填充区。
+
+---
+
+## 15. 色彩系统
+
+### 15.1 主题色
+
+| 名称 | HEX | 用途 | 代码参考 |
+|:----:|:----:|------|:--------:|
+| 深绿背景 | `#1B5E20` | 画布底色 (主色调) | `backgroundColor`, `fillGradientStyle` |
+| 深绿暗端 | `#0D3B0F` | 渐变底部 | `fillGradientStyle` |
+| 中绿 | `#2E7D32` | 外层光晕 | `fillStyle(0x2E7D32, 0.15)` |
+| 浅绿 | `#388E3C` | 内层光晕 | `fillStyle(0x388E3C, 0.1)` |
+| 绿色描边 | `#4CAF50` | 外边框、装饰圆 | `strokeRoundedRect`, `strokeCircle` |
+| 亮绿描边 | `#66BB6A` | 装饰矩形、中心圆、分隔线 | 多处使用 |
+
+### 15.2 文字色
+
+| 名称 | HEX | 用途 | Alpha/备注 |
+|:----:|:----:|------|:----------:|
+| 亮绿文字 | `#E8F5E9` | 回合指示、AI名称 | — |
+| 浅灰绿文字 | `#A5D6A7` | AI牌数、状态文字、强度提示、手牌标签、出牌标签 | — |
+| 淡绿文字 | `#66BB6A` | 底牌提示 "底牌: ? ? ?" | 0.4 |
+| 中绿文字 | `#81C784` | 出牌记录标题 | — |
+| 浅绿记录 | `#C8E6C9` | 出牌记录内容 | — |
+| 白色 | `#FFFFFF` | 按钮文字、Toast、叫分按钮文字 | — |
+| 深色 | `#333333` | 搞事情分数、题目选项文字 | — |
+
+### 15.3 AI 角色色
+
+| 角色 | aiId | HEX | 用途 |
+|:----:|:----:|:----:|------|
+| 王怼怼 | `duidui` | `#4FC3F7` (浅蓝) | 头像底色 40×40 |
+| 苏甜甜 | `tiantian` | `#FFB74D` (橙色) | 头像底色 40×40 |
+
+### 15.4 按钮色 (完整列表)
+
+| 按钮 | HEX | 场景 |
+|:----:|:----:|:----:|
+| 出牌 | `#4ECDC4` (青绿) | 功能按钮、叫分"1分"、结算"再来一局"、换牌确认 |
+| 提示 | `#FFD93D` (黄) | 功能按钮、叫分"2分" |
+| 不出 | `#FF6B6B` (红) | 功能按钮、叫分"不叫" |
+| 搞事情 | `#7C4DFF` (紫) | 功能按钮、题型Hover边框 |
+| 底牌查看 | `#78909C` (灰蓝) | 功能按钮、换牌取消、结算"返回" |
+| 叫分"3分" | `#FF6B35` (橙) | 叫分阶段 |
+
+### 15.5 结算面板色
+
+| 元素 | HEX |
+|:----:|:----:|
+| 卡片底色 | `#1A1A2E` (深蓝黑) |
+| 赢家边框+标题 | `#FFD700` (金) |
+| 输家边框+标题 | `#FF5252` (红) |
+| 总得分 | `#FFD700` (金) + shadow blur 15 |
+| 卡片填色 | `0x1A1A2E`, alpha 0.92 |
+
+### 15.6 搞事情色
+
+| 元素 | HEX |
+|:----:|:----:|
+| 遮罩 | `#000000`, alpha 0.75 |
+| 白色卡片 | `#FFFFFF` |
+| 标题 | `#FF6B35` (橙) |
+| 题型卡片默认 | `#F0F4FF` + border `#CCD8FF` |
+| 题型卡片hover | `#E0EAFF` + border `#7C4DFF` |
+| 选项默认 | `#F5F5F5` + border `#CCCCCC` |
+| 选项标记 | `#4ECDC4` (青绿圆圈) |
+| 答对反馈 | `#4CAF50` (绿) |
+| 答错反馈 | `#E53935` (红) |
+| 超时反馈 | `#FF5252` (红) |
+| 换牌确认 | `#4ECDC4` |
+| 换牌取消 | `#78909C` |
+
+### 15.7 AI 气泡色
+
+| 元素 | 王怼怼 | 苏甜甜 |
+|:----:|:------:|:------:|
+| 头像底色 | `#4FC3F7` | `#FFB74D` |
+| 气泡背景 (出牌) | `#1B5E20` 0.85 | `#311B92` 0.85 |
+| 气泡边框 (出牌) | `#66BB6A` 0.5 | `#CE93D8` 0.5 |
+| 气泡圆角 | 12px | 4px |
+| 气泡背景 (搞事情) | `#1B5E20` 0.85 | `#1B5E20` 0.85 |
+| 气泡边框 (搞事情) | `#66BB6A` 0.5 | `#66BB6A` 0.5 |
+
+---
+
+## 16. 字体规范
+
+### 16.1 字体族
+
+```javascript
+fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif'
+```
+
+所有文本统一使用以上字体族。仅表情符号使用 `fontFamily: 'sans-serif'`。
+
+### 16.2 字号全表
+
+| 字号 (px) | lineSpacing | 使用场景 |
+|:---------:|:-----------:|----------|
+| **8** | — | 底牌提示文字 (初始及 showBottomCards) |
+| **9** | 3 | 出牌记录标题 + 内容 |
+| **10** | — | AI名称、AI牌数、状态文本、强度提示、出牌标签 (4处) |
+| **11** | — | "你的手牌" 标签 |
+| **12** | — | 回合指示器、AI气泡名称、搞事情分数、选项标记字母 |
+| **13** | — | 功能按钮文字、Toast文字、结算细项行、题型标签、选项文字 |
+| **14** | 4(题目) | 叫分按钮文字、搞事情气泡台词、题目文字、选项文字(wordWrap) |
+| **15** | — | 叫分提示、结算按钮文字、换牌按钮文字 |
+| **18** | — | 头像表情 (😎/😊) |
+| **19** | — | 搞事情标题 |
+| **20** | — | 反馈结果 (答对/答错) |
+| **22** | — | 全屏按钮 (⛶) |
+| **26** | — | 题型卡片图标 |
+| **28** | — | 结算主标题 |
+| **36** | — | 结算总得分数字 |
+
+### 16.3 字重规范
+
+| 字重 | 使用场景 |
+|:----:|----------|
+| **bold** | 按钮、标题、回合指示、AI名称、状态文字、提示文字、搞事情标题、反馈结果、结算得分、确认/取消按钮 |
+| normal | AI牌数、出牌标签、底牌提示、出牌记录、强度提示、选项文字、Toast |
+
+### 16.4 文字阴影
+
+仅结算主标题和总得分数字使用 shadow:
+```javascript
+// 结算标题
+shadow: { blur: 20, color: titleColor, fill: true }
+// 总得分数字
+shadow: { blur: 15, color: '#FFD700', fill: true }
+```
+
+---
+
+## 17. Z轴深度层级
+
+### 17.1 完整深度表
+
+| Depth Range | 内容 | 分组名 |
+|:-----------:|------|:------:|
+| **10** | 状态栏背景、出牌区背景、手牌区背景 | 主背景 |
+| **11** | 状态栏文字、出牌标签、手牌标签、底牌初始文字、分隔线 | 主文字 |
+| **12-13** | AI头像图片 | AI元素 |
+| **20** | AI气泡头像、气泡背景、气泡三角、底牌文字(showBottomCards) | 气泡/底牌 |
+| **21** | AI气泡文字、出牌图片 (AI+玩家) | 气泡文字/出牌 |
+| **100** | 功能按钮背景 (5个) | 按钮 |
+| **101** | 功能按钮文字 | 按钮文字 |
+| **110** | 手牌图片 (所有玩家手牌) | 手牌 |
+| **111** | 手牌选中标记 (通过调整image本身Y实现，无额外元素) | — |
+| **200** | 叫分按钮背景、叫分提示文字、强度提示、出牌记录面板、全屏按钮、Toast背景 | 弹层/上层UI |
+| **201** | 叫分按钮文字、出牌记录内容、Toast文字 | 上层文字 |
+| **300** | 搞事情遮罩 | 搞事情弹层 |
+| **301** | 搞事情白色卡片+阴影 | 搞事情卡片 |
+| **302** | 搞事情标题、标签、类型卡片、选项背景、气泡背景、关闭按钮 | 搞事情内容 |
+| **303** | 搞事情图标文字、气泡文字、选项文字 | 搞事情文字 |
+| **304** | 搞事情选项标记文字 | 搞事情选项 |
+| **305** | 搞事情反馈图标、换牌按钮 ("再来一题"/"关掉回牌") | 搞事情按钮 |
+| **306** | 搞事情按钮文字 | 搞事情按钮文字 |
+| **310** | 搞事情换牌结果文字 (🔄 / 😅 / 😈) | 换牌反馈文字 |
+| **350** | 搞事情换牌遮罩 | 换牌遮罩 |
+| **351** | 换牌标题、标签文字 | 换牌UI |
+| **352** | 换牌卡片 (玩家+AI) | 换牌卡片 |
+| **353** | 换牌按钮背景 | 换牌按钮 |
+| **354** | 换牌按钮文字 | 换牌按钮文字 |
+| **355** | 换牌选中卡片 | 换牌选中态 |
+| **400** | 结算遮罩 | 结算弹层 |
+| **401** | 结算卡片背景 | 结算卡片 |
+| **402** | 结算标题、得分面板背景、分隔线 | 结算内容 |
+| **403** | 结算得分细项、总分数字、按钮背景、用时文字 | 结算文字+按钮 |
+| **404** | 结算按钮文字 | 结算按钮文字 |
+
+### 17.2 深度分配原则
+
+| 原则 | 说明 |
+|:----|------|
+| 1. 后创建在高处 | 非特殊情况，后创建的元素z值更高 |
+| 2. 弹层额外加100 | 遮罩+数层(300,350,400) |
+| 3. 同一层bg+10=文字 | 背景和文字保持+1的差值 |
+| 4. 手牌高于按钮 | 手牌110 > 按钮100/101 |
+| 5. 搞事情高于出牌 | 搞事情300+ > 出牌区10-20 |
+
+---
+
+## 18. 动画与过渡参数
+
+### 18.1 动画参数全表
+
+| 场景 | 属性 | duration | ease | 延迟 | 备注 |
+|:----:|:----:|:--------:|:----:|:----:|------|
+| 结算遮罩 | alpha 0→0.65 | 300ms | Linear | 0ms | tween |
+| 结算卡片 | alpha 0→1 | 300ms | Linear | 300ms | tween |
+| 得分面板 | alpha 0→1 | 300ms | Linear | 300ms | tween |
+| 结算标题 | scale 0.3→1.0, alpha 0→1 | 400ms | Back.easeOut | 400ms | tween |
+| AI副标题 | alpha 0→1 | 300ms | Linear | 400ms | tween |
+| 总得分标题 | alpha 0→1 | 200ms | Linear | 700ms | tween |
+| 总得分数字 | alpha 0→1 | 300ms | Linear | 700ms | tween |
+| 分隔线1 | alpha 0→1 | 200ms | Linear | 700ms | tween |
+| 各细项逐行 | alpha 0→1 | 200ms | Linear | 900+n×150ms | tween |
+| 分隔线2 | alpha 0→1 | 200ms | Linear | 1500ms | tween |
+| 用时文字 | alpha 0→1 | 200ms | Linear | 1600ms | tween |
+| 按钮淡入 | alpha 0→1 | 200ms | Linear | 1800ms | tween |
+| 手牌选中 | y -= 16 | 即时 | — | — | 无动画 |
+| Toast | — | — | — | 1200ms后destroy | 无动画 |
+| AI思考延迟 | — | — | — | 1200ms | setTimeout |
+| AI出牌间隔 | — | — | — | 600~1200ms | setTimeout |
+| 发牌延迟 | — | — | — | 1500ms | setTimeout |
+| 搞事情换牌动画 | x/scale/angle 变化 | 600ms | Cubic.easeOut | — | 旋转720° |
+| 答错换牌 | x/scale/angle 变化 | 700ms | Back.easeIn | 600ms前提 | 缩小至0.4, 旋转10° |
+| AI气泡 (出牌) | — | — | — | 4000/5000ms后destroy | 无动画 |
+| AI气泡 (搞事情) | — | — | — | 3500ms后destroy | 无动画 |
+
+### 18.2 时序图 (结算面板)
+
+```
+ 0ms   300ms   400ms         700ms   900ms     1500ms 1600ms 1800ms
+  │      │       │             │       │          │     │     │
+  ├──────┤       │             │       │          │     │     │  遮罩淡入
+         ├───────┤             │       │          │     │     │  卡片+面板淡入
+                 ├─────────────┤       │          │     │     │  标题弹入 (Back)
+                               ├───────┤          │     │     │  得分+分隔线1
+                                       ├────┬────┤     │     │  细项逐行(间隔150ms)
+                                              ├─────┤     │     │  分隔线2
+                                                     ├────┤     │  用时文字
+                                                          ├────┤  按钮淡入
+```
+
+---
+
+## 19. 交互区域全表
+
+### 19.1 可交互元素 (mouse/pointer)
+
+| 区域 | 点击范围 (X,Y,W,H) | 交互类型 | 绑定函数 | depth |
+|:----|:-------------------|:--------:|:---------|:-----:|
+| 全屏按钮 | (center 940,24) | pointerdown | 全屏切换 | 200 |
+| 手牌 (单张) | (动态, 56×80) | pointerdown | 选中/取消 | 110 |
+| 出牌按钮 | (272,442,72,48) | pointerup | `doPlayerPlay()` | 100 |
+| 提示按钮 | (358,442,72,48) | pointerup | `doHint()` | 100 |
+| 不出按钮 | (444,442,72,48) | pointerup | `doPlayerPass()` | 100 |
+| 搞事情按钮 | (530,442,72,48) | pointerup | `doAction()` | 100 |
+| 底牌查看按钮 | (616,442,72,48) | pointerup | `showBottomCards()` | 100 |
+| 叫分"不叫" | (270,280,96,52) | pointerup | `handlePlayerBid(0)` | 200 |
+| 叫分"1分" | (378,280,96,52) | pointerup | `handlePlayerBid(1)` | 200 |
+| 叫分"2分" | (486,280,96,52) | pointerup | `handlePlayerBid(2)` | 200 |
+| 叫分"3分" | (594,280,96,52) | pointerup | `handlePlayerBid(3)` | 200 |
+| 结算"再来一局" | (290,370,170,44) | pointerup | `scene.restart()` | 403 |
+| 结算"返回首页" | (500,370,170,44) | pointerup | `window.location.reload()` | 403 |
+| 搞事情关闭 | (720,72,20,20) | pointerup | `_destroyChaos()` | 302 |
+| 题型卡片(4张) | (220/500, 107/181, 260, 88) | pointerover/out/down | 题型选择+出题 | 302 |
+| 答题选项(4个) | (175/480, 155/230, 290, 64) | pointerdown | 答题 | 302 |
+| 换牌确认 | (290,310,200,44) | pointerup | 确认交换 | 353 |
+| 换牌取消 | (290,360,200,44) | pointerup | 跳过交换 | 353 |
+| 再来一题 | (220, btnY, 220, 40) | pointerup | 重新出题 | 305 |
+| 关掉回牌 | (510, btnY, 220, 40) | pointerup | 关闭chaos | 305 |
+
+### 19.2 手牌交互命中框
+
+每张牌的交互区域为整张牌面 (56×80)，使用 Phaser.Geom.Rectangle.Contains 检测。手牌重叠量为33px，后方的牌被前方的牌遮挡部分不可直接点击。
+
+### 19.3 叫分按钮精确坐标
+
+```javascript
+var bw = 96, bh = 52, gap = 12;
+var totalW = 96 * 4 + 12 * 3 = 420;
+var startX = (960 - 420) / 2 = 270;
+```
+
+| 按钮 | X | Y |
+|:----:|:-:|:-:|
+| 不叫 | 270 | 280 |
+| 1分 | 378 | 280 |
+| 2分 | 486 | 280 |
+| 3分 | 594 | 280 |
+
+---
+
+## 20. 与旧文档的差异说明
+
+### 20.1 代码与旧 Layout.md 的不一致
+
+| # | 旧 Layout.md | 代码实际值 | 影响 |
+|:-:|:-------------|:-----------|:-----|
+| 1 | 头像图片 36×36 | `setDisplaySize(34, 34)` | 头像显示比预期小2px |
+| 2 | 状态文字 Y=9 | `add.text(480, 8, ...)` Y=8 | 状态文字上移1px |
+| 3 | 初始底牌 X=480 | `add.text(460, 60, ...)` X=460, Y=60 | 底牌初始位置偏左20px |
+| 4 | showBottomCards Y=72 | `add.text(480, 72, ...)` 带 origin(0.5) | 底牌文字居中而非左对齐 |
+| 5 | AI1 名称 X=176 | `add.text(200, 9, ...)` X=200 | 名称在头像右侧24px |
+| 6 | AI2 名称 X=788 | `add.text(720, 9, ...)` X=720 | 名称在头像左侧68px |
+| 7 | overlay depth 400 | 代码中 depth 400 是结算遮罩 | 搞事情遮罩 depth=300 |
+| 8 | 结算面板动画(旧版描述) | 详见本版11.5节 | 逐行动画有明确 delay 公式 |
+| 9 | Toast 说明 X=200 | `cx - 100 = 200`, `cx = 300` | Toast 背景200, 文字在300居中 |
+| 10 | 全屏按钮描述 | 代码中在 create() 内创建 | 不是独立函数 |
+| 11 | B38: 底牌显示 | 底牌直接融入地主手牌, 不再展示牌面 | 设计变更 |
+| 12 | 搞事情选项高度 | 代码使用 64px | 旧文档未指定 |
+
+### 20.2 版本间设计变更
+
+| 版本 | 变更内容 |
+|:----:|----------|
+| B34 | 题型选择时隐藏主标题，选完后恢复 |
+| B38 | 底牌不再单独显示，直接融入地主手牌 |
+| B40 | 全屏按钮样式: backgroundColor `#00000066`, padding 8×6 |
+
+---
+
+## 21. 验收标准
+
+### 21.1 基础布局
+
+| # | 验收条件 | 来源 |
+|:-:|----------|:----:|
+| L1 | 画布 960×600, 背景 `#1B5E20` 渐变为 `#0D3B0F` | game.js |
+| L2 | 顶部状态栏高56px, 半透明黑底(0.3) | createTopBar |
+| L3 | 状态栏底部有1px `#66BB6A` (0.2) 分隔线 | createTopBar |
+| L4 | 状态文字居中 (480,8), 10px, `#A5D6A7` | createTopBar |
+| L5 | 回合指示在左上 (12,9), 12px, `#E8F5E9` | createTopBar |
+
+### 21.2 头像
+
+| # | 验收条件 | 来源 |
+|:-:|----------|:----:|
+| A1 | 王怼怼头像在 (176,20), 底色 `#4FC3F7`, 外框 56×56 | makeAvatarImage |
+| A2 | 苏甜甜头像在 (788,20), 底色 `#FFB74D`, 外框 56×56 | makeAvatarImage |
+| A3 | 头像图片尺寸 34×34 | setDisplaySize |
+| A4 | 名称: 王怼怼 (200,9), 苏甜甜 (720,9), 10px bold | createTopBar |
+| A5 | 牌数: (200,22)/(720,22), 10px, `#A5D6A7` | createTopBar |
+
+### 21.3 出牌区
+
+| # | 验收条件 | 来源 |
+|:-:|----------|:----:|
+| P1 | 出牌区背景 (160,59) w=640 h=206, 黑0.1, 圆角10px | createPlayArea |
+| P2 | 出牌区标签 "出牌区" 在 (480,218), 10px, `#66BB6A` 0.4 | createPlayArea |
+| P3 | AI1 出牌中心 (280,133), 牌42×60 | displayPlay |
+| P4 | AI2 出牌中心 (680,133), 牌42×60 | displayPlay |
+| P5 | 玩家出牌中心 (360,195), 牌50×72 | displayPlay |
+
+### 21.4 手牌区
+
+| # | 验收条件 | 来源 |
+|:-:|----------|:----:|
+| H1 | 手牌区背景 (20,300) w=920 h=115, 黑0.15, 圆角10px | createHandArea |
+| H2 | 标签 "你的手牌" 在 (68,305), 11px, `#A5D6A7` | createHandArea |
+| H3 | 牌宽56px, 高80px, depth 110 | renderPlayerHand |
+| H4 | 选中牌上移16px, 取消选中下移16px | renderPlayerHand |
+| H5 | 弧线两端比中间高9px (Y: 336 vs 345) | renderPlayerHand |
+
+### 21.5 功能按钮
+
+| # | 验收条件 | 来源 |
+|:-:|----------|:----:|
+| B1 | 5个按钮水平居中, 总宽416, 起始X=272 | createActionButtons |
+| B2 | 按钮72×48, 间距14px, 圆角8px, depth 100 | createActionButtons |
+| B3 | 各按钮颜色正确 (出牌#4ECDC4, 提示#FFD93D, 不出#FF6B6B, 搞事情#7C4DFF, 底牌#78909C) | createActionButtons |
+| B4 | 按钮文字13px bold, Y比中心高1px | createActionButtons |
+
+### 21.6 叫分UI
+
+| # | 验收条件 | 来源 |
+|:-:|----------|:----:|
+| R1 | 提示 "请叫分" 在 (480,170), 15px, 白色 | showBiddingUI |
+| R2 | 4个叫分按钮在 Y=280, 96×52, 间距12px | showBiddingUI |
+| R3 | 按钮颜色正确 (不叫=红,1分=青,2分=黄,3分=橙) | showBiddingUI |
+| R4 | 强度提示在 (480,260), 10px, `#A5D6A7` | showBiddingUI |
+
+### 21.7 结算面板
+
+| # | 验收条件 | 来源 |
+|:-:|----------|:----:|
+| E1 | 遮罩淡入0.65, 300ms | renderRoundEndPanel |
+| E2 | 结算卡片 (200,60) w=560 h=480, 圆角12px | renderRoundEndPanel |
+| E3 | 标题弹入: scale 0.3→1.0, 400ms, Back.easeOut | renderRoundEndPanel |
+| E4 | 得分面板 (240,142) w=480 h=260, 黑0.25, 圆角8px | renderRoundEndPanel |
+| E5 | 总分数字36px bold, `#FFD700`, shadow blur 15 | renderRoundEndPanel |
+| E6 | 4个细项行 Y=235~310, 间隔25px, 颜色依次`#C8E6C9`/`#FFD54F`/`#FFAB91`/`#A5D6A7` | renderRoundEndPanel |
+| E7 | 按钮 (290/500,370) w=170 h=44, 圆角8px | renderRoundEndPanel |
+| E8 | 动画序列正确: 遮罩→卡片→标题→得分→细项→分隔线→用时→按钮 | renderRoundEndPanel |
+
+### 21.8 Toast/底牌/出牌记录
+
+| # | 验收条件 | 来源 |
+|:-:|----------|:----:|
+| T1 | Toast 背景 (200,206) w=200 h=38, 黑0.7, 圆角10px, 1200ms 自动消失 | showToast |
+| T2 | Toast 文字 (300,225), 13px, 白色 | showToast |
+| Z1 | 初始底牌提示 "底牌: ? ? ?" 在 (460,60), 8px | createPlayArea |
+| Z2 | showBottomCards 无牌时显示 "底牌: ? ? ?" 在 (480,72) | showBottomCards |
+| Z3 | 有底牌时不做展示 (B38) | showBottomCards |
+| - | 出牌记录面板 (800,60) w=150 h=140, 圆角6px | createPlayHistoryArea |
+
+### 21.9 搞事情UI
+
+| # | 验收条件 | 来源 |
+|:-:|----------|:----:|
+| C1 | 遮罩 (0,0,960,600) 黑0.75, depth 300 | _createChaosOverlay |
+| C2 | 白色卡片 (150,55) w=660 h=320, 圆角12px, depth 301 | _createChaosOverlay |
+| C3 | 标题 (480,77) 19px `#FF6B35` | _createChaosOverlay |
+| C4 | 题型2×2网格: X=220/500, Y=107/181, 260×88 | _showTypeSelection |
+| C5 | 选项2×2网格: X=175/480, Y=155/230, 290×64 | _renderQuestion |
+
+### 21.10 全屏/自适应
+
+| # | 验收条件 | 来源 |
+|:-:|----------|:----:|
+| F1 | 全屏按钮 (940,24), 22px, `#FFFFFF` | create() |
+| F2 | 全屏时切换到 FILL 模式 | zoomCanvasToFill |
+| F3 | 首次点击自动触发全屏请求 | create() input.once |
+| F4 | 拒绝全屏后不重复请求 | .catch(function(){}) |
+
+### 21.11 深度/Z轴
+
+| # | 验收条件 | 来源 |
+|:-:|----------|:----:|
+| D1 | 背景元素 depth 10-11, 手牌110 在按钮100之上 | 对照深度表 |
+| D2 | 搞事情遮罩 depth 300 > 按钮100 | 代码确认 |
+| D3 | 结算遮罩 depth 400 > 搞事情 300 | 代码确认 |
+| D4 | AI气泡 depth 20-21 < 手牌110 | 代码确认 |
+
+---
+
+## 附录: 关键函数索引
+
+| 函数 | 行号 | 功能 | 布局相关 |
+|------|:----:|------|:--------:|
+| `drawTableBackground()` | ~321 | 绘制背景渐变+装饰 | 渐变、光晕、装饰圆 |
+| `createTopBar()` | ~350 | 创建顶部状态栏 | 状态栏56px、AI信息 |
+| `makeAvatarImage()` | ~262 | 创建AI头像 | 头像56×56外框 |
+| `createPlayArea()` | ~375 | 创建出牌区 | 出牌区640×206 |
+| `createHandArea()` | ~400 | 创建手牌区 | 手牌区920×115 |
+| `renderPlayerHand()` | ~408 | 渲染手牌 | 56×80, 弧线, 选中偏移 |
+| `createActionButtons()` | 2396 | 创建底部5按钮 | 72×48, 间距14, 居中 |
+| `createPlayHistoryArea()` | 2697 | 创建出牌记录 | 150×140右上角 |
+| `displayPlay()` | ~1000 | 出牌位置 | AI1(280,133), AI2(680,133), 玩家(360,195) |
+| `showToast()` | 2444 | 通知提示 | 黑底200×38, 1200ms |
+| `renderRoundEndPanel()` | 2463 | 结算面板 | 560×480, 动画序列 |
+| `_createChaosOverlay()` | ~1500 | 搞事情遮罩 | 660×320白色卡片 |
+| `zoomCanvasToFill()` | ~300 | 全屏缩放切换 | FIT→FILL切换 |
+| `showBottomCards()` | ~985 | 底牌显示 | 直接融合(B38) |
+
+```
+
+---
+
+## `docs/Layout.md` (21,911 字节)
+
+```markdown
+# 斗地主游戏 — 布局与视觉系统设计文档
+
+> 文档版本: v1.0 · 产品经理
+> 对应源文件: `src/client/js/game.js`
+> 游戏框架: Phaser 3
+
+---
+
+## 1. 画布与缩放
+
+| 属性 | 值 |
+|------|-----|
+| 设计分辨率 | **960 × 600** (横屏) |
+| 缩放模式 | `Phaser.Scale.FIT` — 等比缩放，保留完整画面，可能留绿边 |
+| 全屏模式 | `Phaser.Scale.FILL` — 填满屏幕，允许左右裁剪 |
+| 居中 | `Phaser.Scale.CENTER_BOTH` — 水平和垂直居中 |
+| 背景色 | `#1B5E20` (深绿色) |
+| 渲染器 | `Phaser.AUTO` (优先 WebGL) |
+| DOM 容器 | `id="game-container"` |
+
+---
+
+## 2. 背景系统
+
+### 2.1 渐变底色
+
+由 `drawTableBackground(scene)` 绘制。
+
+```
+fillGradientStyle(0x1B5E20, 0x1B5E20, 0x0D3B0F, 0x0D3B0F, 1)
+fillRect(0, 0, 960, 600)
+```
+
+左上和右上为 `#1B5E20`，左下和右下为 `#0D3B0F`（更深绿），从顶部到底部形成由亮到暗的渐变。
+
+### 2.2 桌面装饰元素
+
+| 元素 | 类型 | 坐标/区域 | 颜色 | 透明度 |
+|------|------|-----------|------|--------|
+| 中心光晕层1 | 椭圆 | 圆心 (480, 260), 宽320高354 | `#2E7D32` | 0.15 |
+| 中心光晕层2 | 椭圆 | 圆心 (480, 260), 宽240高360 | `#388E3C` | 0.1 |
+| 外圈圆角边框 | 描边圆角矩形 | (13, 52) → (934, 470), 半径9 | `#4CAF50` | 0.3 |
+| 装饰矩形框1 | 描边矩形 | (400, 177) → (518, 343) | `#66BB6A` | 0.15 |
+| 装饰矩形框2 | 描边矩形 | (432, 201) → (528, 319) | `#66BB6A` | 0.15 |
+| 四角装饰圆 | 描边圆 × 3/角 | 左上(35,63) 右上(925,63) 左下(35,543) 右下(925,543) | `#4CAF50` | 0.18 |
+| 中心装饰圆1 | 描边圆 | 圆心 (480, 250), 半径67 | `#66BB6A` | 0.08 |
+| 中心装饰圆2 | 描边圆 | 圆心 (480, 250), 半径93 | `#66BB6A` | 0.08 |
+
+---
+
+## 3. 顶部状态栏 (Top Bar)
+
+**区域**: Y = 0 ~ 56，横跨 X = 0 ~ 960
+
+### 3.1 背景
+
+半透明黑色底条，Z 轴深度 = 10:
+```
+fillStyle(0x000000, 0.3)
+fillRect(0, 0, 960, 56)
+```
+
+底部有一条分隔线:
+```
+lineStyle(1, 0x66BB6A, 0.2)
+lineBetween(0, 56, 960, 56)
+```
+
+### 3.2 元素布局
+
+| 元素 | 内容 | X | Y | 说明 |
+|------|------|----|----|------|
+| 回合指示器 | `第 X/10 回合` | 12 | 9 | 左对齐 |
+| AI1 头像 (王怼怼) | `avatar_wang.png` | 176 | 20 | 40×40 圆角矩形底，36×36 显示 |
+| AI1 名称 | `王怼怼` | 200 | 9 | 紧邻头像右侧 |
+| AI1 剩余牌数 | `剩余 N 张` | 200 | 22 | 名称下方 |
+| AI2 头像 (苏甜甜) | `avatar_su.png` | 788 | 20 | 40×40 圆角矩形底，36×36 显示 |
+| AI2 名称 | `苏甜甜` | 720 | 9 | 头像左侧 |
+| AI2 剩余牌数 | `剩余 N 张` | 720 | 22 | 名称下方 |
+| 中央状态文字 | 动态提示 | 480 | 8 | 居中，`origin(0.5, 0)` |
+| 全屏按钮 | `⛶` | 940 | 24 | 右上角，Z深度200 |
+
+### 3.3 AI 头像绘制参数
+
+```javascript
+// makeAvatarImage 函数
+fillRoundedRect(x - 20, y - 20, 40, 40, 10)    // 底色圆角矩形
+strokeRoundedRect(x - 28, y - 28, 56, 56, 10)    // 白色描边外框
+image.setDisplaySize(36, 36)                       // 头像图片显示尺寸
+```
+
+| AI | 头像底色 | 描边色 | 位置 (中心) |
+|----|---------|--------|-------------|
+| 王怼怼 (左) | `#4FC3F7` (浅蓝) | 白色 0.8 | x=176, y=20 |
+| 苏甜甜 (右) | `#FFB74D` (橙色) | 白色 0.8 | x=788, y=20 |
+
+---
+
+## 4. 中央出牌区 (Play Area)
+
+**区域**: Y = 59 ~ 265，X = 160 ~ 800 (640 × 206)
+
+### 4.1 背景
+
+半透明黑色圆角矩形:
+```
+fillStyle(0x000000, 0.1)
+fillRoundedRect(160, 59, 640, 206, 10)
+```
+
+Z 深度 = 10。上方有浅色提示文字 "出牌区" (x=480, y=218)。
+
+### 4.2 出牌位置
+
+| 角色 | 标签文本 | 标签 X | 标签 Y | 出牌起点 X | 出牌 Y | 牌尺寸 | 重叠量 |
+|------|---------|--------|--------|-----------|--------|--------|--------|
+| AI1 王怼怼 | `王怼怼：` | 182 | 65 | 280 (居中) | 133 | 42×60 | min(25, (480-w)/(n-1)) |
+| AI2 苏甜甜 | `苏甜甜：` | 690 | 65 | 680 (居中) | 133 | 42×60 | min(25, (480-w)/(n-1)) |
+| 玩家 | `你出：` | 480 | 270 | 360 (居中) | 195 | 50×72 | min(30, (480-w)/(n-1)) |
+
+### 4.3 底牌提示
+
+| 元素 | 文本 | X | Y | 字体色 | 透明度 |
+|------|------|----|----|--------|--------|
+| 底牌占位 (初始) | `底牌: ? ? ?` | 480 | 72 | `#66BB6A` | 0.4 |
+| 底牌 (翻开后) | 三张图片 | 480 | 72 | — | — |
+
+### 4.4 出牌记录面板
+
+位于左上角，不遮挡手牌:
+| 属性 | 值 |
+|------|-----|
+| 背景 | `fillRoundedRect(12, 58, 140, 240, 6)`, 黑色 0.2 |
+| 标题 | "出牌", fontSize 9px, color `#81C784` |
+| 内容区 | (20, 74), 124px 自动换行, fontSize 9px, color `#C8E6C9` |
+| 最大记录 | 最近 8 条, 显示最近 6 条 |
+
+---
+
+## 5. 手牌区 (Hand Area)
+
+**区域**: Y = 300 ~ 415，X = 20 ~ 940 (920 × 115)
+
+### 5.1 背景
+
+```
+fillStyle(0x000000, 0.15)
+fillRoundedRect(20, 300, 920, 115, 10)
+```
+
+上方有标签 `你的手牌` (x=68, y=305, fontSize 11px)
+
+### 5.2 牌面规格
+
+| 属性 | 值 |
+|------|-----|
+| 牌宽度 (cw) | **56 px** |
+| 牌高度 (ch) | **80 px** |
+| 牌间距 (gap) | **4 px** — 均匀展开，无重叠 |
+| Z 深度 | 110 (高优先级确保在手牌区上方) |
+
+### 5.3 排列公式 (均匀展开)
+
+```javascript
+var n = hand.length, cw = 56, ch = 80, gap = 4;
+var totalWidth = cw * n + gap * (n - 1);
+var startX = 180 + (700 - totalWidth) / 2;
+var baseY = 345;
+
+for (var ii = 0; ii < n; ii++) {
+  var cx = startX + ii * (cw + gap) + cw / 2;
+  var cy = baseY;  // 直线排列，无弧线
+}
+```
+
+### 5.4 选中/取消状态
+
+| 动作 | 效果 |
+|------|------|
+| 选中（点击未选中的牌） | `scale(1.15)` 放大突出 |
+| 取消选中（点击已选中的牌） | `scale(1.0)` 恢复原尺寸 |
+| 选中的牌集合 | 存储在 `selectedCards`（索引数组） |
+| 点击限制 | 仅在 `PLAYER_TURN` 状态可点击 |
+| 非回合点击提示 | Toast "现在不是你的出牌阶段" |
+
+---
+
+## 6. 底部功能按钮 (Action Buttons)
+
+**区域**: Y = 442 ~ 490 (按钮高 48px, Y 从 442 开始)
+
+### 6.1 按钮规格
+
+| 属性 | 值 |
+|------|-----|
+| 按钮宽度 (bw) | **72 px** |
+| 按钮高度 (bh) | **48 px** |
+| 按钮间距 (gap) | **14 px** |
+| 圆角半径 | **8 px** |
+| 总宽度 | 72×5 + 14×4 = 416 px |
+| 起始 X | `(960 - 416) / 2 = 272` |
+| Z 深度 | 100 ~ 101 |
+
+### 6.2 五个按钮
+
+| 序号 | 标签 | 背景色 (hex) | X 位置 | 行为触发函数 |
+|------|------|-------------|--------|-------------|
+| 1 | **出牌** | `#4ECDC4` (青绿) | 272 | `doPlayerPlay()` |
+| 2 | **提示** | `#FFD93D` (黄) | 358 | `doHint()` |
+| 3 | **不出** | `#FF6B6B` (红) | 444 | `doPlayerPass()` |
+| 4 | **搞事情** | `#7C4DFF` (紫) | 530 | `doAction()` |
+| 5 | **底牌查看** | `#78909C` (灰蓝) | 616 | `showBottomCards()` |
+
+### 6.3 叫分阶段按钮 (Bidding UI)
+
+叫分时隐藏功能按钮，显示 4 个叫分按钮:
+
+| 按钮 | 值 | 背景色 (hex) | 宽度×高度 | 圆角 |
+|------|-----|-------------|-----------|------|
+| 不叫 | 0 | `#FF6B6B` | 96 × 52 | 10 |
+| 1分 | 1 | `#4ECDC4` | 96 × 52 | 10 |
+| 2分 | 2 | `#FFD93D` | 96 × 52 | 10 |
+| 3分 | 3 | `#FF6B35` | 96 × 52 | 10 |
+
+位置: Y = 280, 水平居中
+间距 gap = 12, 总宽 = 96×4 + 12×3 = 420
+起始 X = (960 - 420) / 2 = 270
+
+叫分提示文字: "请叫分" (x=480, y=170, fontSize=15px, 白色)
+手牌强度提示: Y = 260, fontSize=10px
+
+---
+
+## 7. 结算面板 (Round End Panel)
+
+**区域**: 居中弹出，200 ≤ X ≤ 760 (宽 560)，60 ≤ Y ≤ 540 (高 480)
+
+### 7.1 组成
+
+| 元素 | 区域/位置 |
+|------|-----------|
+| 半透明遮罩 | `fillRect(0, 0, 960, 600)` 黑色 0.65 |
+| 结算卡片背景 | `fillRoundedRect(200, 60, 560, 480, 12)` 深蓝黑 `#1A1A2E` 0.92 |
+| 卡片边框 | 金色(赢) `#FFD700` / 红色(输) `#FF5252` |
+| 主标题 | x=480, y=90, fontSize=28px |
+| 得分面板 | `fillRoundedRect(240, 142, 480, 260, 8)` 黑色 0.25 |
+| 总得分 | x=480, y=155 (标签) / y=190 (数字), fontSize=36px 金色 |
+| 细项行 | 从 y=235 开始，每行间隔 25px |
+| "再来一局" 按钮 | (290, 370, 170×44) 青绿色 `#4ECDC4` |
+| "返回首页" 按钮 | (500, 370, 170×44) 灰蓝 `#78909C` |
+| 本局用时 | (710, 510), fontSize=10px, 灰色 |
+
+### 7.2 得分计算公式
+
+```
+基础底分 = 地主 ? 30 : 20
+炸弹翻倍 = 2^(炸弹数)
+搞事情分 = 搞事情得分 × 10
+手牌奖励 = 对手剩余手牌数 × 2
+小计 = 基础底分 + 搞事情分 + 手牌奖励
+总分 = 小计 × 炸弹翻倍
+```
+
+### 7.3 入场动画序列
+
+| 时间 (ms) | 动画 |
+|-----------|------|
+| 0 | 遮罩淡入至 0.65 (300ms) |
+| 300 | 结算卡片弹入 (300ms) |
+| 400 | 标题缩放弹入 0.3→1.0 (400ms, Back.easeOut) |
+| 700 | 总得分/分隔线淡入 (200-300ms) |
+| 900 + n×150 | 各细项逐行淡入 (每行 200ms) |
+| 1500 | 分隔线2淡入 |
+| 1600 | 用时文字淡入 |
+| 1800 | 按钮弹入 |
+
+---
+
+## 8. "搞事情" 模式 UI (Chaos Mode)
+
+### 8.1 遮罩与卡片
+
+| 元素 | 属性 |
+|------|------|
+| 遮罩 | `fillRect(0,0,960,600)` 黑色 0.75, Z=300 |
+| 白色卡片背景 | `fillRoundedRect(150, 55, 660, 320, 12)`, Z=301 |
+| 标题 | "🔥 搞事情！答题挑战", x=480, y=77, fontSize=19px, 橙色 `#FF6B35` |
+| 分数显示 | x=660, y=77, fontSize=12px |
+| 关闭按钮 | (720, 72, 20×28), 红色 `#E53935` |
+
+### 8.2 题型选择 (2×2 网格)
+
+| 题型 | 图标 | X | Y | 卡片宽×高 |
+|------|------|----|----|-----------|
+| 四六级单词 | 📚 | 220 | 107 | 260 × 88 |
+| 口语表达 | 💬 | 500 | 107 | 260 × 88 |
+| 冷知识 | 🧠 | 220 | 181 | 260 × 88 |
+| 生活常识 | 🏠 | 500 | 181 | 260 × 88 |
+
+### 8.3 选项布局 (2×2 网格)
+
+| 选项 | X | Y | 选项宽×高 |
+|------|----|----|-----------|
+| A | 175 | 155 | 290 × 64 |
+| B | 480 | 155 | 290 × 64 |
+| C | 175 | 230 | 290 × 64 |
+| D | 480 | 230 | 290 × 64 |
+
+### 8.4 换牌界面
+
+| 元素 | 位置 |
+|------|------|
+| 遮罩 | `fillRect(0,0,960,600)` 黑色 0.6, Z=350 |
+| 标题 | x=480, y=120, 金色 |
+| AI手牌 | Y=200, 38×54, 重叠26 |
+| 玩家手牌 | Y=330, 44×64, 重叠30 |
+| 确认交换 | (240, 390, 200×44), 青绿 #4ECDC4 |
+| 跳过交换 | (520, 390, 200×44), 灰蓝 #78909C |
+
+---
+
+## 9. Toast 通知
+
+| 属性 | 值 |
+|------|-----|
+| 背景 | `fillRoundedRect(200, 206, 200, 38, 10)` 黑色 0.7 |
+| 文本 | 居中 (300, 225), fontSize=13px, 白色 |
+| Z 深度 | 200~201 |
+| 显示时长 | 1200ms 后自动销毁 |
+
+---
+
+## 10. AI 对话气泡 (Play Area)
+
+### 10.1 出牌/不出的气泡
+
+| 属性 | 王怼怼 (左) | 苏甜甜 (右) |
+|------|------------|-------------|
+| 头像位置 | x=80, y=136 (圆) | x=880, y=136 (圆) |
+| 气泡背景色 | `#1B5E20` 0.85 | `#311B92` 0.85 |
+| 气泡边框色 | `#66BB6A` 0.5 | `#CE93D8` 0.5 |
+| 气泡圆角 | 12 | 4 |
+| 气泡宽 | min(280, 140+文字长度*10) | 同左 |
+| 气泡高 | 36 | 36 |
+| 气泡 X | 230 | 头像X - 气泡宽 - 30 |
+| 气泡 Y | Y值+10 | 同左 |
+| 箭头方向 | 向左 (指向左侧头像) | 向右 (指向右侧头像) |
+| 显示时长 | 炸弹 5s / 普通 4s | 同左 |
+
+### 10.2 搞事情模式气泡
+
+| 属性 | 值 |
+|------|-----|
+| 头像 X | 80 |
+| 气泡 X | 230 |
+| 气泡宽 | min(540, 200+文字长度*10) |
+| 气泡高 | 36 |
+| 气泡色 | `#1B5E20` 0.85 |
+| 边框色 | `#66BB6A` 0.5 |
+| 箭头 | 向左 |
+| 显示时长 | 3.5s |
+
+### 10.3 气泡队列系统
+
+```javascript
+var bubbleQueue = [];         // FIFO 队列
+const BUBBLE_QUEUE_MAX = 3;   // 最大队列数
+var bubbleShowing = false;    // 是否正在显示
+```
+
+后进队列，满 3 个时 shift 丢弃最旧的。前一个销毁后 `processBubbleQueue()` 处理下一个。
+
+---
+
+## 11. 色彩系统
+
+### 11.1 主题色
+
+| 名称 | HEX | 用途 |
+|------|-----|------|
+| 深绿背景 | `#1B5E20` | 画布底色、渐变亮端 |
+| 深绿暗端 | `#0D3B0F` | 渐变暗端 |
+| 中绿 | `#2E7D32` | 中心椭圆光晕 |
+| 浅绿 | `#388E3C` | 内层椭圆光晕 |
+| 绿色描边 | `#4CAF50` | 外边框、装饰圆 (0.18~0.3) |
+| 亮绿描边 | `#66BB6A` | 装饰矩形、中心装饰圆 (0.08~0.2) |
+
+### 11.2 文字色
+
+| 名称 | HEX | 用途 |
+|------|-----|------|
+| 亮绿文字 | `#E8F5E9` | 回合指示、AI名称 |
+| 浅灰绿文字 | `#A5D6A7` | AI牌数、状态文字、强度提示 |
+| 淡绿文字 | `#66BB6A` | 底牌提示、区域标签 (0.4) |
+| 深绿文字 | `#81C784` | 出牌记录标题 |
+| 浅绿记录 | `#C8E6C9` | 出牌记录内容 |
+| 白色 | `#FFFFFF` | 按钮文字、Toast |
+
+### 11.3 AI 角色色
+
+| 角色 | HEX | 用途 |
+|------|-----|------|
+| 王怼怼 | `#4FC3F7` (浅蓝) | 头像底、标签 |
+| 苏甜甜 | `#FFB74D` (橙色) | 头像底、标签 |
+
+### 11.4 按钮色
+
+| 按钮 | HEX |
+|------|-----|
+| 出牌 | `#4ECDC4` (青绿) |
+| 提示 | `#FFD93D` (黄) |
+| 不出 | `#FF6B6B` (红) |
+| 搞事情 | `#7C4DFF` (紫) |
+| 底牌查看 | `#78909C` (灰蓝) |
+| 再来一局 | `#4ECDC4` (青绿) |
+| 返回首页 | `#78909C` (灰蓝) |
+
+### 11.5 叫分按钮色
+
+| 选项 | HEX |
+|------|-----|
+| 不叫 | `#FF6B6B` (红) |
+| 1分 | `#4ECDC4` (青绿) |
+| 2分 | `#FFD93D` (黄) |
+| 3分 | `#FF6B35` (橙) |
+
+### 11.6 结算面板色
+
+| 元素 | HEX |
+|------|-----|
+| 卡片底色 | `#1A1A2E` (深蓝黑) 0.92 |
+| 赢家边框 | `#FFD700` (金) |
+| 输家边框 | `#FF5252` (红) |
+| 赢家标题 | `#FFD700` (金) |
+| 输家标题 | `#FF5252` (红) |
+| 总得分数字 | `#FFD700` (金) 带阴影 |
+
+---
+
+## 12. 字体规范
+
+| 属性 | 值 |
+|------|-----|
+| 字体族 | `"PingFang SC", "Microsoft YaHei", sans-serif` |
+| 回退 | sans-serif |
+
+### 12.1 字号对照
+
+| 字号 (px) | 使用场景 |
+|-----------|---------|
+| **8** | 底牌提示、部分标签 (play area 角落) |
+| **9** | 出牌记录文字 |
+| **10** | AI名称、AI牌数、状态文字、强度提示、底牌区域标签、本局用时 |
+| **11** | "你的手牌" 标签 |
+| **12** | 回合指示器、AI 气泡名称、搞事情分数/选项标签 |
+| **13** | 功能按钮文字、Toast、结算细项、题型标签 |
+| **14** | 叫分选项、搞事情气泡台词、题目文字、换牌提示 |
+| **15** | "请叫分" 提示、结算按钮 |
+| **19** | 搞事情标题 |
+| **20** | 反馈结果文字 (答对/答错) |
+| **22** | 全屏按钮 |
+| **28** | 结算主标题 |
+| **36** | 结算总得分数字 |
+
+---
+
+## 13. 交互区域总表
+
+所有可点击/交互区域，坐标以 960×600 设计分辨率为准。
+
+| 区域名称 | X | Y | Width | Height | 触发行为 |
+|----------|---|----|-------|--------|---------|
+| 全屏按钮 | 904 | 6 | 36 | 36 | 切换全屏/FILL模式 |
+| 全屏按钮 (Z框) | 940 | 24 | — | — | `origin(1,0.5)` |
+| 手牌区域 | 20 | 300 | 920 | 115 | 包含所有可点击手牌 |
+| 单张手牌 | 动态 | ~345 | **56** | **80** | 选中/取消手牌 |
+| **出牌** 按钮 | 272 | 442 | 72 | 48 | `doPlayerPlay()` |
+| **提示** 按钮 | 358 | 442 | 72 | 48 | `doHint()` |
+| **不出** 按钮 | 444 | 442 | 72 | 48 | `doPlayerPass()` |
+| **搞事情** 按钮 | 530 | 442 | 72 | 48 | `doAction()` |
+| **底牌查看** 按钮 | 616 | 442 | 72 | 48 | `showBottomCards()` |
+| **不叫** 按钮 | ~270 | 280 | 96 | 52 | 叫分 0 |
+| **1分** 按钮 | ~378 | 280 | 96 | 52 | 叫分 1 |
+| **2分** 按钮 | ~486 | 280 | 96 | 52 | 叫分 2 |
+| **3分** 按钮 | ~594 | 280 | 96 | 52 | 叫分 3 |
+| 搞事情遮罩 | 0 | 0 | 960 | 600 | 拦截点击 |
+| 搞事情关闭 | 720 | 72 | 20 | 28 | 关闭CHAOS |
+| 题型-单词 | 220 | 107 | 260 | 88 | 选四六级单词 |
+| 题型-口语 | 500 | 107 | 260 | 88 | 选口语表达 |
+| 题型-冷知识 | 220 | 181 | 260 | 88 | 选冷知识 |
+| 题型-常识 | 500 | 181 | 260 | 88 | 选生活常识 |
+| 选项 A | 175 | 155 | 290 | 64 | 答题 |
+| 选项 B | 480 | 155 | 290 | 64 | 答题 |
+| 选项 C | 175 | 230 | 290 | 64 | 答题 |
+| 选项 D | 480 | 230 | 290 | 64 | 答题 |
+| 换牌-确认 | 240 | 390 | 200 | 44 | 确认交换 |
+| 换牌-跳过 | 520 | 390 | 200 | 44 | 跳过交换 |
+| 再来一题 | 220 | 动态 | 220 | 40 | 继续答题 |
+| 关掉回牌 | 510 | 动态 | 220 | 40 | 关闭CHAOS |
+| 结算-再来一局 | 290 | 370 | 170 | 44 | `scene.restart()` |
+| 结算-返回首页 | 500 | 370 | 170 | 44 | `window.location.reload()` |
+
+---
+
+## 14. Z 深度层级 (Depth)
+
+| Depth | 内容 |
+|-------|------|
+| 10 | 顶栏背景、出牌区背景 |
+| 11 | 顶栏文字、AI信息、出牌区标签、手牌区标签 |
+| 12 | AI头像图片 |
+| 20 | AI气泡头像、气泡背景、出牌历史背景、底牌提示、底部预留 |
+| 21 | AI气泡文字、AI出牌图片 (play cards) |
+| 100 | 功能按钮背景 |
+| 101 | 功能按钮文字 |
+| 110 | 手牌图片 (在背景上方，按钮下方) |
+| 200 | 叫分按钮/toast/全屏按钮/出牌历史面板/结算遮罩 |
+| 201 | toast文字/出牌历史文字 |
+| 300 | 搞事情遮罩 |
+| 301 | 搞事情卡片背景 |
+| 302 | 搞事情标题/标签/选项背景/气泡 |
+| 303 | 搞事情选项图标/文字/气泡文字 |
+| 304 | 搞事情选项标记文字 |
+| 305 | 搞事情反馈图标/换牌按钮 |
+| 306 | 搞事情按钮文字 |
+| 310 | CHAOS换牌结果文字 |
+| 350 | CHAOS换牌遮罩 |
+| 351 | 换牌标题/标签 |
+| 352 | 换牌卡片 |
+| 353 | 换牌按钮背景 |
+| 354 | 换牌按钮文字 |
+| 355 | 换牌选中卡片 |
+| 400 | 结算遮罩 |
+| 401 | 结算卡片背景 |
+| 402 | 结算标题/得分面板 |
+| 403 | 结算分数/按钮 |
+| 404 | 结算按钮文字 |
+
+---
+
+## 15. 全屏与自适应
+
+### 15.1 全屏切换
+
+全屏按钮 (x=940, y=24) 绑定 `pointerdown` 事件：
+
+1. 进入全屏: `element.requestFullscreen()` 或 `webkitRequestFullscreen`
+2. 退出全屏: `document.exitFullscreen()` 或 `webkitExitFullscreen`
+
+### 15.2 缩放模式
+
+通过 `fullscreenchange` / `webkitfullscreenchange` / `resize` 事件触发 `zoomCanvasToFill()`:
+
+| 状态 | scale.mode | 容器样式 | 效果 |
+|------|-----------|---------|------|
+| 非全屏 | `Phaser.Scale.FIT` | 自适应 | 等比缩放，保留完整画面 |
+| 全屏中 | `Phaser.Scale.FILL` | fixed 撑满 | 填满全屏，允许左右裁剪 |
+
+### 15.3 首次点击自动全屏
+
+首次 pointerdown 自动触发一次 fullscreen 请求（带 `.catch()` 处理拒绝）。
+
+---
+
+## 16. 动画与过渡参数
+
+| 场景 | 类型 | 时长 | 缓动 |
+|------|------|------|------|
+| 手牌选中 | 垂直位移 | 即时 | — |
+| 结算遮罩 | alpha 淡入 | 300ms | Linear |
+| 结算卡片 | alpha 淡入 | 300ms | Linear |
+| 结算标题 | scale 0.3→1.0 | 400ms | Back.easeOut |
+| 结算文字淡入 | alpha 淡入 | 200~300ms | Linear |
+| 结算按钮 | alpha 淡入 | 200ms | Linear |
+| AI 思考延迟 | 无动画 | 1200ms | setTimeout |
+| AI 出牌间隔 | 无动画 | 600~1200ms | setTimeout |
+| Toast 消失 | 无动画 | 1200ms | setTimeout |
+| 气泡显示 | 无动画 | 4s / 5s | setTimeout |
+| 搞事情气泡 | 无动画 | 3.5s | setTimeout |
+| 重新发牌延迟 | 无动画 | 1500ms | setTimeout |
+
+---
+
+## 17. 验收标准
+
+1. [ ] 画布 960×600 在任何宽屏显示器上等比缩放显示完整画面
+2. [ ] 全屏模式切换到 FILL 模式，画面填满无绿边（允许左右裁剪）
+3. [ ] 背景渐变从 `#1B5E20` 到 `#0D3B0F`，装饰元素正确渲染无重叠错位
+4. [ ] 顶部状态栏高度 56px，AI 信息在左右两侧对称分布，状态文字居中
+5. [ ] 手牌弧线排列平滑，弧线高度差不超过 9px；重叠量在6张以内为33px
+6. [ ] 选中手牌上移 16px，取消选中回原位；非回合阶段点击显示 Toast 提示
+7. [ ] 出牌区三列位置正确，AI1 在左侧(280,133)，AI2 在右侧(680,133)，玩家居中(360,195)
+8. [ ] 五个功能按钮水平居中，间距 14px，点击触发正确行为
+9. [ ] 叫分阶段隐藏功能按钮，显示四个叫分按钮
+10. [ ] 结算面板入场动画严格按时间序列执行（遮罩→卡片→标题→分数→细项→按钮）
+11. [ ] 搞事情模式遮罩正确遮挡游戏区域，题型选择 2×2 网格对齐
+12. [ ] AI 气泡队列最多 3 条，依次显示，前一条销毁后下一条出现
+13. [ ] 所有文本使用 `PingFang SC` / `Microsoft YaHei` 字体族
+14. [ ] 首次点击触发全屏请求，拒绝后不再重复请求
+15. [ ] 底牌在叫分结束后正确显示，不显示牌背图片
+
+---
+
+## 18. 附录：坐标速查表
+
+```
+(0,0) ─────────────────────────────────────────────── (960,0)
+  │                                                      │
+  │  Top Bar (0~56)                                      │
+  │  ├─ 回合: (12,9)     AI1头像: (176,20)    全屏: (940,24)│
+  │  ├─ 状态: (480,8)    AI2头像: (788,20)               │
+  │  └─ 分隔线: y=56                                     │
+  │                                                      │
+  │  Play Area (59~265, x:160~800)   记录: (800,60,150×140)│
+  │  ├─ AI1出牌: (280,133)  AI2出牌: (680,133)           │
+  │  ├─ 玩家出牌: (360,195)  底牌: (480,72)               │
+  │  └─ 叫分按钮: y=280                                  │
+  │                                                      │
+  │  Hand Area (300~415, x:20~940)      baseY=345        │
+  │  ├─ 标签: (68,305)                                    │
+  │  └─ 牌: 56×80, 弧线排列                                │
+  │                                                      │
+  │  Action Buttons (442~490)                            │
+  │  ├─ [出牌](272) [提示](358) [不出](444)               │
+  │  └─ [搞事情](530) [底牌查看](616)                      │
+  │                                                      │
+(0,600) ───────────────────────────────────────────── (960,600)
+```
+
+```
+
+---
+
+## `docs/PRD-赢牌反馈+AI气泡系统-v1.md` (23,793 字节)
+
+```markdown
+# PRD: 胜利反馈系统 + AI气泡文字系统 + 换牌逻辑细化
+
+**版本:** v1.1  
+**作者:** 产品老大  
+**日期:** 2026-05-02  
+**文档编号:** PRD-FTL-FEEDBACK-001  
+**对应文件:** `src/client/js/game.js` (Phaser 3, 960×600 横屏)
+
+---
+
+## 目录
+
+1. [需求1：赢牌/结束牌反馈方案](#1-赢牌结束牌反馈方案)
+2. [需求2：AI气泡文字系统](#2-ai气泡文字系统)
+3. [需求3：换牌逻辑细化（答对/答错/超时）](#3-换牌逻辑细化)
+4. [验收标准](#4-验收标准)
+
+---
+
+## 1️⃣ 赢牌/结束牌反馈方案
+
+### 1.1 现状
+
+| 场景 | 现状 | 问题 |
+|------|------|------|
+| 玩家赢 | `setStatusText('恭喜你赢了！')` + `showToast()` 一行字，无其他反馈 | 毫无仪式感，没有分数统计 |
+| AI赢 | `setStatusText('王怼怼 出完了！获胜！')` + `showToast()` | 同样简陋 |
+| 无按钮 | 赢牌后无"再来一局"或"返回首页"按钮 | 玩家只能强行刷新页面 |
+
+### 1.2 设计目标
+
+每局结束后弹出一个全屏结算面板，包含:
+- 胜负结果（带动效和颜色区分）
+- 得分统计（底分、炸弹加成、搞事情加成等）
+- 胜负归属（玩家/AI1/AI2）
+- "再来一局"和"返回首页"按钮
+
+### 1.3 结算面板视觉方案
+
+#### 1.3.1 布局坐标 (960×600 基准)
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                    ╔═══════════════╗                         │
+│                    ║  🏆 你赢了！ ║    ← 标题，弹性弹入       │
+│                    ╚═══════════════╝                         │
+│                                                              │
+│  ┌────────────────────────────────────────┐                  │
+│  │  💰 总得分:     +150                   │                  │
+│  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┤      │                  │
+│  │  基础底分       +80       ★            │    ← 细项逐行淡入      │
+│  │  炸弹翻倍       ×2        🧨           │                  │
+│  │  搞事情得分     +50       🔥           │                  │
+│  │  手牌奖励       +20       🃏           │                  │
+│  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┤      │                  │
+│  │  总击杀(胜)     3:1                    │                  │
+│  │  剩余手牌       0张                     │                  │
+│  └────────────────────────────────────────┘                  │
+│                                                              │
+│      [ 🔄 再来一局 ]      [ 🏠 返回首页 ]                   │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
+```
+
+#### 1.3.2 精确坐标表
+
+| 元素 | X | Y | W | H | 说明 |
+|------|---|---|---|---|------|
+| 半透明遮罩 | 0 | 0 | 960 | 600 | rgba(0,0,0,0.65) 全屏覆盖 |
+| 结算卡片 | 200 | 60 | 560 | 480 | 圆角12px，深色半透明背景 |
+| 卡片边框发光 | — | — | — | — | 赢牌 #FFD700 金色，输牌 #FF5252 红色 |
+| 标题文字 | 480 | 90 | — | — | 赢："🎉 你赢了！" 输："😅 你输了" |
+| 标题字号 | — | — | — | — | 28px bold，#FFD700(赢) / #FF5252(输) |
+| 标题发光 | — | — | — | — | shadowBlur=20，颜色同标题色 |
+| AI胜出提示 | 480 | 120 | — | — | "王怼怼获胜！" 16px #FF5252 (仅AI赢时) |
+| 得分面板 | 240 | 142 | 480 | 260 | 圆角8px，rgba(0,0,0,0.25) 背景 |
+| 总得分标题 | 480 | 155 | — | — | "💰 总得分" 14px #A5D6A7 |
+| 总得分数字 | 480 | 190 | — | — | "+150" 36px bold #FFD700，shadowBlur 15 |
+| 分隔线 | 260 | 215 | 440 | 1 | rgba(255,255,255,0.1) |
+| 得分细项行1 | 270 | 235 | 420 | 22 | "基础底分 +80 ★" 13px #C8E6C9 |
+| 得分细项行2 | 270 | 260 | 420 | 22 | "炸弹翻倍 ×2 🧨" 13px #C8E6C9 |
+| 得分细项行3 | 270 | 285 | 420 | 22 | "搞事情得分 +50 🔥" 13px #C8E6C9 |
+| 得分细项行4 | 270 | 310 | 420 | 22 | "手牌奖励 +20 🃏" 13px #C8E6C9 |
+| 分隔线 | 260 | 335 | 440 | 1 | rgba(255,255,255,0.1) |
+| **再来一局**按钮 | 290 | 370 | 170 | 44 | 圆角8px, #4ECDC4 青色为主色调 |
+| 按钮文字 | 375 | 392 | — | — | "🔄 再来一局" 15px bold #fff |
+| **返回首页**按钮 | 500 | 370 | 170 | 44 | 圆角8px, #78909C 灰色次要 |
+| 按钮文字 | 585 | 392 | — | — | "🏠 返回首页" 15px bold #fff |
+| 右下角战绩小字 | 710 | 510 | 230 | 20 | "本局用时: 3分28秒" 10px #888 |
+
+#### 1.3.3 胜负判定与得分计算
+
+| 字段 | 玩法 | 计算逻辑 |
+|------|------|---------|
+| 基础底分 | 玩家是地主 +30，农民 +20 | 固定值 |
+| 炸弹翻倍 | 本局全场总炸弹数 | ×2/个炸弹，×4/火箭 |
+| 搞事情得分 | 答对题数 | 每题 +10 |
+| 手牌奖励 | 对手剩余牌数 | 每张 +2 |
+
+**玩家赢条件：** `this.playerHand.length === 0`  
+**AI1/王怼怼赢条件：** `this.ai1Hand.length === 0`  
+**AI2/苏甜甜赢条件：** `this.ai2Hand.length === 0`
+
+**得分计算公式演示：**
+```
+基础底分(20) + 搞事情得分(5×10=50) + 手牌奖励(对手剩10张×2=20)
+= 90 分
+炸弹翻倍(本局2个炸弹) → 90 × 2 = 180
+总得分: +180
+```
+
+#### 1.3.4 新状态: ROUND_END
+
+在 `GAME_STATE` 中新增或强化状态处理：
+
+```javascript
+// 在当前 GAME_STATE.ROUND_END 分支中
+case GAME_STATE.ROUND_END:
+  renderRoundEndPanel(scene);  // 渲染结算面板
+  break;
+```
+
+**状态进入点（game.js 中已有3处胜出判定）：**
+
+| 位置 | 玩家赢 | AI1赢 | AI2赢 |
+|:----:|:------:|:-----:|:-----:|
+| `confirmPlay()` | ✅ `this.playerHand.length === 0` | — | — |
+| `handleAIPlay()` | — | ✅ `this.ai1Hand.length === 0` | ✅ `this.ai2Hand.length === 0` |
+| `doAITurn()` | — | ✅ 需初始化 | ✅ 需初始化 |
+
+**新增函数：`renderRoundEndPanel(winner)`** 写在 game.js 中，负责全部结算渲染逻辑。`winner` 参数取值：`'player'` | `'ai1'` | `'ai2'`
+
+#### 1.3.5 进入结算的交互流程
+
+```
+触发胜出条件
+    ↓
+this.gameState = GAME_STATE.ROUND_END
+    ↓
+遮罩淡入 (0.3s, alpha 0→0.65)
+    ↓
+标题弹入 (0.4s, scale 0.3→1.0, ease back-out)
+    ↓
+得分面板整体淡入 (0.3s)
+    ↓
+总得分数字从0跳动到最终值 (1.2s, 每30ms一更新)
+    ↓
+各细项逐行淡入 (每行间隔150ms)
+    ↓
+按钮弹入 (延迟0.2s后两个按钮同时弹入)
+    ↓
+玩家可交互
+```
+
+**按钮行为：**
+
+| 按钮 | 行为 | 代码 |
+|:----:|------|------|
+| 🔄 再来一局 | 重新开始当前游戏（重启场景） | `this.scene.restart()` |
+| 🏠 返回首页 | 刷新页面回到加载画面 | `window.location.reload()` |
+
+### 1.6 胜出时的额外效果
+
+| 效果 | 赢家 | 实现 |
+|:----:|:----:|------|
+| 渐变背景 | — | 赢家角色边框闪烁+光环 |
+| 粒子效果 | 玩家赢 | 随机金色/绿色粒子从屏幕上方飘落 |
+| 音效 | 双方 | 赢: SoundManager.win() / 输: SoundManager.lose() |
+
+---
+
+## 2️⃣ AI气泡文字系统
+
+### 2.1 现状
+
+目前 game.js 已有 `_showPlayBubble()` 函数（位于出牌区），功能是可以显示AI气泡，但存在以下问题：
+
+| 问题 | 具体表现 |
+|:----|---------|
+| 文字太小 | 气泡文字 14px，在960×600比例下偏小 |
+| 显示时间太短 | 当前 `delayedCall(5000)`，5秒固定 |
+| 气泡位置偏低 | 出牌气泡 Y=120/150，与出牌区重叠 |
+| 没有紧急/重要分级 | 所有气泡显示时间一律5秒 |
+| 气泡无弹入动画 | 直接出现，没有过渡感 |
+| 长台词截断 | 部分台词超出气泡宽度限制 |
+
+### 2.2 设计方案
+
+#### 2.2.1 气泡视觉样式
+
+```
+标准气泡(出牌气泡):
+┌──────────────────────────────┐
+│ 😎 王怼怼                     │
+│                              │
+│  「出个顺子，让你一手。」      │  ← 圆角矩形气泡
+│                              │
+│  ◀                           │  ← 左侧三角箭头指向AI头像
+└──────────────────────────────┘
+
+紧急气泡(炸弹/火箭):
+┌──────────────────────────────┐
+│ 😊 苏甜甜   ⚡ 炸弹！         │
+│                              │
+│  「💣 BOMBSHELL！看招！」     │  ← 红色边框，闪烁效果
+│                              │
+│  ◀                           │
+└──────────────────────────────┘
+```
+
+#### 2.2.2 布局坐标 (960×600 基准)
+
+**出牌模式气泡：**
+
+| 元素 | X | Y | W | H | 说明 |
+|------|---|---|---|---|------|
+| AI1头像(王怼怼) | 88 | 83 | — | — | 圆形，底色 #4FC3F7 |
+| AI1名字 | 112 | 79 | — | — | 12px bold #fff |
+| AI1气泡框 | 112 | 96 | min(280, 自适应) | 36~56(自适应) | 深绿圆角12px，左端三角 |
+| AI1气泡文字 | 128 | 114 | 气泡内 | — | 15px #fff，垂直居中 |
+| AI2头像(苏甜甜) | 872 | 83 | — | — | 圆形，底色 #FFB74D |
+| AI2名字 | 782 | 79 | — | — | 右对齐 |
+| AI2气泡框 | 712-自适应 | 96 | min(280, 自适应) | 36~56(自适应) | 深绿圆角12px，右端三角 |
+| AI2气泡文字 | 气泡内 | 114 | — | — | 15px #fff |
+
+> 💡 气泡从 Y=120/150 移到 Y=96，避免与出牌区重叠。
+
+#### 2.2.3 气泡参数规范
+
+| 属性 | 出牌气泡 | 紧急气泡(炸弹/火箭) |
+|:-----|:---------:|:-------------------:|
+| 背景色 | rgba(0,18,6,0.88) | rgba(80,10,0,0.90) |
+| 边框色 | #4CAF50 (0.5) | #FF5252 (0.7) |
+| 边框粗细 | 1.5px | 2px |
+| 圆角半径 | 10px | 10px |
+| 箭头大小 | 8×12px 三角 | 8×12px 三角 |
+| 箭头方向 | AI1左侧 / AI2右侧 | 同左 |
+| 气泡最大宽 | 280px | 300px |
+| 气泡最小高 | 36px | 40px |
+| 文字大小 | 15px | 16px bold |
+| 文字颜色 | #E8F0FF | #FFCDD2 |
+| shadowBlur | 0 | 10px #FF5252 |
+| 弹入动画 | scale 0.8→1.0, 8帧 | scale 0.7→1.1→1.0, 10帧 |
+
+#### 2.2.4 显示时长
+
+| 消息类型 | 显示时长 | 适用场景 |
+|:--------:|:--------:|---------|
+| 普通出牌/过牌 | 4.0秒 (240帧) | 大部分AI出牌、过牌 |
+| 炸弹/火箭 | 5.0秒 (300帧) | AI出了炸弹、火箭 |
+
+#### 2.2.5 动画实现
+
+```javascript
+// 弹入动画 (Phaser Tween)
+container.setScale(0.8).setAlpha(0);
+scene.tweens.add({
+  targets: container,
+  scale: 1.0, alpha: 1.0,
+  duration: 150, ease: 'Back.easeOut',
+  onComplete: function() {
+    scene.time.delayedCall(displayFrames, function() {
+      scene.tweens.add({
+        targets: container,
+        alpha: 0, duration: 200, ease: 'Linear',
+        onComplete: function() { container.destroy(); }
+      });
+    });
+  }
+});
+```
+
+---
+
+## 3️⃣ 换牌逻辑细化
+
+### 3.1 现状
+
+当前代码已有两套换牌逻辑：
+- **答对 (`_showSwapUI`)：** 展示AI手牌正面 + 玩家手牌正面，玩家各选一张互换。**但用户期望的不是这样——用户要的是"盲选"（看不到AI牌面）。**
+- **答错 (`_showSwapResult`)：** AI从玩家随机抽一张，只显示文字结果。**但用户期望有抽牌动画 + 展示牌面。**
+- **超时：** 完全没有实现。
+
+### 3.2 问题分析
+
+| 问题 | 用户期望 | 差距 |
+|:----|---------|:----:|
+| 答对 | 玩家盲选AI的牌（看不到AI牌面）+ 选自己一张牌交换 | 当前是明牌选，缺少惊喜感 |
+| 答错 | AI从玩家拿牌 + 动画 + 玩家看到结果 | 当前只有一行字，没有视觉冲击 |
+| 超时 | 和答错相同逻辑 | 完全没有实现 |
+
+### 3.3 最终方案决策
+
+#### 3.3.1 答对 → 盲选+换牌（玩家选自己一张牌，盲抽AI一张牌）
+
+**流程：**
+
+```
+答题正确
+    ↓
+弹窗：「🎉 答对了！赢一张牌！」
+    ↓
+展示玩家手牌（正面，选一张）
+      同时展示3-5张牌背（随机插入1张AI真实牌 + 2-4张空牌背混淆）
+    ↓
+玩家选自己的牌（点选手牌）
+      玩家选一张AI牌背（完全随机，看不到牌面）
+    ↓
+确认交换 → 动画：AI牌背从牌堆飞入玩家手牌，翻牌揭示
+    ↓
+显示结果：「🔄 用[♠K]换了AI的[♥A]」
+    ↓
+AI气泡反应（答对台词）
+```
+
+> **关键设计：** AI的牌用牌背展示，玩家完全看不到牌面。为了提高悬念感，展示3-5个牌背（只有1张是真的AI手牌，其他是"空位"填充）。玩家点一张，系统随机决定是不是真的拿到那张牌。
+
+#### 3.3.2 答错 → AI抽走玩家的牌（动画 + 展示）
+
+**流程：**
+
+```
+答题错误
+    ↓
+显示正确答案 + 解析
+    ↓
+0.6秒后自动触发换牌（无需玩家点击确认）
+    ↓
+动画：玩家手牌区一张牌"飞出"（Y从345移到160，旋转10°，缩小）
+      牌移动到AI头像下方 → 翻转展示牌面
+    ↓
+结果显示：「😈 王怼怼 从你手中拿走了 [♠K]」
+    ↓
+AI气泡反应（答错嘲讽台词）
+    ↓
+底部按钮：「🔄 再来一题」 / 「✖ 关掉回牌」
+```
+
+> **关键设计：** 不需要玩家"确认"——答错的惩罚是自动的，动画本身让玩家看清被拿走了什么牌。玩家只需要看动画，不需要额外操作。
+
+#### 3.3.3 超时 → 和答错共用同一逻辑
+
+**触发条件：** 搞事情模式下，出题后 **30秒** 内玩家没有点击任何选项。
+
+**流程：**
+
+```
+30秒倒计时归零
+    ↓
+自动关闭题目界面 ≪与答错共享代码路径≫
+    ↓
+调用 _handleOptionClick 的"超时"分支
+    ↓
+显示：「⏱ 超时了！AI 趁机拿走了你一张牌」
+    ↓
+复用 _showSwapResult() 的AI抽牌动画
+    ↓
+AI气泡反应（过牌/嘲讽台词，如："思考这么久？结果还是错了哈哈"）
+```
+
+**关键：** 超时直接复用 `_showSwapResult()` 的动画逻辑，不新增独立函数。
+
+### 3.4 详细UI设计
+
+#### 3.4.1 答对盲选界面布局
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  🎉 答对了！赢一张牌！                                        │
+│                                                              │
+│  请选一张你的牌 → 然后点一张AI的牌背                          │
+│                                                              │
+│  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐                               │
+│  │  │  │  │  │  │  │  │  │  │     ← AI牌背(3-5张，真牌混入)   │
+│  │牌│  │牌│  │牌│  │牌│  │牌│                                │
+│  │背│  │背│  │背│  │背│  │背│                                │
+│  └──┘  └──┘  └──┘  └──┘  └──┘                               │
+│           ↑ 玩家的牌（正面，可点击选）                         │
+│  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐                               │
+│  │♠K│  │♥9│  │♦7│  │♣5│  │♠3│                               │
+│  └──┘  └──┘  └──┘  └──┘  └──┘                               │
+│                                                              │
+│    [ ✅ 确认交换 ]         [ ✖ 跳过交换 ]                     │
+└──────────────────────────────────────────────────────────────┘
+```
+
+**精确坐标：**
+
+| 元素 | X | Y | W | H | 说明 |
+|------|---|---|---|---|------|
+| 半透明遮罩 | 0 | 0 | 960 | 600 | rgba(0,0,0,0.6) |
+| 标题 | 480 | 80 | — | — | "🎉 答对了！赢一张牌！" 18px bold #FFD700 |
+| 子提示 | 480 | 105 | — | — | "选你的牌 → 点AI牌背 → 确认" 11px #AAA |
+| AI牌背行 | 动态计算 | 135 | 每张40×56 | — | 3~5张背牌，间隔20px，居中 |
+| 玩家牌行 | 动态计算 | 225 | 每张44×64 | — | 全部正面，可交互 |
+| **确认交换**按钮 | 280 | 310 | 180 | 40 | 圆角8px，#4ECDC4，半透明至全亮 |
+| **跳过交换**按钮 | 500 | 310 | 180 | 40 | 圆角8px，#78909C |
+
+**盲选实现逻辑：**
+
+```javascript
+// 1. 取AI手牌，随机选一张作为"真牌"
+var realAICard = aiHand[Math.floor(Math.random() * aiHand.length)];
+// 2. 生成3-5个牌背位置，随机把真牌放在其中一个位置
+var slotCount = 3 + Math.floor(Math.random() * 3); // 3~5
+var realSlot = Math.floor(Math.random() * slotCount);
+// 3. 玩家点牌背 → 如果是realSlot则拿到真牌，否则随机从AI手牌拿一张
+```
+
+#### 3.4.2 答错/超时抽牌动画
+
+```
+动画时间轴 (总时长 ~1.2s)：
+0ms       → 玩家手牌区一张牌放大高亮（被选中）
+200ms     → 牌从原位置开始上升（Y:345 → 160）
+400ms     → 牌旋转10°，向右偏移50px，缩小到60%
+600ms     → 牌到达AI头像下方，翻转为牌面（显示花色+数字）
+800ms     → 结果显示文字弹出
+1200ms    → 完成（手牌区重新渲染）
+```
+
+**文字显示：** 始终显示被拿走的牌的花色和数字，不用玩家点击确认。
+
+### 3.5 超时计时器
+
+**新增UI元素：** 答题倒计时计时器
+
+| 元素 | X | Y | W | H | 说明 |
+|------|---|---|---|---|------|
+| 计时条背景 | 220 | 144 | 520 | 6 | 圆角3px，rgba(0,0,0,0.2) |
+| 计时条填充 | 220 | 144 | 520→0 | 6 | 渐变绿→黄→红，随剩余时间变化 |
+
+**计时状态机：**
+
+| 时间段 | 颜色 | 动画 |
+|:------:|:----:|:----:|
+| 0-20秒 | #4ECDC4 → #FFD93D 渐变 | 正常 |
+| 20-27秒 | #FFD93D → #FF6B35 | 轻微脉冲 |
+| 27-30秒 | #FF6B35 → #FF0000 | 闪烁（alpha 0.4↔1.0，每10帧切换） |
+
+**超时触发：** 30秒后自动调用 `_handleTimeout()`
+
+### 3.6 函数变更清单
+
+| 当前函数 | 修改方向 | 说明 |
+|---------|---------|------|
+| `_handleOptionClick()` | 保留，入口不变 | 题完成后根据 isCorrect 分发 |
+| `_showSwapUI()` | **保留但修改** | 改为盲选模式（AI牌背展示） |
+| `_showSwapResult()` | **保留但修改** | 增加卡牌飞出动画，去掉"答对"参数（现在只处理答错/超时） |
+| `_showSwapButtons()` | 保留 | 底部"再来一题/关掉"按钮 |
+| **新增** `_handleTimeout()` | 新增 | 超时处理函数，30秒无操作触发 |
+| **新增** `_startChaosTimer()` | 新增 | 启动答题30秒倒计时 |
+
+### 3.7 关键伪代码
+
+```javascript
+// 答对：盲选版
+GameScene.prototype._showBlindSwapUI = function(aiId, fbY) {
+  // 构造AI牌背排列（3-5个位置，1张真牌混入）
+  var slotCount = 3 + Math.floor(Math.random() * 3);
+  var realSlot = Math.floor(Math.random() * slotCount);
+  var realCard = aiHand[Math.floor(Math.random() * aiHand.length)];
+  
+  // 渲染牌背（全部背牌）
+  // 玩家点击牌背 → 如果 slot === realSlot 则拿到 realCard
+  //                   否则从 aiHand 随机取一张
+  // 点击确认后：执行换牌（player给1张 + AI给1张）
+  // 调用 scene.tweens.add 做翻牌动画
+};
+
+// 答错+超时：抽牌动画版
+GameScene.prototype._showTakeCardAnimation = function(aiId, isTimeout) {
+  // 1. 选一张玩家的牌
+  // 2. Phaser tween: 从手牌区飞到AI区
+  // 3. 翻牌展示
+  // 4. 显示文字 + AI气泡
+};
+```
+
+---
+
+## 4️⃣ 验收标准
+
+### 4.1 赢牌反馈
+
+| # | 验收条件 | 优先级 |
+|:-:|----------|:------:|
+| WF1 | 玩家出完最后一手牌后，显示全屏结算面板 | P0 |
+| WF2 | AI出完牌后同样显示结算面板，标题显示对应AI获胜 | P0 |
+| WF3 | 结算面板包含：标题、总得分（含动画跳动）、得分细项 | P0 |
+| WF4 | 得分细项包含：基础底分、炸弹翻倍、搞事情得分、手牌奖励 | P0 |
+| WF5 | 结算面板底部有"再来一局"和"返回首页"两个可点击按钮 | P0 |
+| WF6 | "再来一局"按钮调用 `scene.restart()` 重新发牌 | P0 |
+| WF7 | "返回首页"按钮可刷新页面或跳回主页 | P0 |
+| WF8 | 结算面板有遮罩过渡 + 各元素渐入动画（总时长约2秒） | P1 |
+| WF9 | 玩家赢时总得分为金色 (#FFD700) 带发光，输时为红色 (#FF5252) | P0 |
+
+### 4.2 AI气泡系统
+
+| # | 验收条件 | 优先级 |
+|:-:|----------|:------:|
+| AB1 | AI出牌/过牌时，在出牌区上方(Y=96)显示完整气泡 | P0 |
+| AB2 | 气泡为圆角矩形(10px圆角)+三角箭头，左侧AI箭头朝左、右侧AI箭头朝右 | P0 |
+| AB3 | 气泡背景深绿 rgba(0,18,6,0.88)，边框 #4CAF50 | P0 |
+| AB4 | 气泡文字 15px #E8F0FF，不截断（自适应宽度，最大280px） | P0 |
+| AB5 | 炸弹/火箭类型使用红色紧急样式（红底+闪烁边框+更大字号） | P0 |
+| AB6 | 普通气泡显示4秒，炸弹气泡显示5秒 | P0 |
+| AB7 | 新气泡弹出时，旧气泡立即销毁（替换机制） | P0 |
+| AB8 | 气泡有弹入动画 (scale 0.8→1.0, Back.easeOut, 150ms) | P0 |
+| AB9 | 气泡有渐隐动画 (alpha 1→0, 200ms) 而非直接消失 | P0 |
+| AB10 | 王怼怼和苏甜甜气泡左右对称布局 | P0 |
+| AB11 | 气泡显示时不遮挡出牌区的牌面 | P0 |
+
+### 4.3 换牌逻辑
+
+| # | 验收条件 | 优先级 |
+|:-:|----------|:------:|
+| SW1 | 答对后弹出盲选界面：玩家选自己的1张牌 + 点AI的牌背（看不到牌面） | P0 |
+| SW2 | 盲选界面展示3-5个牌背位置，随机混入1张真AI手牌 | P0 |
+| SW3 | 玩家选完后点击"确认交换"，展示换牌结果 + AI气泡反应 | P0 |
+| SW4 | 答错后不显示选择题界面，自动触发AI抽牌动画（无需玩家操作） | P0 |
+| SW5 | 抽牌动画：玩家一张牌从手牌区飞出 → AI区翻转展示（总时长~1.2s） | P0 |
+| SW6 | 抽牌后展示被拿走的牌的花色和数字文字 | P0 |
+| SW7 | 超时30秒自动触发，与答错共用同一套抽牌动画逻辑 | P0 |
+| SW8 | 超时前显示30秒倒计时间条（绿→黄→红渐变） | P0 |
+| SW9 | 超时后自动关闭题目界面并触发换牌，显示"⏱ 超时了"提示 | P0 |
+
+---
+
+## 附：修改文件清单
+
+| 文件 | 修改内容 | 预计行数 |
+|------|---------|:--------:|
+| `src/client/js/game.js` | 新增 `renderRoundEndPanel()` 函数 | 新增~150行 |
+| `src/client/js/game.js` | 修改3处胜出判定处，调用新函数替换旧 toast | 修改3行 |
+| `src/client/js/game.js` | 重写 `_showPlayBubble()`，上移Y坐标+统一参数+动画 | 重写~60行 |
+| `src/client/js/game.js` | 修改 `_showSwapUI()` 为盲选模式（AI牌背） | 修改~50行 |
+| `src/client/js/game.js` | 修改 `_showSwapResult()` 增加抽牌动画 | 修改~30行 |
+| `src/client/js/game.js` | 新增 `_startChaosTimer()` + `_handleTimeout()` | 新增~40行 |
+| `src/client/js/game.js` | 倒计时条渲染（答题模式下绘制） | 新增~20行 |
+
+**依赖关系：** 无外部依赖。Phaser 3 已有 tween 系统和 graphics 绘制能力。
+
+```
+
+---
+
+## `docs/PROJECT_CONTEXT.md` (10,709 字节)
+
+```markdown
+# 斗地主 — 子Agent项目上下文
+
+> 本文件为子Agent（小弟）提供完整项目上下文，避免"修了这里坏了那里"。
+
+---
+
+## 📦 项目信息
+
+| 项目 | 值 |
+|------|-----|
+| 根目录 | `/home/xu_yujing/openclaw/workspaces/fight-the-landlord` |
+| 框架 | Phaser 3 (CDN) |
+| 画布 | 960×600 横屏 |
+| 缩放宽高比 | Phaser.Scale.FIT (全屏时 FILL) |
+| 调整模式 | Phaser.Scale.CENTER_BOTH |
+| 背景色 | #1B5E20 |
+| 后端 | Node.js Express (端口 3000), 文件 `server/index.js` |
+| 入口 | `client/index.html` |
+| 主游戏文件 | `src/client/js/game.js` (~2820行) |
+| 牌引擎 | `src/client/js/CardEngine.js` |
+| API客户端 | `src/client/js/apiClient.js` |
+
+---
+
+## 🏗 代码架构
+
+```
+fight-the-landlord/
+├── client/index.html          # 入口页面
+├── src/client/js/             # 核心源码
+│   ├── game.js                # ⭐ 游戏主逻辑 (~2820行, 频繁修改)
+│   ├── CardEngine.js          # 牌型引擎 (Doudizhu 类)
+│   ├── CardEngine.test.js     # 牌引擎测试
+│   └── apiClient.js           # 后端API调用
+├── server/index.js            # Express 后端 (端口3000)
+├── docs/                      # 设计文档
+│   ├── ChaoShiQing-detailed.md    # ⭐ 搞事情系统超详细设计
+│   ├── CardSwap.md                # 交换牌逻辑
+│   ├── PRD-赢牌反馈+AI气泡系统-v1.md
+│   ├── Layout.md / Gameplay.md / Bidding.md / Scoring.md
+│   ├── AIBubble.md / SoundAnimation.md
+│   └── CardEngine.md
+├── memory/                     # 开发记忆
+│   └── YYYY-MM-DD.md           # 每日变更日志
+└── PROJECT_CONTEXT.md          # ← 本文件
+```
+
+### game.js 核心模块一览
+
+| 函数/区域 | 行号(大约) | 功能 |
+|----------|-----------|------|
+| `GAME_STATE` | ~18 | 状态机定义 |
+| `SoundManager` | ~40 | Web Audio 音效管理 |
+| `getCardImageKey()` | ~120 | 牌面→图片key映射 |
+| `renderPlayerHand()` | ~410 | 渲染玩家手牌 |
+| `displayPlay()` | ~470 | 显示玩家出牌 |
+| `updateAICount()` | ~440 | 更新AI牌数 |
+| `createActionButtons()` | ~3090 | 底部5个功能按钮 |
+| `doAction()` | ~1920 | 按钮点击分发 |
+| `handleAIPlay()` | ~1400 | AI出牌处理 |
+| `handleAIPass()` | ~1520 | AI不出处理 |
+| `_showPlayBubble()` | ~1540 | AI气泡台词显示 |
+| `_createChaosOverlay()` | 搞事情区域 | 遮罩+白色面板 |
+| `_showTypeSelection()` | 搞事情区域 | 4种题型选择 |
+| `_renderQuestion()` | 搞事情区域 | 题目渲染(4选项) |
+| `_handleOptionClick()` | 搞事情区域 | 选项点击处理 |
+| `_handleChaosTimeout()` | 搞事情区域 | 30秒超时处理 |
+| `_showSwapUI()` | 搞事情区域 | 答对盲选交换UI |
+| `_showSwapResult()` | 搞事情区域 | 答错AI飞牌抢牌 |
+| `_showSwapButtons()` | 搞事情区域 | 底部"再来一题/关掉"按钮 |
+| `_clearQuestionArea()` | 搞事情区域 | 清除题目区(保留[0..4]) |
+| `_destroyChaos()` | 搞事情区域 | 完全销毁搞事情系统 |
+
+---
+
+## 🎮 游戏状态机
+
+```
+INIT → BIDDING → PLAYER_TURN ⇄ WAITING_AI → ROUND_END
+                          ↑ ↓
+                     CHAOS_MODE (搞事情)
+```
+
+关键守卫：
+- 搞事情按钮只在 `PLAYER_TURN` 或 `CHAOS_MODE` 可用
+- 选中CHAOS_MODE后，遮罩阻隔下层交互
+- CHAOS_MODE 结束时恢复 PLAYER_TURN
+
+---
+
+## 🔄 搞事情系统（ChaoShiQing）核心数据流
+
+```
+action='chaos'
+  → doAction()
+    → SoundManager.pauseAll()
+    → gameState = CHAOS_MODE
+    → 选AI (duidui/tiantian 各50%)
+    → _createChaosOverlay(aiId, callback)
+      → 创建遮罩(0x000000, 0.75) depth 300
+      → 白色卡片(150,55, 660×320) depth 301
+      → 标题 "🔥 搞事情！答题挑战" depth 302
+      → 关闭按钮 + 得分显示
+    → _showTypeSelection(aiId, aiName)
+      → 4种题型: vocab(📚)/expression(💬)/trivia(🧠)/life_hack(🏠)
+      → 2×2网格 260×88 卡片
+      → 选完→_showChaosQuestion()
+    → _showChaosQuestion(aiId, aiName, type)
+      → API请求可回落_fallbackQuestions(4道内置题)
+    → _renderQuestion(q, aiId)
+      → 4选项 290×64, 2×2网格
+      → 30s超时计时器
+    → _handleOptionClick(self, optBg, optKey, aiId, q)
+      → 答对: chaosScore+1, SoundManager.win(), _showSwapUI()
+      → 答错: SoundManager.lose(), 显示正确答案+解析, _showSwapResult()
+    → _handleChaosTimeout(aiId)
+      → 超时→_showSwapResult()
+    → _showSwapUI()   → 盲选 3~5牌背 → 确认翻牌+飞入动画
+    → _showSwapResult() → 600ms后背面飞牌→翻牌揭示(700ms, Back.easeIn)
+    → _showSwapButtons → "再来一题"/"关掉回牌"
+    → _destroyChaos() → 恢复音效+状态+文字
+```
+
+---
+
+## 🎨 搞事情UI精确坐标
+
+| 元素 | X | Y | W | H | Depth |
+|------|---|---|---|---|:-----:|
+| 半透明遮罩 | 0 | 0 | 960 | 600 | 300 |
+| 白色卡片 | 150 | 55 | 660 | 320 | 301 |
+| 内发光边框 | 154 | 58 | 660 | 320 | 301 |
+| 标题 | 480(居中) | 77 | — | — | 302 |
+| 关闭按钮 | 720 | 72 | 20 | 28 | 302 |
+| 选项卡片(vocab) | 220 | 107 | 260 | 88 | 302 |
+| 选项卡片(expr) | 500 | 107 | 260 | 88 | 302 |
+| 选项卡片(trivia) | 220 | 181 | 260 | 88 | 302 |
+| 选项卡片(life) | 500 | 181 | 260 | 88 | 302 |
+| 选项A | 175 | 155 | 290 | 64 | 302 |
+| 选项B | 480 | 155 | 290 | 64 | 302 |
+| 选项C | 175 | 230 | 290 | 64 | 302 |
+| 选项D | 480 | 230 | 290 | 64 | 302 |
+| 确认按钮 | 290 | 310 | 200 | 44 | 353 |
+| 取消/跳过按钮 | 290 | 360 | 200 | 44 | 353 |
+
+---
+
+## 🃏 换牌UI精确坐标
+
+| 元素 | X | Y | W | H | Depth |
+|------|---|---|---|---|:-----:|
+| 交换遮罩 | 0 | 0 | 960 | 600 | 350 |
+| 标题 "🎉 答对了！赢一张牌！" | 480 | 90 | — | — | 351 |
+| 提示文字 | 480 | 112 | — | — | 351 |
+| 玩家手牌标签 | 480 | 140 | — | — | 351 |
+| 玩家手牌 | 动态 | 175 | 44×64 | — | 352 |
+| AI牌背标签 | 480 | 230 | — | — | 351 |
+| AI牌背(3~5张) | 动态 | 260 | 40×56 | — | 352 |
+| 确认按钮 | 290 | 310 | 200 | 44 | 353 |
+| 跳过/取消按钮 | 290 | 360 | 200 | 44 | 353 |
+
+---
+
+## 📐 关键编码规范
+
+1. **Phaser坐标系**: 960×600，左上角为(0,0)，文字 `setOrigin(0.5)` 居中
+2. **Depth层级策略**: 搞事情depth 300-359, 换牌depth 350-400
+3. **音效**: `SoundManager.win()` / `lose()` / `playCard()` / `selectCard()`
+4. **游戏状态**: `this.gameState = GAME_STATE.X`
+5. **搞事情变量命名**:
+   - `chaosElements` — 所有chaos UI元素数组
+   - `chaosScore` — 搞事情得分（跨回合持久）
+   - `chaosQuestionAnswered` — 答题锁定标志
+   - `chaosTypeSelection` — 题型选择锁定
+   - `chaosTimeoutTimer` — 30秒超时计时器
+   - `swapElements` — 换牌UI元素数组
+6. **Doudizhu工具**: `Doudizhu.sortCards()` 排序, `Doudizhu.RANK_NAMES` / `SUIT_NAMES` 牌名映射
+7. **牌面图key**: `getCardImageKey(card)` → `'cardS<套>R<点数>'` 格式
+8. **cardBack**: 通用牌背图key `'cardBack'`
+
+---
+
+## 📜 设计文档索引
+
+| 文档 | 内容 |
+|------|------|
+| `docs/ChaoShiQing-detailed.md` | ⭐ 搞事情系统完整设计 |
+| `docs/CardSwap.md` | 交换牌逻辑设计 |
+| `docs/PRD-赢牌反馈+AI气泡系统-v1.md` | 赢牌结算+AI气泡 |
+| `docs/Layout.md` | 布局设计 |
+| `docs/Gameplay.md` | 游戏玩法 |
+| `docs/Bidding.md` | 叫地主逻辑 |
+| `docs/Scoring.md` | 计分规则 |
+| `docs/AIBubble.md` | AI气泡台词 |
+| `docs/SoundAnimation.md` | 音效动画 |
+| `docs/CardEngine.md` | 牌型引擎说明 |
+
+---
+
+## 🆕 最近变更 v2.0 (2026-05-02)
+
+### 最新3次提交
+```
+04a873c [FIX] 搞事情文档一致性审查 (答错手牌空卡UI+超时分场景)
+9575c33 [DOC] ChaoShiQing超详细设计文档 v2.0
+5479a36 [FIX] B44: 修复_showSwapUI被覆盖
+```
+
+### B44-B46 换牌机制
+- 答对→`_showSwapUI()`: 3~5牌背盲选，1张真AI牌+2~4空牌背，翻牌飞牌动画
+- 答错→`_showSwapResult()`: 600ms后背面飞向AI(y345→y160)，翻牌揭示
+- 超时→`_handleChaosTimeout()`: 30s÷倒计时，显示超时消息，走答错路径
+- 确认按钮(290,310) 跳过按钮(290,360)
+
+### B42-B43 界面修复
+- B42: AI出牌文字层(depth=22)移除
+- B43: 全屏FILL/CSS :fullscreen
+
+### B40 赢牌结算+AI气泡队列
+- `renderRoundEndPanel()` 全屏结算
+- 气泡队列 max 3条，依次出队
+- 出牌4秒/炸弹5秒/搞事情3.5秒销毁
+
+### B38-B39 牌尺寸
+- 手牌 62×88, Y=420
+- 出牌玩家 52×75, AI 42×60
+- 底牌直接融入地主手牌
+
+---
+
+## ⚠️ 修改安全规则
+
+### ✅ 可以自由做
+- 读文件、搜索代码、查git历史
+- 修改 `src/client/js/game.js` 中的搞事情/换牌逻辑
+- 修改 `apiClient.js`
+- 修改 `client/index.html` (CSS/布局)
+- 添加新函数、新动画、新UI元素
+
+### ⚠️ 注意不要破坏
+- `Doudizhu` 牌型判断逻辑（`CardEngine.js`）
+- `SoundManager` 全局单例
+- `renderPlayerHand()` 手牌渲染
+- `displayPlay()` 出牌区渲染
+- `createActionButtons()` 底部按钮（索引位置不能乱改）
+- `getCardImageKey()` 牌图映射
+
+### 🛑 工作流程（子Agent必读）
+
+### 收到任务后的顺序
+1. **保存记忆** — 先写 memory 文件记录：当前进度、决策、上下文、相关代码位置
+2. **清空上下文** — 标记旧历史结束，进入全新任务
+3. **读 PROJECT_CONTEXT.md** — 了解项目整体
+4. **执行任务** — 改代码
+5. **验语法** — `node --check src/client/js/game.js`
+6. **报告结果** — 不提交，只说
+
+---
+
+## 📏 代码提交规则
+
+1. **不提交** — 修完代码在群里 @小虾 通知验收，由小虾 commit + push
+2. **只修代码** — 不改记忆文件、不改文档（除非PRD明确要求）
+3. **语法检查** — 每次修改后必须 `node --check`
+4. **增量修改** — 用 `edit` 工具做精确替换，不要 `write` 全部覆盖
+
+---
+
+## 📁 关键文件路径速查
+
+```
+src/client/js/game.js          # 主游戏逻辑
+src/client/js/CardEngine.js    # 牌型引擎
+src/client/js/apiClient.js     # API客户端
+server/index.js                # 后端服务
+docs/ChaoShiQing-detailed.md   # 搞事情系统设计 (最详细)
+docs/CardSwap.md               # 换牌逻辑设计
+memory/2026-05-02.md           # 今日开发记忆
+```
+
+---
+
+## 🔍 常见调试命令
+
+```bash
+# 语法检查
+node --check src/client/js/game.js
+
+# 搜索函数
+grep -n '函数名' src/client/js/game.js
+
+# 看某段代码
+sed -n '100,150p' src/client/js/game.js
+
+# 看最近提交
+git log --oneline -10
+
+# 看改动量
+git diff HEAD~1 --stat
+```
+
+```
+
+---
+
+## `docs/Scoring-detailed.md` (31,606 字节)
+
+```markdown
+# 计分与回合系统 (Scoring) — 超详细设计文档
+
+**版本:** v2.0  
+**作者:** 产品经理  
+**日期:** 2026-05-02  
+**基准画布:** 960×600 横屏 (Phaser 3 Scale.FIT)  
+**对应源码:** `src/client/js/game.js` (2897行)  
+
+---
+
+## 目录
+
+1. [记分变量总表](#1-记分变量总表)
+2. [计分公式](#2-计分公式)
+3. [炸弹/火箭统计](#3-炸弹火箭统计)
+4. [搞事情得分](#4-搞事情得分)
+5. [手牌奖励](#5-手牌奖励)
+6. [结算面板布局](#6-结算面板布局)
+7. [动画序列](#7-动画序列)
+8. [回合计数器](#8-回合计数器)
+9. [胜负判定与 winner 参数](#9-胜负判定与-winner-参数)
+10. [UI变化全记录](#10-ui变化全记录)
+11. [与旧文档差异说明](#11-与旧文档差异说明)
+12. [验收标准](#12-验收标准)
+
+---
+
+## 1. 记分变量总表
+
+### 1.1 游戏场景属性
+
+| 属性名 | 类型 | 初始值 | 初始化位置 | 用途 |
+|:------|:----:|:------:|:-----------|:-----|
+| `isLandlord` | boolean | `false` | finishBidding / localAssignLandlord | 玩家是否为地主 |
+| `totalBombs` | number | 0 | init() | 全局限弹+火箭计数 |
+| `chaosScore` | number | 0 | init() | 搞事情答对次数 |
+| `gameStartTime` | number | `Date.now()` | init() | 本局开始时间戳 |
+| `round` | number | 1 | init() | 当前回合数 |
+| `maxRounds` | number | 10 | 构造函数 | 最大回合数 |
+| `gameState` | string | `INIT` | init() | 游戏阶段控制 |
+| `lastPlayPlayer` | string | null | init() | 最后出牌者 |
+
+### 1.2 计分中间变量 (renderRoundEndPanel 内局部)
+
+| 变量 | 计算方式 | 说明 |
+|:----|:---------|:-----|
+| `baseScore` | `isLandlord ? 30 : 20` | 基础底分 |
+| `bombMult` | `totalBombs \|\| 0` | 炸弹数量 |
+| `chaosBonus` | `chaosScore * 10` | 搞事情得分 |
+| `remainingCards` | 对手剩余手牌之和 | 手牌奖励基数 |
+| `handBonus` | `remainingCards * 2` | 手牌奖励 |
+| `subTotal` | `baseScore + chaosBonus + handBonus` | 小计 |
+| `multiplier` | `Math.pow(2, bombMult)` | 炸弹翻倍系数 |
+| `totalScore` | `subTotal * multiplier` | 最终总分 |
+
+---
+
+## 2. 计分公式
+
+### 2.1 完整公式 (代码)
+
+```javascript
+// renderRoundEndPanel 内 (line ~2525-2535)
+var baseScore = self.isLandlord ? 30 : 20;
+var bombMult = self.totalBombs || 0;
+var chaosScore = self.chaosScore || 0;
+var chaosBonus = chaosScore * 10;
+
+// 手牌奖励
+var remainingCards = 0;
+if (isPlayerWin) {
+  remainingCards = (self.ai1Hand ? self.ai1Hand.length : 0) +
+                   (self.ai2Hand ? self.ai2Hand.length : 0);
+} else if (isAI1Win) {
+  remainingCards = (self.playerHand ? self.playerHand.length : 0) +
+                   (self.ai2Hand ? self.ai2Hand.length : 0);
+} else {
+  remainingCards = (self.playerHand ? self.playerHand.length : 0) +
+                   (self.ai1Hand ? self.ai1Hand.length : 0);
+}
+var handBonus = remainingCards * 2;
+
+var subTotal = baseScore + chaosBonus + handBonus;
+var multiplier = Math.pow(2, bombMult);
+var totalScore = subTotal * multiplier;
+```
+
+**数学表达:**
+```
+subTotal = 基础底分 + (chaosScore × 10) + (对手剩余手牌 × 2)
+totalScore = subTotal × 2^totalBombs
+```
+
+### 2.2 分项明细
+
+#### 基础底分 (baseScore)
+
+| 玩家身份 | `isLandlord` | 分数 |
+|:--------:|:------------:|:----:|
+| 地主 | `true` | **+30** |
+| 农民 | `false` | **+20** |
+
+#### 炸弹翻倍 (multiplier)
+
+```javascript
+var multiplier = Math.pow(2, bombMult);
+// 当前代码: 火箭也按 ×2 计算，不单独区分
+// ⚠️ 火箭和炸弹统一按 bombMult 计数
+```
+
+| 炸弹数 | multiplier | 文字显示 |
+|:------:|:----------:|:---------|
+| 0 | ×1 | `×1 (0个)` |
+| 1 | ×2 | `×2 (1个)` |
+| 2 | ×4 | `×4 (2个)` |
+| 3 | ×8 | `×8 (3个)` |
+| 4 | ×16 | `×16 (4个)` |
+
+#### 搞事情得分 (chaosBonus)
+
+```javascript
+var chaosScore = self.chaosScore || 0;
+var chaosBonus = chaosScore * 10;
+```
+
+| 答对题数 | chaosBonus |
+|:--------:|:----------:|
+| 0 | 0 |
+| 1 | +10 |
+| 3 | +30 |
+| 5 | +50 |
+
+#### 手牌奖励 (handBonus)
+
+| 对手剩余手牌数 | handBonus |
+|:--------------:|:----------:|
+| 0 **⚠️ 不可能** | 0 |
+| 1~4 | +2 ~ +8 |
+| 17 (农民全没出) | +34 |
+| 34 (两家全没出) | **+68** (最大) |
+
+### 2.3 计算示例
+
+**场景1: 地主玩家赢了，答对3题，2个炸弹，AI1剩5张，AI2剩3张**
+```
+基础底分:     +30  (地主)
+搞事情:       +30  (3×10)
+手牌奖励:     +16  ((5+3)×2)
+────────────────────────
+subTotal:     +76
+炸弹翻倍:     ×4   (2²)
+────────────────────────
+totalScore:   +304
+```
+
+**场景2: 农民玩家赢了，答对0题，0炸弹，AI剩8+12=20张**
+```
+基础底分:     +20  (农民)
+搞事情:       +0   (0题)
+手牌奖励:     +40  (20×2)
+────────────────────────
+subTotal:     +60
+炸弹翻倍:     ×1   (0个)
+────────────────────────
+totalScore:   +60
+```
+
+**场景3: 玩家输了 (AI2赢得)，1个炸弹**
+```
+玩家输时:
+  baseScore = self.isLandlord ? 30 : 20
+  // 仍然计算但显示为 AI 得分
+```
+
+---
+
+## 3. 炸弹/火箭统计
+
+### 3.1 totalBombs 递增位置 (3处)
+
+```javascript
+// 1. confirmPlay (玩家出牌) — line 1011
+if (info.type === 'BOMB' || info.type === 'ROCKET') this.totalBombs++;
+
+// 2. handleAIPlay (API AI出牌) — line 1210
+if (info.type === 'BOMB' || info.type === 'ROCKET') this.totalBombs++;
+
+// 3. localAIPlay (本地AI出牌) — line 1285
+if (info.type === 'BOMB' || info.type === 'ROCKET') this.totalBombs++;
+```
+
+**统计范围:** 本局中**所有玩家**(玩家+AI1+AI2)打出的炸弹和火箭总和。
+
+### 3.2 火箭 vs 炸弹
+
+| 牌型 | 识别 | 代码处理 |
+|:----|:-----|:---------|
+| 炸弹 | 4张同 rank | `info.type === 'BOMB'` → `totalBombs++` |
+| 火箭 | 小王+大王 | `info.type === 'ROCKET'` → `totalBombs++` |
+
+**⚠️ 代码 bug:** 当前代码将火箭和炸弹统一 `totalBombs++`，最终乘以 `Math.pow(2, bombMult)`。火箭也应该按 ×4 计算。需要引入 `rocketCount` 单独统计火箭。
+
+### 3.3 炸弹翻倍文字显示
+
+```javascript
+'×' + multiplier + ' (' + bombMult + '个)'
+// 示例: "×8 (3个)"
+// 即使 bombMult=0 也显示 "×1 (0个)"
+```
+
+---
+
+## 4. 搞事情得分
+
+### 4.1 得分生命周期
+
+```javascript
+// init() — 重置
+this.chaosScore = 0;
+
+// doAction() — 搞事情入口，确保非null
+this.chaosScore = this.chaosScore || 0;
+
+// _handleOptionClick 答对时递增 — line ~1640
+self.chaosScore = (self.chaosScore || 0) + 1;
+
+// renderRoundEndPanel 读取
+var chaosScore = self.chaosScore || 0;
+var chaosBonus = chaosScore * 10;
+```
+
+### 4.2 零值处理
+
+```javascript
+// 搞事情得分为0时显示为 "0" 而非隐藏整行
+if (chaosBonus === 0) {
+  detailRows[2].value = '0';
+}
+// 手牌奖励为0时同样
+if (handBonus === 0) {
+  detailRows[3].value = '0';
+}
+```
+
+**显示效果:**
+| chaosBonus | 显示 |
+|:----------:|:-----|
+| +50 | `搞事情得分 +50  🔥` |
+| 0 | `搞事情得分 0  🔥` |
+
+---
+
+## 5. 手牌奖励
+
+### 5.1 对手手牌计算
+
+**玩家赢时:**
+```javascript
+remainingCards = ai1Hand.length + ai2Hand.length;
+```
+
+**AI1赢时:**
+```javascript
+remainingCards = playerHand.length + ai2Hand.length;
+```
+
+**AI2赢时:**
+```javascript
+remainingCards = playerHand.length + ai1Hand.length;
+```
+
+**始终取 ?.length 且 ? 为 null 时视为 0**
+
+### 5.2 公式
+
+```javascript
+var handBonus = remainingCards * 2;
+```
+
+**最大值:** 34张 (两家全没出) × 2 = **+68**
+
+### 5.3 零值处理
+
+```javascript
+if (handBonus === 0) {
+  detailRows[3].value = '0';
+}
+```
+
+---
+
+## 6. 结算面板布局
+
+### 6.1 整体区域
+
+```
+结算卡片: X=200, Y=60, W=560, H=480  (200+560=760, 60+480=540)
+depths: 遮罩400, 卡片401, 内容402, 文字按钮403, 按钮文字404
+```
+
+### 6.2 精确坐标全表
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│ (0,0)                                                   960×600│
+│ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ │  ← 遮罩 depth=400
+│ ▓                                                            ▓ │     fill 0x000000 alpha 0.65
+│ ▓   ╔══════════════════════════════════════════════════════╗  ▓ │  ← 结算卡片 depth=401
+│ ▓   ║    (200,60) w=560 h=480  圆角12px                    ║  ▓ │     fill 0x1A1A2E 0.92
+│ ▓   ║    边框: 赢 #FFD700 / 输 #FF5252  lineWidth=2 0.8    ║  ▓ │
+│ ▓   ║                                                    ║  ▓ │
+│ ▓   ║  ┌──────────────────────────────────────────────┐  ║  ▓ │
+│ ▓   ║  │  🎉 你赢了！        (480,90) 28px bold       │  ║  ▓ │  ← 标题 depth=402
+│ ▓   ║  │  shadow blur=20 color=#FFD700 fill=true      │  ║  ▓ │
+│ ▓   ║  └──────────────────────────────────────────────┘  ║  ▓ │
+│ ▓   ║                                                    ║  ▓ │
+│ ▓   ║  ┌────────────────────────────────────────────┐   ║  ▓ │  ← 得分面板 depth=402
+│ ▓   ║  │  (240,142) w=480 h=260 圆角8px             │   ║  ▓ │     fill 0x000000 0.25
+│ ▓   ║  │  黑0.25                                     │   ║  ▓ │
+│ ▓   ║  │                                            │   ║  ▓ │
+│ ▓   ║  │    💰 总得分              (480,155) 14px    │   ║  ▓ │  ← depth=403
+│ ▓   ║  │    +800                   (480,190) 36px    │   ║  ▓ │     bold, #FFD700
+│ ▓   ║  │    ────────────────────── (260,215~700)     │   ║  ▓ │     line 1px white 0.1
+│ ▓   ║  │                                             │   ║  ▓ │
+│ ▓   ║  │  基础底分   +30  ★     (270,235) 13px      │   ║  ▓ │  ← 4行
+│ ▓   ║  │  炸弹翻倍   ×8         (270,260) 13px      │   ║  ▓ │     间隔25px
+│ ▓   ║  │  搞事情得分 +50  🔥    (270,285) 13px      │   ║  ▓ │
+│ ▓   ║  │  手牌奖励   +20  🃏    (270,310) 13px      │   ║  ▓ │
+│ ▓   ║  │    ────────────────────── (260,335~700)     │   ║  ▓ │     分隔线2
+│ ▓   ║  └────────────────────────────────────────────┘   ║  ▓ │
+│ ▓   ║                                                    ║  ▓ │
+│ ▓   ║   ┌──────────────┐   ┌──────────────┐             ║  ▓ │  ← 按钮 depth=403/404
+│ ▓   ║   │ 🔄 再来一局  │   │ 🏠 返回首页  │             ║  ▓ │
+│ ▓   ║   │  (290,370)   │   │ (500,370)    │             ║  ▓ │
+│ ▓   ║   │  170×44      │   │ 170×44       │             ║  ▓ │
+│ ▓   ║   └──────────────┘   └──────────────┘             ║  ▓ │
+│ ▓   ║                                                    ║  ▓ │
+│ ▓   ║        本局用时: 3分28秒  (710,510) 10px          ║  ▓ │  ← depth=403
+│ ▓   ╚══════════════════════════════════════════════════════╝  ▓ │
+│ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ │
+└────────────────────────────────────────────────────────────────┘
+```
+
+### 6.3 元素精确坐标
+
+| 元素 | 变量 | X | Y | W | H | 圆角 | depth | 填色/样式 |
+|:----|:----:|:-:|:-:|:-:|:-:|:----:|:-----:|:----------|
+| 半透明遮罩 | overlay | 0 | 0 | 960 | 600 | — | 400 | fill 0x000000, alpha 0→0.65 |
+| 结算卡片 | cardBg | 200 | 60 | 560 | 480 | 12 | 401 | fill 0x1A1A2E 0.92 |
+| 卡片边框 | (同一graphics) | 200 | 60 | 560 | 480 | 12 | 401 | stroke, 赢0xFFD700/输0xFF5252, lineWidth 2, alpha 0.8 |
+| 主标题 | title | 480 | 90 | — | — | — | 402 | text, 28px bold, 赢#FFD700/输#FF5252, shadow blur=20 |
+| AI副标题 | aiWinSub | 480 | 120 | — | — | — | 402 | text, 16px, #FF5252, 仅AI赢时 |
+| 得分面板 | scorePanel | 240 | 142 | 480 | 260 | 8 | 402 | fill 0x000000 0.25 |
+| 总得分标签 | totalLabel | 480 | 155 | — | — | — | 403 | text, "💰 总得分", 14px, #A5D6A7 |
+| 总得分数字 | totalNum | 480 | 190 | — | — | — | 403 | text, "+N", 36px bold, #FFD700, shadow blur=15 |
+| 分隔线1 | div1 | 260→700 | 215 | — | — | — | 403 | line, 1px, 0xFFFFFF 0.1 |
+| 得分行1 | rowText[0] | 270 | 235 | — | — | — | 403 | "基础底分 +30  ★", 13px, #C8E6C9 |
+| 得分行2 | rowText[1] | 270 | 260 | — | — | — | 403 | "炸弹翻倍 ×4  🧨", 13px, #FFD54F |
+| 得分行3 | rowText[2] | 270 | 285 | — | — | — | 403 | "搞事情得分 +50  🔥", 13px, #FFAB91 |
+| 得分行4 | rowText[3] | 270 | 310 | — | — | — | 403 | "手牌奖励 +20  🃏", 13px, #A5D6A7 |
+| 分隔线2 | div2 | 260→700 | 335 | — | — | — | 403 | line, 1px, 0xFFFFFF 0.1 |
+| 再来一局按钮 | btn1Bg | 290 | 370 | 170 | 44 | 8 | 403 | fill 0x4ECDC4 |
+| 再来一局文字 | btn1Txt | 375 | 392 | — | — | — | 404 | "🔄 再来一局", 15px bold, #FFFFFF |
+| 返回首页按钮 | btn2Bg | 500 | 370 | 170 | 44 | 8 | 403 | fill 0x78909C |
+| 返回首页文字 | btn2Txt | 585 | 392 | — | — | — | 404 | "🏠 返回首页", 15px bold, #FFFFFF |
+| 本局用时 | timeTxt | 710 | 510 | — | — | — | 403 | "本局用时: X分Y秒", 10px, #888888 |
+
+### 6.4 得分行颜色规范
+
+| 行 | 标签 | 值颜色 | icon |
+|:--|:----:|:------:|:----:|
+| 基础底分 | `#C8E6C9` | `#C8E6C9` | ★ |
+| 炸弹翻倍 | `#FFD54F` | `#FFD54F` | 🧨 |
+| 搞事情得分 | `#FFAB91` | `#FFAB91` | 🔥 |
+| 手牌奖励 | `#A5D6A7` | `#A5D6A7` | 🃏 |
+
+### 6.5 按钮坐标计算
+
+```javascript
+// 再来一局: (290, 370) w=170 h=44
+// 返回首页: (500, 370) w=170 h=44
+// 间距: 500 - (290+170) = 40px
+```
+
+### 6.6 用时计算
+
+```javascript
+var elapsed = Math.floor((Date.now() - (self.gameStartTime || Date.now())) / 1000);
+var min = Math.floor(elapsed / 60);
+var sec = elapsed % 60;
+var timeStr = '本局用时: ' + min + '分' + sec + '秒';
+```
+
+**用时格式:** `本局用时: 3分28秒`  
+**位置:** (710, 510), 10px, `#888888`, depth 403
+
+---
+
+## 7. 动画序列
+
+### 7.1 精确时间线
+
+```javascript
+// T=0: 遮罩淡入 0→0.65 (300ms)
+self.tweens.add({ targets: overlay, alpha: 0.65, duration: 300, ease: 'Linear' });
+
+// T=300: 卡片+得分面板淡入 (300ms)
+self.time.delayedCall(300, function() {
+  self.tweens.add({ targets: cardBg, alpha: 1, duration: 300 });
+  self.tweens.add({ targets: scorePanel, alpha: 1, duration: 300 });
+});
+
+// T=400: 标题弹入 + AI副标题
+self.time.delayedCall(400, function() {
+  self.tweens.add({ targets: title, scale: 1.0, alpha: 1, duration: 400, ease: 'Back.easeOut' });
+  if (aiWinSub) {
+    self.tweens.add({ targets: aiWinSub, alpha: 1, duration: 300, ease: 'Linear' });
+  }
+});
+
+// T=700: 总得分+分隔线1
+self.time.delayedCall(700, function() {
+  self.tweens.add({ targets: totalLabel, alpha: 1, duration: 200 });
+  self.tweens.add({ targets: totalNum, alpha: 1, duration: 300 });
+  self.tweens.add({ targets: div1, alpha: 1, duration: 200 });
+});
+
+// T=900+n×150: 得分细项逐行 (4行)
+for (var rj = 0; rj < rowTexts.length; rj++) {
+  (function(idx, txt) {
+    self.time.delayedCall(900 + idx * 150, function() {
+      self.tweens.add({ targets: txt, alpha: 1, duration: 200 });
+    });
+  })(rj, rowTexts[rj]);
+}
+
+// T=1500: 分隔线2
+self.time.delayedCall(1500, function() {
+  self.tweens.add({ targets: div2, alpha: 1, duration: 200 });
+});
+
+// T=1600: 用时文字
+self.time.delayedCall(1600, function() {
+  self.tweens.add({ targets: timeTxt, alpha: 1, duration: 200 });
+});
+
+// T=1800: 两个按钮同时淡入
+self.time.delayedCall(1800, function() {
+  self.tweens.add({ targets: btn1Bg, alpha: 1, duration: 200 });
+  self.tweens.add({ targets: btn1Txt, alpha: 1, duration: 200 });
+  self.tweens.add({ targets: btn2Bg, alpha: 1, duration: 200 });
+  self.tweens.add({ targets: btn2Txt, alpha: 1, duration: 200 });
+});
+```
+
+### 7.2 动画序列表
+
+```
+时间(ms)   要素               动画开始          动画结束        缓动
+ ─────────────────────────────────────────────────────────────────
+  0        遮罩               alpha 0→0.65     300ms         Linear
+300        结算卡片           alpha 0→1        300ms (600)   Linear
+300        得分面板           alpha 0→1        300ms (600)   Linear
+400        标题               scale 0.3→1.0    400ms (800)   Back.easeOut
+                                     alpha 0→1
+400        AI副标题(如有)     alpha 0→1        300ms (700)   Linear
+700        总得分标签         alpha 0→1        200ms (900)   Linear
+700        总得分数字         alpha 0→1        300ms (1000)  Linear
+700        分隔线1            alpha 0→1        200ms (900)   Linear
+900        细项行1            alpha 0→1        200ms (1100)  Linear
+1050       细项行2            alpha 0→1        200ms (1250)  Linear
+1200       细项行3            alpha 0→1        200ms (1400)  Linear
+1350       细项行4            alpha 0→1        200ms (1550)  Linear
+1500       分隔线2            alpha 0→1        200ms (1700)  Linear
+1600       用时文字           alpha 0→1        200ms (1800)  Linear
+1800       按钮(2个同时)      alpha 0→1        200ms (2000)  Linear
+ ─────────────────────────────────────────────────────────────────
+2000       全部完成，玩家可交互
+```
+
+**总时长: 2.0 秒**
+
+### 7.3 ⚠️ 与旧 Scoring.md 差异
+
+| 旧文档 | 实际代码 | 差异说明 |
+|:------|:---------|:---------|
+| 总得分有数字跳动 (0→最终) | 直接显示最终值，仅alpha淡入 | 没有数字跳动动画 |
+| 按钮有悬停效果 | 无悬停效果 | 纯静态 |
+| 火箭 ×4 | 火箭也按×2计算 | 代码bug |
+
+---
+
+## 8. 回合计数器
+
+### 8.1 实现现状
+
+```javascript
+// init() — line ~200
+this.round = 1;          // 初始值
+this.maxRounds = 10;     // 构造函数中设置
+
+// createTopBar() — line ~360
+scene.roundText = scene.add.text(12, 9, '第 1/10 回合', {
+  fontSize: '12px', color: '#E8F5E9', fontStyle: 'bold'
+}).setDepth(11);
+```
+
+**⚠️ 代码 bug:** 
+- `roundText` 字符串是硬编码的 `'第 1/10 回合'`
+- `this.round` 在 `init()` 中初始化为1后**从未递增**
+- 始终显示 "第 1/10 回合"
+
+### 8.2 回合不递增的原因
+
+| 位置 | 代码 | 问题 |
+|:-----|:-----|:-----|
+| `renderRoundEndPanel` 末尾 | 无 round++ 代码 | 从未递增 |
+| `restartGame()` | `scene.restart()` → init() | round 重置为1 |
+| `createTopBar` | 硬编码字符串 | 即使 round++ 也不会更新 |
+
+---
+
+## 9. 胜负判定与 winner 参数
+
+### 9.1 判定点 (6处)
+
+| 函数 | 条件 | winner | 行号 |
+|:-----|:-----|:------:|:----:|
+| `confirmPlay()` | `playerHand.length === 0` | `'player'` | ~1015 |
+| `doAITurn()` | `hand.length === 0` (入口) | `'ai1'`/`'ai2'` | ~1140 |
+| `handleAIPlay()` | `hand.length === 0` (出牌后) | `'ai1'`/`'ai2'` | ~1215 |
+| `localAIPlay()` | `hand.length === 0` (出牌后) | `'ai1'`/`'ai2'` | ~1290 |
+
+### 9.2 winner → 显示
+
+```javascript
+var isPlayerWin = winner === 'player';
+var isAI1Win = winner === 'ai1';
+var winName = '';
+if (isAI1Win) winName = '王怼怼';
+else if (winner === 'ai2') winName = '苏甜甜';
+
+var titleEmoji = isPlayerWin ? '🎉' : '😅';
+var titleText = isPlayerWin ? '你赢了！' : '你输了';
+var titleColor = isPlayerWin ? '#FFD700' : '#FF5252';
+```
+
+| winner | isPlayerWin | 标题 | 副标题 | 边框色 |
+|:------:|:-----------:|:----:|:------:|:------:|
+| `'player'` | true | `🎉 你赢了！` | 无 | `#FFD700` |
+| `'ai1'` | false | `😅 你输了` | `王怼怼获胜！` | `#FF5252` |
+| `'ai2'` | false | `😅 你输了` | `苏甜甜获胜！` | `#FF5252` |
+
+### 9.3 结算时 gameState
+
+```javascript
+this.gameState = GAME_STATE.ROUND_END;
+```
+
+---
+
+## 10. UI变化全记录
+
+### 10.1 结算前 (玩家出完最后牌)
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ 第 1/10 回合   [王怼怼]剩余5张   已出 顺子    [苏甜甜]剩余3张    │
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│    你: ┌8┐┌9┐┌10┐┌J┐┌Q┐  (最后出牌)                        │
+│                                                              │
+│      [手牌 — 空]                                              │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### 10.2 C+0ms (遮罩淡入开始)
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓  │
+│ ▓ (遮罩alpha 0 → 0.65, 300ms)                              ▓ │
+│ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓  │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### 10.3 C+300ms (卡片/面板淡入)
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ │
+│ ▓  ┌────────────────────────────────────────────────────┐  ▓ │
+│ ▓  │         (结算卡片淡入, alpha 0→1)                   │  ▓ │
+│ ▓  └────────────────────────────────────────────────────┘  ▓ │
+│ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### 10.4 C+400ms (标题弹入)
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ │
+│ ▓  ┌────────────────────────────────────────────────────┐  ▓ │
+│ ▓  │          🎉 你赢了！  (scale 0.3→1.0弹入)           │  ▓ │
+│ ▓  └────────────────────────────────────────────────────┘  ▓ │
+│ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### 10.5 C+700ms (得分区淡入)
+
+```
+         💰 总得分          (alpha 0→1)
+         +304               (alpha 0→1)
+         ────────────       (alpha 0→1)
+```
+
+### 10.6 C+900~1350ms (逐行淡入)
+
+```
+         基础底分   +30  ★   (alpha 0→1, T+900)
+         炸弹翻倍   ×4       (alpha 0→1, T+1050)
+         搞事情得分 +30  🔥   (alpha 0→1, T+1200)
+         手牌奖励   +16  🃏   (alpha 0→1, T+1350)
+```
+
+### 10.7 C+1800ms (按钮淡入)
+
+```
+         [ 🔄 再来一局 ]    [ 🏠 返回首页 ]   (同时淡入)
+```
+
+### 10.8 C+2000ms (全部完成)
+
+完整结算面板可交互，玩家可点击"再来一局"或"返回首页"。
+
+---
+
+## 11. 与旧文档差异说明
+
+### 11.1 代码 vs 旧 Scoring.md
+
+| # | 旧文档 | 代码实际值 | 说明 |
+|:-:|:-------|:-----------|:-----|
+| 1 | 火箭 ×4 | `Math.pow(2, bombMult)` 统一×2 | 需引入 rocketCount 修复 |
+| 2 | 数字跳动动画 (30ms步进) | 直接显示最终值+alpha淡入 | 无数字跳动 |
+| 3 | 结算按钮悬停效果 | 无悬停效果 | 纯静态按钮 |
+| 4 | `round` 自动递增 | 硬编码 "第 1/10 回合" | round 从未递增 |
+| 5 | 0分项隐藏 | 仅 value 显示 "0" | 行不隐藏 |
+| 6 | 搞事情显示 "+0 🔥" | 显示 "0" (去掉+号) | 显示方式不同 |
+| 7 | 手牌奖励显示 "+0" | 显示 "0" | 同上 |
+
+### 11.2 代码bug汇总
+
+| Bug | 影响 | 修复建议 |
+|:----|:-----|:---------|
+| `round` 从不递增 | 始终显示"第1回合" | `renderRoundEndPanel` 末尾加 `round++` 并更新 roundText |
+| 火箭也×2 | 火箭威力减弱 | 引入 `rocketCount`，`Math.pow(2, bombs) * Math.pow(4, rockets)` |
+| 无数字跳动 | 结算缺乏动感 | 添加 `time.addEvent` 每30ms递增显示 |
+
+---
+
+## 12. 验收标准
+
+### 12.1 计分公式
+
+| # | 验收条件 | 预期结果 | 来源行 |
+|:-:|----------|---------|:------:|
+| F1 | 地主底分+30，农民底分+20 | baseScore 正确 | ~2525 |
+| F2 | 每个炸弹总分×2 | multiplier = Math.pow(2, bombMult) | ~2533 |
+| F3 | 搞事情每题+10分 | chaosBonus = chaosScore * 10 | ~2528 |
+| F4 | 对手剩余每张手牌+2分 | handBonus = remainingCards * 2 | ~2531 |
+| F5 | 0个炸弹显示×1 | "×1 (0个)" | ~2540 |
+| F6 | 搞事情0分显示"0" | 不隐藏行，值显示"0" | ~2548 |
+
+### 12.2 结算面板UI
+
+| # | 验收条件 | 预期结果 | 来源行 |
+|:-:|----------|---------|:------:|
+| U1 | 结算卡片中心弹出 (200,60) w=560 h=480 | 圆角12px, #1A1A2E 0.92 | ~2470 |
+| U2 | 赢家边框#FFD700金色/输家#FF5252红色 | glowColor正确 | ~2471 |
+| U3 | 标题28px bold, 赢#FFD700/输#FF5252 | shadow blur=20 | ~2477 |
+| U4 | AI获胜时显示副标题"王怼怼/苏甜甜获胜！" | 16px #FF5252 | ~2483 |
+| U5 | 得分面板 (240,142) w=480 h=260 圆角8px | 黑0.25 | ~2553 |
+| U6 | 总得分36px bold #FFD700, shadow blur=15 | 正确显示 | ~2561 |
+| U7 | 4个得分行 Y=235/260/285/310 | 间隔25px | ~2572 |
+| U8 | 按钮 (290,370) + (500,370) 170×44 | 再来一局#4ECDC4, 返回#78909C | ~2605~2625 |
+| U9 | 用时文字 (710,510) 10px #888888 | 格式正确 | ~2593 |
+
+### 12.3 动画序列
+
+| # | 验收条件 | 预期结果 | 来源行 |
+|:-:|----------|---------|:------:|
+| A1 | 遮罩0.3s淡入至0.65 | alpha 0→0.65 | ~2465 |
+| A2 | 卡片+面板在0.3s延迟后0.3s淡入 | delayedCall(300) | ~2598 |
+| A3 | 标题0.4s弹入 scale 0.3→1.0 Back.easeOut | delayedCall(400) | ~2605 |
+| A4 | 得分+分隔线在0.7s延迟后淡入 | delayedCall(700) | ~2612 |
+| A5 | 得分行逐行淡入，间隔150ms | 900/1050/1200/1350ms | ~2619 |
+| A6 | 分隔线2在1.5s淡入 | delayedCall(1500) | ~2624 |
+| A7 | 用时文字在1.6s淡入 | delayedCall(1600) | ~2627 |
+| A8 | 按钮在1.8s同时淡入 | delayedCall(1800) | ~2630 |
+| A9 | 总时长2.0s，之后可交互 | 最后一个动画在2000ms完 | 计算 |
+
+### 12.4 胜负判定
+
+| # | 验收条件 | 预期结果 | 来源行 |
+|:-:|----------|---------|:------:|
+| W1 | 玩家出完最后牌 → 结算 | confirmPlay `playerHand.length === 0` → 'player' | ~1015 |
+| W2 | AI1出完牌 → 结算 "王怼怼获胜！" | handleAIPlay/localAIPlay | ~1215 |
+| W3 | AI2出完牌 → 结算 "苏甜甜获胜！" | handleAIPlay/localAIPlay | ~1215 |
+| W4 | gameState = ROUND_END | 结算期间不可操作 | ~2463 |
+
+### 12.5 回合计数器
+
+| # | 验收条件 | 预期结果 | 来源行 |
+|:-:|----------|---------|:------:|
+| R1 | 初始 "第 1/10 回合" | (12,9) 12px #E8F5E9 | createTopBar |
+| R2 | round 当前不递增 (代码bug) | 硬编码字符串 | 待修复 |
+
+### 12.6 边界情况
+
+| # | 验收条件 | 预期结果 | 来源行 |
+|:-:|----------|---------|:------:|
+| B1 | chaosScore=0时仍显示行 | value='0' | ~2548 |
+| B2 | handBonus=0时显示行 | value='0' | ~2550 |
+| B3 | 玩家输时显示"😅 你输了"+AI副标题 | 红色主题 | ~2477 |
+| B4 | elapsed 安全兜底 | `self.gameStartTime \|\| Date.now()` | ~2589 |
+
+---
+
+## 附录: 函数索引
+
+| 函数 | 行号 | 功能 | 计分类键行 |
+|:-----|:----:|:-----|:----------|
+| `init()` | ~200 | 初始变量 | totalBombs=0, chaosScore=0, gameStartTime=Date.now() |
+| `renderRoundEndPanel(winner)` | 2463 | 结算面板+计分 | 2525-2536 计分公式 |
+| `confirmPlay()` | ~990 | 出牌确认 | ~1011 totalBombs++ |
+| `handleAIPlay()` | ~1170 | AI出牌 | ~1210 totalBombs++ |
+| `localAIPlay()` | ~1260 | 本地AI出牌 | ~1285 totalBombs++ |
+| `_handleOptionClick()` | ~1619 | 搞事情答题 | ~1640 chaosScore++ |
+| `doAction()` | ~1360 | 搞事情入口 | chaosScore \|\| 0 |
+| `createTopBar()` | ~350 | 顶部状态栏 | ~360 roundText |
+
+```
+
+---
+
+## `docs/Scoring.md` (24,201 字节)
+
+```markdown
+# PRD: 计分与回合系统
+
+**版本:** v1.0  
+**作者:** 产品老大  
+**日期:** 2026-05-02  
+**文档编号:** PRD-FTL-SCORING-001  
+**对应文件:** `src/client/js/game.js`
+
+---
+
+## 目录
+
+1. [回合计数器](#1-回合计数器)
+2. [计分公式](#2-计分公式)
+3. [结算面板](#3-结算面板)
+4. [Bonus 系统 (TODO)](#4-bonus-系统-todo)
+5. [动画序列规范](#5-动画序列规范)
+6. [计分交互流程](#6-计分交互流程)
+7. [验收标准](#7-验收标准)
+
+---
+
+## 1️⃣ 回合计数器
+
+### 1.1 总览
+
+| 字段 | 类型 | 初始值 | 范围 | 说明 |
+|------|------|--------|------|------|
+| `this.round` | Number | 1 | 1～10 | 当前第几回合 |
+| `this.maxRounds` | Number | 10 | 固定 | 最大回合数 |
+
+### 1.2 显示格式
+
+顶部状态栏居中显示（当前已硬编码为 `'第 1/10 回合'`）：
+
+```
+第 X/10 回合
+```
+
+- X = `this.round` 当前值
+- 10 = `this.maxRounds`
+
+### 1.3 现有问题
+
+| 问题 | 风险 | 当前实现 |
+|------|------|---------|
+| `this.round` 在 `init()` 里初始化为1，但**从未递增** | 始终显示"第 1/10 回合"，玩家无法感知进度 | 硬编码字符串 |
+| `roundText` 在 `createTopBar()` 中写死 `'第 1/10 回合'` | 不会随 `this.round` 变化 | 需要改为动态绑定 |
+| `scene.restart()` 重置所有状态 | 正确——新一局应该是第1回合 | 无需修改 |
+
+### 1.4 修改方案
+
+**1.4.1 回合递增**
+
+在 `renderRoundEndPanel(winner)` 结尾处，即动画播放完、按钮可交互后，递增回合计数：
+
+```javascript
+// renderRoundEndPanel() 内部，按钮弹入后
+self.round = (self.round || 1) + 1;
+
+// 如果达到最大回合数，显示"系列赛结束"提示，按钮改为"🏠 返回首页"
+if (self.round > self.maxRounds) {
+  // 显示"系列赛结束"覆盖文字
+  // 隐藏"再来一局"按钮（或改为"重新开始系列"）
+}
+```
+
+> ✅ 实际递增时机：在动画完成后、按钮交互前的回调中，以避免竞态。
+
+**1.4.2 动态文字更新**
+
+```javascript
+// createTopBar() 中修改：
+scene.roundText = scene.add.text(12, 9, '第 ' + scene.round + '/' + scene.maxRounds + ' 回合', { ... });
+
+// 取消硬编码字符串，改为读取 scene.round 和 scene.maxRounds
+```
+
+**1.4.3 回合结束处理（第10局后）**
+
+| 场景 | 行为 |
+|------|------|
+| 第1-9局结束 | 显示结算面板，"再来一局"按钮 → `scene.restart()` → 起始回合+1? |
+| 第10局结束 | 显示结算面板，"再来一局"按钮改为"🎮 重新开始系列" → 重置 `round=1` 后 `scene.restart()` |
+
+> **注意：** `scene.restart()` 会重新执行 `init()` → `round=1`。如果需要保留回合进度（系列赛），就不能简单地 `scene.restart()`，而是需要把 `round` 提升到 scene 外部或使用特定 data 传递。  
+> **建议方案：** 使用 `this.scene.data.set('round', self.round + 1)` 传递，在 `init()` 中读取：
+
+```javascript
+// init() 中：
+this.round = this.scene.data.get('round') || 1;
+```
+
+### 1.5 验收条件
+
+| # | 验收条件 | 优先级 |
+|:-:|----------|:------:|
+| RC1 | 顶部状态栏显示"第 X/10 回合"，X从1开始 | P0 |
+| RC2 | 每局结束后 `this.round` 递增1 | P0 |
+| RC3 | 第10局结束后"再来一局"改为"重新开始系列"，点击后重置为第1局 | P1 |
+| RC4 | `scene.restart()` 不会丢失回合计数（通过 data 传递） | P1 |
+
+---
+
+## 2️⃣ 计分公式
+
+### 2.1 公式总览
+
+```
+subTotal = 基础底分 + 搞事情得分 + 手牌奖励
+totalScore = subTotal × 炸弹翻倍系数
+
+其中：
+  基础底分   = 地主 +30 / 农民 +20
+  搞事情得分 = chaosScore × 10
+  手牌奖励   = 对手剩余手牌总数 × 2
+  炸弹翻倍   = 2 ^ totalBombs（每个炸弹 ×2，火箭 ×4）
+```
+
+### 2.2 各分项详述
+
+#### 2.2.1 基础底分
+
+| 身份 | 分数 | 说明 |
+|:----:|:----:|------|
+| 👑 地主 (isLandlord=true) | +30 | 叫到地主的玩家/角色 |
+| 👤 农民 (isLandlord=false) | +20 | 另外两位 |
+
+**代码逻辑（game.js 已实现）：**
+```javascript
+var baseScore = self.isLandlord ? 30 : 20;
+```
+
+#### 2.2.2 炸弹翻倍
+
+| 牌型 | 倍率 | 说明 |
+|:----:|:----:|------|
+| 💣 炸弹 (4张同点数) | ×2 | 每出1个炸弹叠加 |
+| 🚀 火箭 (大王+小王) | ×4 | 火箭单独×4，不占用炸弹位 |
+
+**火焰统计器 `this.totalBombs`：**
+
+| 时机 | 递增条件 | 代码位置 |
+|:----:|:---------|:--------:|
+| 玩家出了炸弹/火箭 | `info.type === 'BOMB' \|\| info.type === 'ROCKET'` | `confirmPlay()` 中 |
+| AI出了炸弹/火箭 | 同上 | `handleAIPlay()` 和 `localAIPlay()` 中 |
+
+**⚠️ 当前实现问题：** `Math.pow(2, bombMult)` 对所有炸弹统一 ×2（包括火箭）。  
+**需要修改：** 火箭应单独统计为 ×4：
+
+```javascript
+// 建议引入 rocketCount:
+var rocketCount = 0;   // 火箭单独计数器
+
+// 在出牌判定处：
+if (info.type === 'ROCKET') {
+  self.totalBombs++;    // 仍然计入总炸弹数（UI展示）
+  self.rocketCount++;   // 火箭专用计数器
+} else if (info.type === 'BOMB') {
+  self.totalBombs++;
+}
+
+// 在 renderRoundEndPanel 中计算翻倍：
+var normalBombs = self.totalBombs - (self.rocketCount || 0);
+var multiplier = Math.pow(2, normalBombs) * Math.pow(4, (self.rocketCount || 0));
+```
+
+**计算公式对比：**
+
+| 场景 | 当前实现 (×2统一) | 正确实现 |
+|:----:|:-----------------:|:--------:|
+| 1个炸弹 × 0火箭 | ×2 | ×2 |
+| 2个炸弹 × 0火箭 | ×4 | ×4 |
+| 0个炸弹 × 1火箭 | ×2 | **×4** |
+| 1个炸弹 × 1火箭 | ×4 | **×8** (2×4) |
+
+#### 2.2.3 搞事情得分
+
+| 变量 | 类型 | 说明 |
+|------|------|------|
+| `this.chaosScore` | Number | 答对总数（答对一次+1） |
+| 搞事情得分 | Number | `chaosScore × 10` |
+
+**当前实现逻辑（game.js 已实现）：**
+```javascript
+var chaosScore = self.chaosScore || 0;
+var chaosBonus = chaosScore * 10;
+```
+
+**搞事情得分显示规则：**
+
+| 场景 | 显示值 |
+|:----:|:------:|
+| `chaosScore === 0` | 显示 "+0 🔥" 或隐藏整行 |
+| `chaosScore > 0` | 显示 "+\`chaosBonus\` 🔥" |
+
+#### 2.2.4 手牌奖励
+
+| 变量 | 值 | 说明 |
+|------|----|------|
+| 对手剩余手牌 | `otherPlayersHand.length` | 输家手牌数 |
+| 每张奖励 | 2 分 | 固定值 |
+| 手牌奖励 | `remainingCards × 2` | 总分 |
+
+**当前实现逻辑（game.js 已实现）：**
+```javascript
+var remainingCards = 0;
+if (isPlayerWin) {
+  remainingCards = (self.ai1Hand ? self.ai1Hand.length : 0) + (self.ai2Hand ? self.ai2Hand.length : 0);
+} else if (isAI1Win) {
+  remainingCards = (self.playerHand ? self.playerHand.length : 0) + (self.ai2Hand ? self.ai2Hand.length : 0);
+} else {
+  remainingCards = (self.playerHand ? self.playerHand.length : 0) + (self.ai1Hand ? self.ai1Hand.length : 0);
+}
+var handBonus = remainingCards * 2;
+```
+
+### 2.3 完整计分计算示范
+
+**场景：玩家是地主，赢了**
+
+```
+基础底分:         +30  (地主)
+搞事情得分:       +50  (答对5题 × 10)
+手牌奖励:         +20  (AI1剩6张 + AI2剩4张 = 10张 × 2)
+─────────────────────────────
+subTotal:        +100
+炸弹翻倍:         ×8   (2个普通炸弹 ×2²=4, 1个火箭 ×4=4, 总 ×8)
+─────────────────────────────
+totalScore:      +800
+```
+
+**场景：玩家是农民，AI赢了**
+
+```
+不计算得分面板显示——AI获胜时显示"你输了"，不展示得分明细
+（或展示玩家本局表现：底分、炸弹数等统计项）
+```
+
+### 2.4 验收条件
+
+| # | 验收条件 | 优先级 |
+|:-:|----------|:------:|
+| SF1 | 地主得分基础底分为+30，农民为+20 | P0 |
+| SF2 | 每个炸弹(4张同点)使总分 ×2 | P0 |
+| SF3 | 火箭(大王+小王)使总分 ×4 | P1 |
+| SF4 | 多个炸弹/火箭的倍数正确叠加 (×2^炸弹数 × 4^火箭数) | P0 |
+| SF5 | 答对每题给+10搞事情分 | P0 |
+| SF6 | 对手剩余每张手牌奖励+2分 | P0 |
+| SF7 | 最终总分为 (底分+搞事情+手牌) × 翻倍系数 | P0 |
+
+---
+
+## 3️⃣ 结算面板
+
+### 3.1 布局坐标表 (960×600 基准)
+
+**面板尺寸概览：** 结算卡片 (200,60) → (200+560=760, 60+480=540)
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  (0,0)                                             960×600 │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │  半透明遮罩: 全屏 rgba(0,0,0,0)→(0.65)  0.3s淡入     │ │
+│  │                                                      │ │
+│  │         ╔═══════════════════╗                        │ │
+│  │         ║  🎉 你赢了！     ║   (480,90) 28px bold   │ │
+│  │         ╚═══════════════════╝   gold发光             │ │
+│  │                                                      │ │
+│  │  ╔═══════════════════════════════════════╗           │ │
+│  │  ║  💰 总得分           (480,155) 14px  ║           │ │
+│  │  ║  +800               (480,190) 36px  ║           │ │
+│  │  ║  ─────────────────────────────       ║           │ │
+│  │  ║  基础底分   +30  ★    (270,235)      ║           │ │
+│  │  ║  炸弹翻倍   ×8          (270,260)     ║           │ │
+│  │  ║  搞事情得分 +50  🔥    (270,285)     ║           │ │
+│  │  ║  手牌奖励   +20  🃏    (270,310)     ║           │ │
+│  │  ║  ─────────────────────────────       ║           │ │
+│  │  ╚═══════════════════════════════════════╝           │ │
+│  │                                                      │ │
+│  │   [ 🔄 再来一局 ]    [ 🏠 返回首页 ]               │ │
+│  │   (290,370) 170×44   (500,370) 170×44              │ │
+│  │                                                      │ │
+│  │  本局用时: 3分28秒 (710,510) 10px #888              │ │
+│  └────────────────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### 3.2 精确坐标表
+
+#### 3.2.1 遮罩与卡片
+
+| 元素 | X | Y | W | H | 颜色/样式 |
+|------|---|---|---|---|-----------|
+| 半透明遮罩 | 0 | 0 | 960 | 600 | rgba(0,0,0,0) → (0,0,0,0.65), 淡入 0.3s, depth=400 |
+| 结算卡片 | 200 | 60 | 560 | 480 | 圆角12px, rgba(26,26,46,0.92) |
+| 卡片边框 | — | — | — | — | 赢牌 #FFD700 / 输牌 #FF5252, lineWidth=2, alpha=0.8 |
+| 卡片残影/发光 | — | — | — | — | shadowBlur=12, 颜色同上 |
+
+#### 3.2.2 标题区
+
+| 元素 | X | Y | W | H | 说明 |
+|------|---|---|---|---|------|
+| 标题文字 | 480 | 90 | — | — | "🎉 你赢了！" 或 "😅 你输了" |
+| 标题字号 | — | — | — | — | 28px bold, shadowBlur=20 |
+| 标题颜色(赢) | — | — | — | — | #FFD700 |
+| 标题颜色(输) | — | — | — | — | #FF5252 |
+| 标题弹入 | — | — | — | — | scale 0.3→1.0, Back.easeOut, 0.4s |
+| AI胜出提示 | 480 | 120 | — | — | "王怼怼获胜！" 16px #FF5252 (仅AI赢时) |
+
+#### 3.2.3 得分面板
+
+| 元素 | X | Y | W | H | 说明 |
+|------|---|---|---|---|------|
+| 得分面板背景 | 240 | 142 | 480 | 260 | 圆角8px, rgba(0,0,0,0.25), 淡入 0.3s |
+| 总得分标题 | 480 | 155 | — | — | "💰 总得分" 14px #A5D6A7 |
+| 总得分数字 | 480 | 190 | — | — | "+800" 36px bold #FFD700, shadowBlur=15 |
+| 分隔线1 | 260 | 215 | 440 | 1 | rgba(255,255,255,0.1) |
+| 得分细项行1 | 270 | 235 | 420 | 22 | "基础底分 +30 ★" 13px #C8E6C9 |
+| 得分细项行2 | 270 | 260 | 420 | 22 | "炸弹翻倍 ×8 🧨" 13px #FFD54F |
+| 得分细项行3 | 270 | 285 | 420 | 22 | "搞事情得分 +50 🔥" 13px #FFAB91 |
+| 得分细项行4 | 270 | 310 | 420 | 22 | "手牌奖励 +20 🃏" 13px #A5D6A7 |
+| 分隔线2 | 260 | 335 | 440 | 1 | rgba(255,255,255,0.1) |
+
+#### 3.2.4 得分细项颜色规范
+
+| 行 | 标签颜色 | 值颜色 | 说明 |
+|:--:|:--------:|:------:|------|
+| 基础底分 | #C8E6C9 | #C8E6C9 | 浅绿 |
+| 炸弹翻倍 | #FFD54F | #FFD54F | 金色 |
+| 搞事情得分 | #FFAB91 | #FFAB91 | 浅橙 |
+| 手牌奖励 | #A5D6A7 | #A5D6A7 | 草绿 |
+
+#### 3.2.5 按钮区
+
+| 元素 | X | Y | W | H | 说明 |
+|------|---|---|---|---|------|
+| **再来一局**按钮 | 290 | 370 | 170 | 44 | 圆角8px, #4ECDC4 青色 |
+| 按钮文字 | 375 | 392 | — | — | "🔄 再来一局" 15px bold #fff |
+| 按钮悬停 | — | — | — | — | (#4ECDC4)→(#3DBEB0), scale 1.02 |
+| **返回首页**按钮 | 500 | 370 | 170 | 44 | 圆角8px, #78909C 灰色 |
+| 按钮文字 | 585 | 392 | — | — | "🏠 返回首页" 15px bold #fff |
+| 按钮悬停 | — | — | — | — | (#78909C)→(#607D8B), scale 1.02 |
+
+#### 3.2.6 底部信息
+
+| 元素 | X | Y | W | H | 说明 |
+|------|---|---|---|---|------|
+| 本局用时 | 710 | 510 | 230 | 20 | "本局用时: 3分28秒" 10px #888, 右对齐 |
+
+**用时计算：** `Math.floor((Date.now() - this.gameStartTime) / 1000)` 得到秒数，格式化为 "X分Y秒"。
+
+### 3.3 胜负判定与 winner 参数
+
+| winner参数 | 胜出条件 | 胜方名称 |
+|:----------:|:---------|:--------:|
+| `'player'` | `this.playerHand.length === 0` | "你" |
+| `'ai1'` | `this.ai1Hand.length === 0` | "王怼怼" |
+| `'ai2'` | `this.ai2Hand.length === 0` | "苏甜甜" |
+
+**对应判定点（game.js 中已有的3处胜出判定）：**
+
+| 胜出方 | 判定位置 | 触发函数 |
+|:------:|:---------|:--------:|
+| 玩家 | `confirmPlay()` 末尾 | 玩家出完最后一张牌后 |
+| AI1/AI2 | `handleAIPlay()` 末尾 | API模式下AI出完牌 |
+| AI1/AI2 | `localAIPlay()` 末尾 | 本地模式下AI出完牌 |
+| AI1/AI2 | `doAITurn()` 开头 | 特殊保护：轮到AI时手牌已为0 |
+
+### 3.4 面板状态与初始化
+
+```javascript
+// 进入结算状态
+this.gameState = GAME_STATE.ROUND_END;
+
+// 渲染函数签名
+renderRoundEndPanel(winner);  // winner: 'player' | 'ai1' | 'ai2'
+
+// 初始化变量（init() 中已有）：
+this.totalBombs = 0;     // 炸弹计数器
+this.rocketCount = 0;    // 火箭计数器（新增）
+this.chaosScore = 0;     // 搞事情得分
+this.gameStartTime = Date.now();  // 本局开始时间
+```
+
+### 3.5 按钮行为
+
+| 按钮 | 行为 | 代码 |
+|:----:|------|------|
+| 🔄 再来一局 | 重新开始游戏 | `self.scene.restart()` |
+| 🏠 返回首页 | 刷新页面 | `window.location.reload()` |
+
+### 3.6 第10局特殊处理（TODO）
+
+```
+第10局结算后：
+  "🔄 再来一局" → 改为 "🎮 重新开始系列"
+  点击后：重置 round=1，并 scene.restart()
+  "🏠 返回首页" → 保持不变
+  顶部添加： "🏆 系列赛结束！" 提示
+```
+
+### 3.7 验收条件
+
+| # | 验收条件 | 优先级 |
+|:-:|----------|:------:|
+| RP1 | 玩家出完牌后弹出全屏结算面板 | P0 |
+| RP2 | AI出完牌同样弹出结算面板，显示对应AI胜出 | P0 |
+| RP3 | 玩家赢时标题为"🎉 你赢了！"金色#FFD700 | P0 |
+| RP4 | 玩家输时标题为"😅 你输了"红色#FF5252 | P0 |
+| RP5 | 得分面板显示：总得分、基础底分、炸弹翻倍、搞事情得分、手牌奖励 | P0 |
+| RP6 | 总得分数字从0跳动到最终值（30ms间隔动画） | P0 |
+| RP7 | "再来一局"和"返回首页"两个按钮可点击 | P0 |
+| RP8 | 结算面板所有元素有正确的渐入动画 | P0 |
+| RP9 | 按钮悬停效果（轻微放大+颜色变化） | P1 |
+
+---
+
+## 4️⃣ Bonus 系统 (TODO)
+
+### 4.1 暂未实现
+
+以下两个加分系统属于二期规划，当前版本不实现，标记为 **TODO**：
+
+#### 4.1.1 Stealth Bonus (暗牌奖励)
+
+| 字段 | 值 | 说明 |
+|:----:|:--:|------|
+| 触发条件 | 玩家在无人关注时暗渡陈仓出关键牌 | 需定义"暗牌"标准 |
+| 得分 | +50 | 一次性奖励 |
+| 判定机制 | 未设计 | 需讨论实现方式 |
+
+#### 4.1.2 Kill Streak (连杀奖励)
+
+| 字段 | 值 | 说明 |
+|:----:|:--:|------|
+| 触发条件 | 连续3局赢得系列赛 | 需跨局记录 |
+| 得分 | +100 | 每3连胜累积 |
+| 判定机制 | 未设计 | 需跨局状态保持 |
+
+### 4.2 占位预留
+
+在 `renderRoundEndPanel()` 中留有扩展点，位于分隔线1和分隔线2之间：
+
+```javascript
+// TODO: 将来在此处插入 bonus 行
+// var bonusRows = getBonusRows(); // 返回 [{label, value, icon, color}]
+// for (...) { /* 渲染 bonus 行，在已有4行下方 */ }
+```
+
+### 4.3 验收条件
+
+| # | 验收条件 | 优先级 |
+|:-:|----------|:------:|
+| B1 | 代码注释中有 `TODO: Stealth Bonus` 标记 | P3 |
+| B2 | 代码注释中有 `TODO: Kill Streak` 标记 | P3 |
+| B3 | 结算面板预留 Bonus 行渲染扩展点 | P3 |
+
+---
+
+## 5️⃣ 动画序列规范
+
+### 5.1 完整时间轴
+
+```
+Time (ms)   ───►
+0           遮罩开始淡入 (overlay alpha 0→0.65, 0.3s)
+300         结算卡片淡入 (cardBg alpha 0→1, 0.3s)
+            得分面板淡入 (scorePanel alpha 0→1, 0.3s)
+400         标题弹入 (title scale 0.3→1.0, Back.easeOut, 0.4s)
+700         总得分标题淡入 (totalLabel alpha 0→1, 0.2s)
+            总得分数字淡入 (totalNum alpha 0→1, 0.3s)
+            分隔线1淡入 (div1 alpha 0→1, 0.2s)
+900         得分细项行1淡入 (rowText[0] alpha 0→1, 0.2s)     ← 每行间隔150ms
+1050        得分细项行2淡入 (rowText[1] alpha 0→1, 0.2s)
+1200        得分细项行3淡入 (rowText[2] alpha 0→1, 0.2s)
+1350        得分细项行4淡入 (rowText[3] alpha 0→1, 0.2s)
+1500        分隔线2淡入 (div2 alpha 0→1, 0.2s)
+1600        底部用时文字淡入 (timeTxt alpha 0→1, 0.2s)
+1800        按钮淡入 (btn1Bg/btn1Txt/btn2Bg/btn2Txt alpha 0→1, 0.2s)
+            至此全部元素可见，玩家可交互
+```
+
+**总时长：约 2.0 秒**
+
+### 5.2 动画参数速查
+
+| 步骤 | 持续时间 | Easing | 起始状态 | 结束状态 | 延迟 |
+|:----:|:--------:|:------:|:---------|:---------|:----:|
+| 遮罩淡入 | 0.3s | Linear | alpha=0 | alpha=0.65 | 0ms |
+| 卡片淡入 | 0.3s | Linear | alpha=0 | alpha=1 | 300ms |
+| 标题弹入 | 0.4s | Back.easeOut | scale=0.3, alpha=0 | scale=1.0, alpha=1 | 400ms |
+| 总得分淡入 | 0.3s | Linear | alpha=0 | alpha=1 | 700ms |
+| 分隔线淡入 | 0.2s | Linear | alpha=0 | alpha=1 | 700ms |
+| 细项行淡入 | 0.2s | Linear | alpha=0 | alpha=1 | 900+150i ms |
+| 用时淡入 | 0.2s | Linear | alpha=0 | alpha=1 | 1600ms |
+| 按钮淡入 | 0.2s | Linear | alpha=0 | alpha=1 | 1800ms |
+
+### 5.3 总得分数字跳动动画
+
+**类型：** 数字从0逐帧跳到最终值  
+**间隔：** 每 30ms 更新一次  
+**时间：** 约 1.2 秒完成  
+**实现方式：**
+
+```javascript
+// 总得分数字跳动动画伪代码
+var currentDisplay = 0;
+var targetScore = totalScore;
+var step = Math.max(1, Math.floor(targetScore / 40));  // 每次步进，~40步走完
+
+var countTimer = self.time.addEvent({
+  delay: 30,
+  repeat: 39,  // 40次
+  callback: function() {
+    currentDisplay = Math.min(currentDisplay + step, targetScore);
+    totalNum.setText('+' + currentDisplay);
+    if (currentDisplay >= targetScore) {
+      countTimer.remove();
+      totalNum.setText('+' + targetScore);  // 确保精确值
+    }
+  }
+});
+```
+
+### 5.4 淡入 vs 弹入对比
+
+```
+淡入 (fade in):     alpha: 0 → 1,  Linear
+弹入 (bounce in):   scale: 0.3 → 1.0,  Back.easeOut
+跳动 (count up):    数字: 0 → final, 每30ms递增
+```
+
+### 5.5 验收条件
+
+| # | 验收条件 | 优先级 |
+|:-:|----------|:------:|
+| AN1 | 遮罩在 0.3s 内从透明淡入至半透明 | P0 |
+| AN2 | 标题有弹性弹入效果 (scale 0.3→1.0, Back.easeOut) | P0 |
+| AN3 | 总得分数字从0开始跳动计数到最终值，30ms间隔 | P0 |
+| AN4 | 得分细项逐行淡入，每行间隔150ms | P0 |
+| AN5 | 按钮延迟约0.2s后同时淡入 | P0 |
+| AN6 | 全部动画在~2.0s内完成，之后玩家可交互 | P0 |
+
+---
+
+## 6️⃣ 计分交互流程
+
+### 6.1 完整流程图
+
+```
+[玩家/AI出最后一张牌]
+       │
+       ▼
+this.gameState = GAME_STATE.ROUND_END
+       │
+       ▼
+winner = 'player' / 'ai1' / 'ai2'
+       │
+       ▼
+SoundManager.win() / SoundManager.lose()
+       │
+       ▼
+renderRoundEndPanel(winner)
+       │
+       ├─→ 1. 遮罩淡入 (0~300ms)
+       ├─→ 2. 卡片+得分面板淡入 (300~600ms)
+       ├─→ 3. 标题弹入 (400~800ms)
+       ├─→ 4. 总得分+分隔线淡入 (700~1000ms)
+       ├─→ 5. 细项逐行淡入 (900~1350ms)
+       ├─→ 6. 用时+分隔线淡入 (1500~1600ms)
+       └─→ 7. 按钮淡入 (1800~2000ms)
+              │
+              ▼
+      [玩家可交互]
+              │
+         ┌────┴────┐
+         ▼         ▼
+   再来一局     返回首页
+  scene.restart()  location.reload()
+```
+
+### 6.2 跨局数据持久化
+
+| 数据 | 是否跨局 | 存储方式 |
+|:----:|:--------:|:---------|
+| `this.round` | ✅ 跨局 | `scene.data.set('round', round+1)` 传递 |
+| `this.chaosScore` | ❌ 每局重置 | scene.restart() → init() 清空 |
+| `this.totalBombs` | ❌ 每局重置 | 同上 |
+| `this.gameStartTime` | ❌ 每局重置 | 同上 |
+
+### 6.3 多回合积分汇总（二期规划）
+
+> 当前版本不实现多回合积分汇总，仅单局即时结算。二期可以加入：
+
+| 功能 | 方案 |
+|:----|:-----|
+| 系列赛总分 | 存入 `localStorage`，每局结算时累加 |
+| 历史最高分 | 比较 `localStorage` 中的历史记录 |
+| 胜率统计 | 记录总胜场/总局数 |
+
+---
+
+## 7️⃣ 验收标准
+
+| # | 验收条件 | 优先级 |
+|:-:|----------|:------:|
+| S1 | 顶部状态栏动态显示"第 X/10 回合"，X随局数递增 | P0 |
+| S2 | 第10局结束后不再出现"再来一局"按钮（或改为重启系列） | P1 |
+| S3 | 计分公式正确：底分+搞事情+手牌奖励，乘以炸弹翻倍 | P0 |
+| S4 | 火箭翻倍为 ×4，普通炸弹为 ×2 | P1 |
+| S5 | 结算面板完整包含标题、得分、按钮、用时 | P0 |
+| S6 | 结算动画序列正确：遮罩→标题→得分→细项→按钮 | P0 |
+| S7 | 总得分数字有跳动动画，30ms间隔从0递增 | P0 |
+| S8 | 得分细项逐行淡入，每行150ms间隔 | P0 |
+| S9 | "再来一局"按钮调用 scene.restart()，"返回首页"调用 location.reload() | P0 |
+| S10 | 按钮悬停有视觉反馈（颜色变化/放大） | P1 |
+| S11 | Stealth Bonus 和 Kill Streak 标记为 TODO | P3 |
+
+---
+
+## 附：函数变更清单
+
+| 函数 | 当前状态 | 变更说明 |
+|:----|:--------:|:---------|
+| `init()` | 已有 | 新增 `this.rocketCount = 0` 初始化 |
+| `createTopBar()` | 已有 | 将 `roundText` 改为动态读取 `scene.round/scene.maxRounds` |
+| `confirmPlay()` | 已有 | 新增火箭判定：`info.type === 'ROCKET'` 时记录 `rocketCount++` |
+| `handleAIPlay()` | 已有 | 同上，新增火箭判定 |
+| `localAIPlay()` | 已有 | 同上，新增火箭判定 |
+| `renderRoundEndPanel()` | 已有 | ①修复火箭×4倍率计算；②末尾添加 `round++`；③第10局特殊按钮行为 |
+| — | **新增** | 系列赛重置函数 `resetSeries()`：重置 `round=1`，`scene.restart()` |
+| — | TODO | Stealth Bonus 判定逻辑 |
+| — | TODO | Kill Streak 跨局计数器 |
+| — | TODO | 多回合积分汇总面板 |
+
+**总新增/修改行数预估：~80 行**
+
+```
+
+---
+
+## `docs/SoundAnimation-detailed.md` (27,034 字节)
+
+```markdown
+# 音效与动效系统 (Sound & Animation) — 超详细设计文档
+
+**版本:** v2.0  
+**作者:** 产品经理  
+**日期:** 2026-05-02  
+**对应源码:** `src/client/js/game.js` (2897行)  
+
+---
+
+## 目录
+
+1. [音效系统](#1-音效系统)
+2. [音频文件清单](#2-音频文件清单)
+3. [手牌选中/取消动画](#3-手牌选中取消动画)
+4. [出牌动画](#4-出牌动画)
+5. [AI气泡动画](#5-ai气泡动画)
+6. [结算面板动画](#6-结算面板动画)
+7. [搞事情换牌动画](#7-搞事情换牌动画)
+8. [Toast通知动画](#8-toast通知动画)
+9. [搞事情弹窗动画](#9-搞事情弹窗动画)
+10. [AI回合延迟](#10-ai回合延迟)
+11. [动画参数速查表](#11-动画参数速查表)
+12. [与旧文档差异说明](#12-与旧文档差异说明)
+13. [验收标准](#13-验收标准)
+
+---
+
+## 1. 音效系统
+
+### 1.1 SoundManager 实现 (代码行 31-117)
+
+```javascript
+var SoundManager = {
+  scene: null,
+  audioReady: false,
+  // ...
+};
+```
+
+**关键属性:**
+| 属性 | 类型 | 初始值 | 说明 |
+|:-----|:----:|:------:|------|
+| `scene` | object | null | 当前游戏场景引用 |
+| `audioReady` | boolean | false | AudioContext 是否就绪 |
+
+### 1.2 音频上下文初始化
+
+```javascript
+SoundManager.init = function (scene) {
+  this.scene = scene;
+  var self = this;
+  function tryResume() {
+    if (self.audioReady) return;
+    var ctx = scene.sound && scene.sound.context;
+    if (ctx && ctx.state === 'suspended') {
+      ctx.resume().then(function () {
+        self.audioReady = true;
+      }).catch(function () {});
+    } else if (ctx && ctx.state === 'running') {
+      self.audioReady = true;
+    }
+    if (!ctx) self.audioReady = true;
+  }
+  scene.input.on('pointerdown', tryResume);   // 首次点击恢复
+  scene.time.delayedCall(500, tryResume);      // 500ms后重试
+};
+```
+
+**自动播放策略:**
+1. 首次 `pointerdown` → 调用 `AudioContext.resume()`
+2. 500ms 延迟后再次尝试恢复
+3. 无 AudioContext 时默认 ready
+4. `_ensureReady()` 每次播放前检查状态
+
+### 1.3 音效播放函数
+
+```javascript
+// 随机播放 base+1 ~ base+count
+SoundManager._random = function (base, count) {
+  return base + (Math.floor(Math.random() * count) + 1);
+};
+// 例如 _random('cardPlace', 3) → 'cardPlace1'~'cardPlace3'
+```
+
+**完整音效函数表:**
+
+| 函数 | 代码 | 调用 | 音效文件 | 音量 | 触发场景 |
+|:-----|:-----|:-----|:---------|:----:|:---------|
+| `playCard()` | `_random('cardPlace', 3)` | `scene.sound.play(key, {volume:0.8})` | cardPlace1-3 | 0.8 | 玩家出牌确认 |
+| `selectCard()` | `_random('cardSlide', 3)` | `{volume:0.6}` | cardSlide1-3 | 0.6 | 选中手牌 |
+| `deselectCard()` | `_random('cardSlide', 3)` | `{volume:0.5}` | cardSlide1-3 | 0.5 | 取消选中手牌 |
+| `playerTurn()` | `_random('chipsCollide', 3)` | `{volume:0.7}` | chipsCollide1-3 | 0.7 | 轮到玩家出牌 |
+| `bid()` | `_random('chipsCollide', 3)` | `{volume:0.7}` | chipsCollide1-3 | 0.7 | 玩家叫1/2/3分 |
+| `passBid()` | `_random('cardSlide', 3)` | `{volume:0.5}` | cardSlide1-3 | 0.5 | 玩家不叫 |
+| `win()` | `'cardPlace3'` | `{volume:0.9}` | cardPlace3 | 0.9 | 玩家赢牌/答对 |
+| `lose()` | `'cardSlide1'` | `{volume:0.6}` | cardSlide1 | 0.6 | 玩家输牌/答错 |
+| `aiThink()` | — | 无音效 | — | — | AI思考 (静默) |
+| `pauseAll()` | `scene.sound.pauseAll()` | — | — | — | 搞事情模式暂停 |
+| `resumeAll()` | `scene.sound.resumeAll()` | — | — | — | 搞事情恢复 |
+
+### 1.4 音效在 game.js 中的调用点
+
+| 调用位置 | 函数 | 行号 |
+|:---------|:-----|:----:|
+| 选中手牌 | `SoundManager.selectCard()` | ~453 |
+| 取消选中手牌 | `SoundManager.deselectCard()` | ~449 |
+| 玩家出牌确认 | `SoundManager.playCard()` | ~1009 |
+| 轮到玩家 | `SoundManager.playerTurn()` | 多处 |
+| 叫分 | `SoundManager.bid()` | ~590 |
+| 不叫 | `SoundManager.passBid()` | ~591 |
+| 玩家赢牌 | `SoundManager.win()` | ~1015 |
+| AI2出完→玩家 | `SoundManager.playerTurn()` | 多处 |
+| 答对搞事情 | `SoundManager.win()` | ~1640 |
+| 答错搞事情 | `SoundManager.lose()` | ~1660 |
+| 暂停所有 | `SoundManager.pauseAll()` | ~1380 |
+| 恢复所有 | `SoundManager.resumeAll()` | ~2300 |
+
+---
+
+## 2. 音频文件清单
+
+### 2.1 预加载配置 (preload)
+
+```javascript
+// preload() 中 — 行 ~210
+// 3个系列 × 3个变体 + 1个备用 = 10个音效文件
+
+for (var ai = 1; ai <= 3; ai++) {
+  this.load.audio('cardPlace' + ai, [
+    'assets/sounds/cardPlace' + ai + '.mp3',
+    'assets/sounds/cardPlace' + ai + '.ogg'
+  ]);
+  this.load.audio('cardSlide' + ai, [
+    'assets/sounds/cardSlide' + ai + '.mp3',
+    'assets/sounds/cardSlide' + ai + '.ogg'
+  ]);
+  this.load.audio('chipsCollide' + ai, [
+    'assets/sounds/chipsCollide' + ai + '.mp3',
+    'assets/sounds/chipsCollide' + ai + '.ogg'
+  ]);
+}
+this.load.audio('dieShuffle1', [
+  'assets/sounds/dieShuffle1.mp3',
+  'assets/sounds/dieShuffle1.ogg'
+]);
+```
+
+### 2.2 文件清单
+
+| 系列 | 变体 | 格式 | 路径 | 使用状态 |
+|:----|:----:|:----|:-----|:--------|
+| cardPlace | 1-3 | .mp3 + .ogg | assets/sounds/cardPlace{1-3}.mp3/.ogg | ✅ 使用中 |
+| cardSlide | 1-3 | .mp3 + .ogg | assets/sounds/cardSlide{1-3}.mp3/.ogg | ✅ 使用中 |
+| chipsCollide | 1-3 | .mp3 + .ogg | assets/sounds/chipsCollide{1-3}.mp3/.ogg | ✅ 使用中 |
+| dieShuffle | 1 | .mp3 + .ogg | assets/sounds/dieShuffle1.mp3/.ogg | ❌ 未使用(备用) |
+
+**总计:** 10 个音效文件 (4系列 × 双格式 = 20个物理文件)
+
+### 2.3 双格式说明
+
+```javascript
+// Phaser loader 自动选择浏览器支持的格式
+this.load.audio('cardPlace1', [
+  'assets/sounds/cardPlace1.mp3',
+  'assets/sounds/cardPlace1.ogg'
+]);
+```
+
+- 浏览器优先选 .mp3，不支持时降级 .ogg
+- Phaser 自动检测
+
+---
+
+## 3. 手牌选中/取消动画
+
+### 3.1 实现
+
+```javascript
+// renderPlayerHand 内 pointerdown — 行 ~445
+if (s) {
+  // 取消选中
+  this.y += 16;               // 直接y赋值，无动画
+  this.setData('selected', false);
+  var pos = self.selectedCards.indexOf(idx2);
+  if (pos >= 0) self.selectedCards.splice(pos, 1);
+  SoundManager.deselectCard();
+} else {
+  // 选中
+  this.y -= 16;               // 直接y赋值，无动画
+  this.setData('selected', true);
+  self.selectedCards.push(idx2);
+  SoundManager.selectCard();
+}
+```
+
+### 3.2 参数
+
+| 参数 | 值 |
+|:-----|:----:|
+| Y偏移 | **16px** (上移/下移) |
+| 动画类型 | **无动画** (直接 y = origY ± 16) |
+| 选中音效 | `SoundManager.selectCard()` — cardSlide1-3, vol 0.6 |
+| 取消音效 | `SoundManager.deselectCard()` — cardSlide1-3, vol 0.5 |
+| 视觉反馈 | 选中牌在 depth 110，上方无遮盖(手牌重叠量33px) |
+| 手柄区域 | (20,300) w=920 h=115 |
+
+### 3.3 手牌无动画的原因
+
+无 tween 动画，直接修改 y 属性。后续优化建议: 添加 50ms 缓动。
+
+---
+
+## 4. 出牌动画
+
+### 4.1 玩家/AI 出牌 (displayPlay)
+
+```javascript
+// displayPlay(cards, player) — 行 ~1325
+// 直接在目标位置创建图片，无飞行动画
+var positions = {
+  player: { x: 360, y: 195, w: 50, h: 72 },
+  ai1:    { x: 280, y: 133, w: 42, h: 60 },
+  ai2:    { x: 680, y: 133, w: 42, h: 60 }
+};
+
+var pimg = this.add.image(pcx, pos.y, pkey)
+  .setDisplaySize(pos.w, pos.h).setDepth(21);
+```
+
+| 参数 | 值 |
+|:-----|:----:|
+| 动画类型 | **无动画** (直接在目标位置创建) |
+| depth | 21 |
+| 音效 | `SoundManager.playCard()` — cardPlace1-3, vol 0.8 |
+| 清理 | 每次调用先销毁旧出牌图片数组 |
+
+### 4.2 出牌时间线
+
+```
+玩家点击"出牌" → (即时) → 手牌移除 → displayPlay → 音效
+  ↓ 600ms delay → AI1 思考中...
+  ↓ 1200ms delay → AI1 出牌 → displayPlay (即时渲染)
+  ↓ 1200ms delay → AI2 出牌/不出
+```
+
+### 4.3 出牌区清空
+
+两轮都过 (`passCount >= 2`) 时 `lastPlay = null`，但出牌图片不自动清除。旧图片在下一次 `displayPlay` 调用时被清除。
+
+---
+
+## 5. AI气泡动画
+
+### 5.1 搞事情气泡 (_showAiBubble) 
+
+```javascript
+// _showAiBubble — 行 ~2185
+// 即时创建，无过渡动画
+// 3.5s 后 destroy
+self.time.delayedCall(3500, function() {
+  if (self.chaosBubbleElements) {
+    for (var i = 0; i < self.chaosBubbleElements.length; i++) {
+      if (self.chaosBubbleElements[i]) self.chaosBubbleElements[i].destroy();
+    }
+    self.chaosBubbleElements = [];
+  }
+  processBubbleQueue();
+});
+```
+
+| 参数 | 值 |
+|:-----|:----:|
+| 进入动画 | **无** (即时显示) |
+| 停留时长 | **3500ms** |
+| 退出动画 | **无** (即时 destroy) |
+| 队列 | 最大 3 个任务，~3.5s 后自动处理下一个 |
+
+### 5.2 出牌气泡 (_showPlayBubble)
+
+```javascript
+// _showPlayBubble — 行 ~2160
+var displayMs = event === 'bomb' ? 5000 : 4000;
+self.time.delayedCall(displayMs, function() {
+  if (self.playBubbleElements) {
+    for (var i = 0; i < self.playBubbleElements.length; i++) {
+      if (self.playBubbleElements[i]) self.playBubbleElements[i].destroy();
+    }
+    self.playBubbleElements = [];
+  }
+  processBubbleQueue();
+});
+```
+
+| 参数 | 值 |
+|:-----|:----:|
+| 进入动画 | **无** (即时显示) |
+| 普通气泡停留 | **4000ms** (4秒) |
+| 炸弹气泡停留 | **5000ms** (5秒) |
+| 退出动画 | **无** (即时 destroy) |
+| 队列 | 与 _showAiBubble 共享 `bubbleQueue`，同一 `processBubbleQueue` |
+
+### 5.3 气泡队列系统
+
+```javascript
+var bubbleQueue = [];          // 全局队列
+var BUBBLE_QUEUE_MAX = 3;      // 最大队列长度
+var bubbleShowing = false;     // 队列处理中标记
+
+function processBubbleQueue() {
+  if (bubbleQueue.length === 0) {
+    bubbleShowing = false;
+    return;
+  }
+  bubbleShowing = true;
+  var item = bubbleQueue.shift();
+  item.render();  // 渲染气泡
+  // 内部含有 delayedCall 在超时后再次 processBubbleQueue
+}
+```
+
+---
+
+## 6. 结算面板动画
+
+### 6.1 完整时间线 (代码精确)
+
+```javascript
+// renderRoundEndPanel — 行 2463-2696
+
+// T=0ms: 遮罩淡入 (300ms)
+self.tweens.add({ targets: overlay, alpha: 0.65, duration: 300, ease: 'Linear' });
+
+// T=300ms: 卡片+得分面板淡入 (300ms)
+self.time.delayedCall(300, function() {
+  self.tweens.add({ targets: cardBg, alpha: 1, duration: 300, ease: 'Linear' });
+  self.tweens.add({ targets: scorePanel, alpha: 1, duration: 300, ease: 'Linear' });
+});
+
+// T=400ms: 标题弹入 (400ms, Back.easeOut)
+self.time.delayedCall(400, function() {
+  self.tweens.add({
+    targets: title, scale: 1.0, alpha: 1, duration: 400,
+    ease: 'Back.easeOut'
+  });
+  if (aiWinSub) {
+    self.tweens.add({ targets: aiWinSub, alpha: 1, duration: 300, ease: 'Linear' });
+  }
+});
+
+// T=700ms: 总得分+分隔线1淡入
+self.time.delayedCall(700, function() {
+  self.tweens.add({ targets: totalLabel, alpha: 1, duration: 200, ease: 'Linear' });
+  self.tweens.add({ targets: totalNum, alpha: 1, duration: 300, ease: 'Linear' });
+  self.tweens.add({ targets: div1, alpha: 1, duration: 200, ease: 'Linear' });
+});
+
+// T=900+n×150ms: 各细项逐行淡入 (每行200ms)
+for (var rj = 0; rj < rowTexts.length; rj++) {
+  (function(idx, txt) {
+    self.time.delayedCall(900 + idx * 150, function() {
+      self.tweens.add({ targets: txt, alpha: 1, duration: 200, ease: 'Linear' });
+    });
+  })(rj, rowTexts[rj]);
+}
+
+// T=1500ms: 分隔线2淡入
+self.time.delayedCall(1500, function() {
+  self.tweens.add({ targets: div2, alpha: 1, duration: 200, ease: 'Linear' });
+});
+
+// T=1600ms: 用时文字淡入
+self.time.delayedCall(1600, function() {
+  self.tweens.add({ targets: timeTxt, alpha: 1, duration: 200, ease: 'Linear' });
+});
+
+// T=1800ms: 两个按钮同时淡入
+self.time.delayedCall(1800, function() {
+  self.tweens.add({ targets: btn1Bg, alpha: 1, duration: 200, ease: 'Linear' });
+  self.tweens.add({ targets: btn1Txt, alpha: 1, duration: 200, ease: 'Linear' });
+  self.tweens.add({ targets: btn2Bg, alpha: 1, duration: 200, ease: 'Linear' });
+  self.tweens.add({ targets: btn2Txt, alpha: 1, duration: 200, ease: 'Linear' });
+});
+```
+
+### 6.2 动画序列表
+
+| 时间 | 动作 | 属性变化 | duration | ease | 完成时间 |
+|:----:|:-----|:---------|:--------:|:----:|:--------:|
+| 0ms | 遮罩 | alpha 0→0.65 | 300ms | Linear | 300ms |
+| 300ms | 结算卡片 | alpha 0→1 | 300ms | Linear | 600ms |
+| 300ms | 得分面板 | alpha 0→1 | 300ms | Linear | 600ms |
+| 400ms | 主标题 | scale 0.3→1.0 | 400ms | **Back.easeOut** | 800ms |
+| 400ms | AI副标题 | alpha 0→1 | 300ms | Linear | 700ms |
+| 700ms | 总得分标签 | alpha 0→1 | 200ms | Linear | 900ms |
+| 700ms | 总得分数字 | alpha 0→1 | 300ms | Linear | 1000ms |
+| 700ms | 分隔线1 | alpha 0→1 | 200ms | Linear | 900ms |
+| 900ms | 得分行1 | alpha 0→1 | 200ms | Linear | 1100ms |
+| 1050ms | 得分行2 | alpha 0→1 | 200ms | Linear | 1250ms |
+| 1200ms | 得分行3 | alpha 0→1 | 200ms | Linear | 1400ms |
+| 1350ms | 得分行4 | alpha 0→1 | 200ms | Linear | 1550ms |
+| 1500ms | 分隔线2 | alpha 0→1 | 200ms | Linear | 1700ms |
+| 1600ms | 用时文字 | alpha 0→1 | 200ms | Linear | 1800ms |
+| 1800ms | 按钮(2个) | alpha 0→1 | 200ms | Linear | 2000ms |
+
+**总时长: 2000ms (2.0秒)**
+
+### 6.3 动画类型摘要
+
+| 类型 | 使用位置 | 参数 |
+|:-----|:---------|:-----|
+| alpha 淡入 | 遮罩/卡片/面板/得分/细项/按钮/用时 | 0→1, Linear |
+| scale + alpha | 主标题弹入 | 0.3→1.0, Back.easeOut, 400ms |
+
+**注意:** 
+- 当前代码中总得分数字**没有**跳动动画，只有 alpha 淡入
+- 按钮**没有**缩放弹入效果，只有 alpha 淡入
+- 唯一使用 Back.easeOut 的是主标题
+
+---
+
+## 7. 搞事情换牌动画
+
+### 7.1 答对盲选 — 翻牌揭示 (_showSwapUI)
+
+```javascript
+// 行 ~1724-1895 (抽中真牌时)
+// 翻牌揭示 + 飞入动画
+self.tweens.add({
+  targets: revealCard,
+  x: 480, y: 345,
+  scaleX: 0.8, scaleY: 0.8,
+  angle: 720,
+  duration: 600,
+  ease: 'Cubic.easeOut',
+  onComplete: function() {
+    // 实际牌交换 + renderPlayerHand
+    // 显示底部按钮
+  }
+});
+```
+
+| 参数 | 值 |
+|:-----|:----:|
+| 动画类型 | 飞入+旋转 |
+| 起始位置 | 选中的牌背位置 (动态) |
+| 目标位置 | (480, 345) — 手牌区上方 |
+| 缩放 | 1.0 → 0.8 |
+| 旋转角度 | 0° → 720° (2圈) |
+| duration | **600ms** |
+| ease | **Cubic.easeOut** |
+| depth | 400 (临时) |
+| **后续** | 销毁揭示牌 → 实际数据交换 → renderPlayerHand → 显示底部按钮 |
+
+### 7.2 答错/超时 — AI抢牌动画 (_showSwapResult)
+
+```javascript
+// 行 ~1685-1724
+// 600ms 延迟后开始飞行动画
+self.time.delayedCall(600, function() {
+  var animCard = self.add.image(playerCardX, 345, 'cardBack')
+    .setDisplaySize(50, 72).setDepth(400);
+
+  self.tweens.add({
+    targets: animCard,
+    x: targetX,        // 王怼怼=80, 苏甜甜=880
+    y: targetY,        // 王怼怼=160, 苏甜甜=200
+    scaleX: 0.4,
+    scaleY: 0.4,
+    angle: 10,         // 轻微旋转
+    duration: 700,
+    ease: 'Back.easeIn',
+    onComplete: function() {
+      // 翻牌: 背面→正面
+      animCard.setTexture(getCardImageKey(lostCard));
+      animCard.setDisplaySize(38, 54).setAngle(0).setDepth(310);
+      // 数据修改 + renderPlayerHand
+      // 显示结果文字 + 底部按钮
+    }
+  });
+});
+```
+
+| 阶段 | 时机 | 动画 | duration | ease |
+|:----|:----:|:-----|:--------:|:----:|
+| 1. 等待 | T+0ms | 显示反馈文字+解析 | 600ms (setTimeout) | — |
+| 2. 起飞 | T+600ms | 卡牌从手牌区飞出 | **700ms** | **Back.easeIn** |
+| 3. 到达翻牌 | T+1300ms | 背面→正面 + 缩放 + 复位 | 即时 | — |
+| 4. 结果文字 | T+1300ms | 显示 + 3.5s autodestroy | 3.5s | — |
+
+**飞行参数详解:**
+| 参数 | 值 |
+|:-----|:----:|
+| 起始位置 | 玩家手牌中随机一张的实际X, Y=345 |
+| 目标X | 王怼怼: **80**, 苏甜甜: **880** |
+| 目标Y | 王怼怼: **160**, 苏甜甜: **200** |
+| 起始尺寸 | 50×72 (牌背) |
+| 结束尺寸 | 38×54 (翻牌后) |
+| 旋转 | 0° → 10° |
+| 翻牌后尺寸 | 38×54 |
+| 翻牌后depth | 310 |
+
+### 7.3 没抽中的揭示动画 (_showSwapUI)
+
+```javascript
+// 没抽中时 (selectedBackIdx !== realAICardSlot)
+// 在AI真牌位置创建正面图片
+if (realAICardSlot >= 0 && realAICardSlot < backCardPositions.length) {
+  var realPos = backCardPositions[realAICardSlot];
+  var aiRevealCard = self.add.image(realPos.x, realPos.y, getCardImageKey(realAICard))
+    .setDisplaySize(backW, backH).setDepth(400);
+}
+```
+
+| 参数 | 值 |
+|:-----|:----:|
+| 动画类型 | 即时揭示 (无飞行动画) |
+| 位置 | 牌背位置的 X,Y |
+| 牌背尺寸 | backW=40, backH=56 (按 `_showSwapUI` 中设置) |
+| depth | 400 |
+
+---
+
+## 8. Toast通知动画
+
+### 8.1 实现
+
+```javascript
+function showToast(scene, message) {
+  var cx = 300;
+  var toastBg = scene.add.graphics();
+  toastBg.fillStyle(0x000000, 0.7);
+  toastBg.fillRoundedRect(cx - 100, 206, 200, 38, 10).setDepth(200);
+  var toastText = scene.add.text(cx, 225, message, {
+    fontSize: '13px', color: '#FFFFFF'
+  }).setOrigin(0.5).setDepth(201);
+  scene.time.delayedCall(1200, function() {
+    toastBg.destroy();
+    toastText.destroy();
+  });
+}
+```
+
+| 参数 | 值 |
+|:-----|:----:|
+| 出现 | 即时显示 (无过渡) |
+| 停留 | **1200ms** |
+| 消失 | 即时 destroy (无过渡) |
+| 位置 | (200, 206) w=200 h=38, 文字在(300,225) |
+
+---
+
+## 9. 搞事情弹窗动画
+
+### 9.1 遮罩与卡片
+
+**搞事情模式全程使用无过渡动画:**
+- 遮罩: `fillRect(0,0,960,600)` 黑0.75 — 即时显示
+- 白色卡片: `fillRoundedRect(150,55,660,320)` — 即时显示
+- 副标题: 即时显示
+- 选项: 即时显示
+
+**唯一动画:**
+- 结算面板逐行动画 (详见第6章)
+- 换牌飞牌动画 (详见第7章)
+
+### 9.2 搞事情倒计时
+
+**代码中没有可视化倒计时条:**
+```javascript
+// _renderQuestion 末尾
+self.chaosTimeoutTimer = self.time.delayedCall(30000, function() {
+  self._handleChaosTimeout(aiId);
+});
+```
+
+30秒后自动触发超时，无UI进度条。
+
+### 9.3 题型选择Hover
+
+```javascript
+card.on('pointerover', function() {
+  this.clear();
+  this.fillStyle(0xE0EAFF, 1);
+  this.fillRoundedRect(cx, cy, cardW, cardH, 10);
+  this.lineStyle(2, 0x7C4DFF, 1);
+  this.strokeRoundedRect(cx, cy, cardW, cardH, 10);
+});
+card.on('pointerout', function() {
+  this.clear();
+  this.fillStyle(0xF0F4FF, 1);
+  this.fillRoundedRect(cx, cy, cardW, cardH, 10);
+  this.lineStyle(1.5, 0xCCD8FF, 1);
+  this.strokeRoundedRect(cx, cy, cardW, cardH, 10);
+});
+```
+
+| 参数 | 值 |
+|:-----|:----:|
+| 默认 | fill #F0F4FF, stroke 1.5px #CCD8FF |
+| hover | fill #E0EAFF, stroke 2px #7C4DFF |
+| 过渡 | 即时 (无动画) |
+
+---
+
+## 10. AI回合延迟
+
+### 10.1 所有延迟时间
+
+| 起点 | 终点 | 延迟 (ms) | 代码位置 |
+|:-----|:-----|:---------:|:---------|
+| 玩家出牌 | AI1 思考 | **600** | confirmPlay |
+| AI1/AI2 思考 | 实际出牌 | **1200** | doAITurn |
+| 玩家不出(1次) | AI2 思考 | **800** | doPlayerPass |
+| 玩家不出(2次) | lastPlayPlayer | **800** | doPlayerPass |
+| AI1 出牌 | AI2 思考 | **1200** | handleAIPlay/localAIPlay |
+| AI1 不出 | AI2 思考 | **1200** | handleAIPass |
+| AI2 出牌/不出 | 玩家回合 | 0 (即时) | handleAIPlay/handleAIPass |
+| AI 过(2次) | lastPlayPlayer | **1200** | handleAIPass |
+| 叫分结束 | 出牌阶段 | **1200** | finishBidding |
+| 三家都不叫 | 重新发牌 | **1500** | onBiddingResult |
+| 发牌完成 | 叫分阶段 | **800** | create() 末尾 |
+
+### 10.2 思考期间 UI
+
+| 状态 | 状态文字 |
+|:-----|:---------|
+| AI1 思考 | `王怼怼思考中...` |
+| AI2 思考 | `苏甜甜思考中...` |
+| AI1 出牌 | `王怼怼出了 顺子，轮到苏甜甜` |
+| AI2 出牌后 | `轮到你出牌` |
+
+---
+
+## 11. 动画参数速查表
+
+### 11.1 Phaser Tween 动画
+
+| 场景 | 属性 | duration | ease | delay | 类型 |
+|:-----|:-----|:--------:|:----:|:-----:|:----:|
+| 结算遮罩 | alpha 0→0.65 | 300ms | Linear | 0 | tween |
+| 结算卡片 | alpha 0→1 | 300ms | Linear | 300ms | tween |
+| 得分面板 | alpha 0→1 | 300ms | Linear | 300ms | tween |
+| 主标题 | scale 0.3→1.0, alpha 0→1 | 400ms | **Back.easeOut** | 400ms | tween |
+| AI副标题 | alpha 0→1 | 300ms | Linear | 400ms | tween |
+| 总得分标签 | alpha 0→1 | 200ms | Linear | 700ms | tween |
+| 总得分数字 | alpha 0→1 | 300ms | Linear | 700ms | tween |
+| 分隔线1 | alpha 0→1 | 200ms | Linear | 700ms | tween |
+| 各细项 | alpha 0→1 | 200ms | Linear | 900+150n | tween |
+| 分隔线2 | alpha 0→1 | 200ms | Linear | 1500ms | tween |
+| 用时文字 | alpha 0→1 | 200ms | Linear | 1600ms | tween |
+| 按钮(2个) | alpha 0→1 | 200ms | Linear | 1800ms | tween |
+| 答对翻牌 | x/y/scale/angle | 600ms | **Cubic.easeOut** | 0 | tween |
+| 答错抢牌 | x/y/scale/angle | 700ms | **Back.easeIn** | 600ms | tween |
+
+### 11.2 setTimeout 延迟
+
+| 场景 | duration | 用途 |
+|:-----|:--------:|:-----|
+| AI 思考 | 1200ms | 模拟AI思考 |
+| 玩家→AI | 600ms | 玩家出牌后过渡 |
+| 玩家pass→AI | 800ms | 不出后过渡 |
+| Toast 停留 | 1200ms | 提示自动消失 |
+| 气泡停留(普通) | 4000ms | 出牌气泡 |
+| 气泡停留(炸弹) | 5000ms | 炸弹气泡 |
+| 气泡停留(搞事情) | 3500ms | 搞事情气泡 |
+| 重新发牌 | 1500ms | redeal 延迟 |
+| 叫分出牌 | 1200ms | 叫分→出牌过渡 |
+
+### 11.3 无动画操作
+
+| 操作 | 说明 |
+|:-----|:------|
+| 手牌选中/取消 | 直接 y += 16 |
+| 出牌 displayPlay | 在目标位置直接 add.image |
+| 搞事情弹窗 | 直接 create/fill |
+| 题型选择 Hover | 即时颜色变化 |
+| Toast 出现/消失 | 即时 add/destroy |
+| 气泡出现/消失 | 即时 add/destroy |
+
+---
+
+## 12. 与旧文档差异说明
+
+### 12.1 代码 vs 旧 SoundAnimation.md
+
+| # | 旧文档 | 代码实际 | 说明 |
+|:-:|:-------|:---------|:------|
+| 1 | 总得分有数字跳动(1200ms, 30ms递增) | **直接显示最终值 + alpha淡入** | 无跳动动画 |
+| 2 | 按钮有弹入(scale 0→1, Back.easeOut) | **alpha 0→1, Linear** | 无限入效果 |
+| 3 | 气泡有进入动画(scale 0.8→1.0, 150ms) | **即时显示** | 无进入动画 |
+| 4 | 气泡有退出动画(alpha 1→0, 200ms) | **即时 destroy** | 无退出动画 |
+| 5 | 炸弹气泡闪烁(border flash) | 仅停留时间不同(5s vs 4s) | 无闪烁效果 |
+| 6 | 答对闪光(绿3次) | 文字 + 音效 | 无闪光动画 |
+| 7 | 答错抖动(左右3px×3) | 文字 + 音效 | 无抖动动画 |
+| 8 | `canBeat` 返回 `{canBeat, reason}` | 返回 **boolean** | 旧文档不准确 |
+| 9 | dieShuffle1 用于洗牌动画 | **已加载但未使用** | 备用文件 |
+
+### 12.2 已知缺失
+
+| 特性 | 状态 |
+|:-----|:------|
+| 发牌动画 | 未实现 (P2) |
+| 胜利粒子效果 | 未实现 (P1) |
+| BGM 背景音乐 | 未实现 (P3) |
+| 音量控制UI | 未实现 (P2) |
+| 可视化倒计时条 | 未实现 (P1) |
+
+---
+
+## 13. 验收标准
+
+### 13.1 音效
+
+| # | 验收条件 | 预期结果 | 来源行 |
+|:-:|----------|---------|:------:|
+| S1 | 选中手牌播放 cardSlide | 随机1-3, vol 0.6 | SoundManager.selectCard |
+| S2 | 取消选中播放 cardSlide | vol 0.5 (比选中小) | SoundManager.deselectCard |
+| S3 | 出牌播放 cardPlace | vol 0.8 | SoundManager.playCard |
+| S4 | 轮到玩家播放 chipsCollide | vol 0.7 | SoundManager.playerTurn |
+| S5 | 赢牌播放 cardPlace3 | vol 0.9 | SoundManager.win |
+| S6 | 输牌播放 cardSlide1 | vol 0.6 | SoundManager.lose |
+| S7 | 叫分播放 chipsCollide | vol 0.7 | SoundManager.bid |
+| S8 | 不叫播放 cardSlide | vol 0.5 | SoundManager.passBid |
+| S9 | AudioContext 自动恢复 | 首次pointerdown触发 | init |
+| S10 | 搞事情暂停/恢复音效 | pauseAll/resumeAll | doAction/_destroyChaos |
+
+### 13.2 卡牌动画
+
+| # | 验收条件 | 预期结果 | 来源行 |
+|:-:|----------|---------|:------:|
+| C1 | 选中手牌上移16px | y = origY - 16, 即时 | renderPlayerHand |
+| C2 | 取消选中下移16px | y = origY + 16, 即时 | renderPlayerHand |
+| C3 | 出牌在目标位置显示 | 玩家(360,195), AI1(280,133), AI2(680,133) | displayPlay |
+| C4 | 答对翻牌旋转720°飞入 | 600ms, Cubic.easeOut | _showSwapUI |
+| C5 | 答错AI抢牌飞行动画 | 700ms, Back.easeIn | _showSwapResult |
+
+### 13.3 气泡
+
+| # | 验收条件 | 预期结果 | 来源行 |
+|:-:|----------|---------|:------:|
+| B1 | 出牌气泡显示4秒 | delayedCall(4000) | _showPlayBubble |
+| B2 | 炸弹气泡显示5秒 | delayedCall(5000) | _showPlayBubble |
+| B3 | 搞事情气泡显示3.5秒 | delayedCall(3500) | _showAiBubble |
+| B4 | 气泡队列最大3个 | BUBBLE_QUEUE_MAX=3 | processBubbleQueue |
+
+### 13.4 结算面板
+
+| # | 验收条件 | 预期结果 | 来源行 |
+|:-:|----------|---------|:------:|
+| E1 | 遮罩300ms淡入至0.65 | alpha 0→0.65, Linear | ~2465 |
+| E2 | 卡片300ms后淡入 | delayedCall(300) | ~2598 |
+| E3 | 标题400ms弹入 | Back.easeOut, scale 0.3→1.0 | ~2605 |
+| E4 | 得分+分隔线700ms后淡入 | delayedCall(700) | ~2612 |
+| E5 | 细项逐行150ms间隔 | 900/1050/1200/1350ms | ~2619 |
+| E6 | 按钮1800ms后淡入 | delayedCall(1800) | ~2630 |
+| E7 | 总时长2.0s后可交互 | 最后一个动画2000ms完成 | 计算 |
+
+### 13.5 搞事情/Toast
+
+| # | 验收条件 | 预期结果 | 来源行 |
+|:-:|----------|---------|:------:|
+| T1 | Toast 1200ms自动消失 | delayedCall(1200) | showToast |
+| T2 | 搞事情遮罩即时显示 | 黑0.75 fillRect | _createChaosOverlay |
+| T3 | 题型hover颜色变化 | #F0F4FF→#E0EAFF, 即时 | _showTypeSelection |
+| T4 | 30秒超时 | delayedCall(30000) | _renderQuestion |
+
+### 13.6 AI延迟
+
+| # | 验收条件 | 预期结果 | 来源行 |
+|:-:|----------|---------|:------:|
+| A1 | 玩家出牌→AI1: 600ms | delayedCall(600) | confirmPlay |
+| A2 | AI思考→出牌: 1200ms | delayedCall(1200) | doAITurn |
+| A3 | 玩家pass→AI2: 800ms | delayedCall(800) | doPlayerPass |
+| A4 | AI1出→AI2: 1200ms | delayedCall(1200) | handleAIPlay |
+| A5 | AI2出→玩家: 即时 | 无delayedCall | handleAIPlay |
+
+---
+
+## 附录: 函数索引
+
+| 函数 | 行号 | 功能 | 动画相关 |
+|:-----|:----:|:-----|:---------|
+| `SoundManager` | ~31 | 音效管理 | 10个音效函数 |
+| `preload()` | ~210 | 资源预加载 | 10个音效文件(mp3+ogg) |
+| `renderPlayerHand()` | ~408 | 手牌渲染 | 选中 y-16 / 取消 y+16 |
+| `displayPlay()` | ~1325 | 出牌显示 | 即时渲染在目标位置 |
+| `showToast()` | 2444 | Toast提示 | 1200ms自动destroy |
+| `renderRoundEndPanel()` | 2463 | 结算面板 | 9段动画序列 |
+| `_showPlayBubble()` | ~2160 | 出牌气泡 | 4s/5s自动destroy |
+| `_showAiBubble()` | ~2185 | 搞事情气泡 | 3.5s自动destroy |
+| `_showSwapUI()` | ~1724 | 答对换牌 | 翻牌旋转720°, 600ms |
+| `_showSwapResult()` | ~1685 | 答错抢牌 | 飞行700ms, Back.easeIn |
+| `_createChaosOverlay()` | ~1500 | 搞事情遮罩 | 即时显示 |
+| `processBubbleQueue()` | ~2140 | 气泡队列 | 串行渲染 |
+| `doAITurn()` | ~1130 | AI回合 | 1200ms思考延迟 |
+
+```
+
+---
+
+## `docs/SoundAnimation.md` (11,323 字节)
+
+```markdown
+# Sound & Animation Design Document
+
+**Version:** v1.0  
+**Author:** 产品老大  
+**Date:** 2026-05-02  
+**Doc ID:** SOUND-ANIM-001  
+**Corresponding File:** `src/client/js/game.js`  
+
+---
+
+## 1. Overview
+
+This document covers all sound effects and animations used throughout the game. The game uses Phaser 3's built-in sound system (`scene.sound`) and tween system (`scene.tweens`) — no external libraries required.
+
+---
+
+## 2. Sound Manager
+
+### 2.1 SoundManager Singleton
+
+```javascript
+var SoundManager = {
+  scene: null,
+  audioReady: false,
+  init: function(scene) { ... },
+  ...
+};
+```
+
+Location: game.js lines 31-117
+
+**Initialization:** Called in `GameScene.create()` as `SoundManager.init(this)`. The init method listens for the first `pointerdown` event to resume the AudioContext (required by browser autoplay policy).
+
+**Autoplay handling:**
+- First click on the canvas → `AudioContext.resume()`
+- A `tryResume()` function is also called after 500ms delay
+- All `_ensureReady()` calls check if AudioContext state is 'running' before playing
+
+### 2.2 Sound Pool System
+
+Each sound effect uses `_random(base, count)` to pick from 3 variants:
+
+```javascript
+_random: function(base, count) {
+  return base + (Math.floor(Math.random() * count) + 1);
+}
+```
+
+This prevents audio fatigue by adding subtle variation on each play.
+
+### 2.3 Sound Catalog
+
+| Sound Function | File(s) | Volume | Trigger Event | Gameplay Context |
+|---------------|---------|:------:|---------------|------------------|
+| `playCard()` | cardPlace1-3 (.mp3/.ogg) | 0.8 | Player confirms play | Satisfying card-slap feedback |
+| `selectCard()` | cardSlide1-3 | 0.6 | Card click to select | Low-volume slide sound for selection |
+| `deselectCard()` | cardSlide1-3 | 0.5 | Card click to deselect | Slightly quieter on deselect |
+| `playerTurn()` | chipsCollide1-3 | 0.7 | "轮到你出牌" notification | Attention-grabbing turn indicator |
+| `bid()` | chipsCollide1-3 | 0.7 | Player bids | Confident chip-clack sound |
+| `passBid()` | cardSlide1-3 | 0.5 | Player passes in bidding | Quieter, less assertive |
+| `win()` | cardPlace3 | 0.9 | Player wins round | Triumphant single strong sound |
+| `lose()` | cardSlide1 | 0.6 | Player loses round | Deflating slide sound |
+| `bomb()` | cardPlace1 + bombEffect | 0.9 | Bomb/rocket is played | Explosive effect, double-length tail |
+| `aiThink()` | — | — | AI's turn | Currently silent, intentional |
+
+### 2.4 Sound File Requirements
+
+**Format:** Both `.mp3` and `.ogg` are loaded for each sound, allowing cross-browser compatibility.
+
+**Loaded in preload:**
+```javascript
+for (var ai = 1; ai <= 3; ai++) {
+  this.load.audio('cardPlace' + ai, ['assets/sounds/cardPlace' + ai + '.mp3', 'assets/sounds/cardPlace' + ai + '.ogg']);
+  this.load.audio('cardSlide' + ai, ['assets/sounds/cardSlide' + ai + '.mp3', 'assets/sounds/cardSlide' + ai + '.ogg']);
+  this.load.audio('chipsCollide' + ai, ['assets/sounds/chipsCollide' + ai + '.mp3', 'assets/sounds/chipsCollide' + ai + '.ogg']);
+}
+this.load.audio('dieShuffle1', ['assets/sounds/dieShuffle1.mp3', 'assets/sounds/dieShuffle1.ogg']);
+```
+
+**Note:** `dieShuffle1` is loaded but not currently used in any code path — available for future shuffle animations.
+
+**Asset location:** `assets/sounds/`
+
+### 2.5 SoundManager Limitations
+
+| Limitation | Description | Future Improvement |
+|-----------|-------------|-------------------|
+| No volume control UI | Volume is hardcoded per sound type | Add settings panel with volume slider |
+| No mute toggle | No way to mute all sounds | Add mute button (e.g., speaker icon in top bar) |
+| Single channel | Sounds play on the default channel | Add separate music/SFX channels |
+| No background music | No BGM during gameplay | Add BGM track for play and bidding phases |
+
+---
+
+## 3. Animations
+
+All animations use Phaser 3 Tweens (`scene.tweens.add`).
+
+### 3.1 Card Selection (Hand Area)
+
+**Trigger:** Click on a hand card during `GAME_STATE.PLAYER_TURN`
+
+| Property | Value |
+|----------|-------|
+| Effect | Card shifts Y: -16px (lifts up) or +16px (drops back) |
+| Duration | Instant (no tween, direct property change) |
+| Sound | selectCard (0.6) / deselectCard (0.5) |
+| Visual indicator | Selected cards render on top via Z-order |
+
+**Code location:** game.js lines 490-515 (pointerdown handler on each card image)
+
+**Future improvement:** Add a 50ms tween with slight ease for smoother selection feel.
+
+### 3.2 Card Play (Play Area)
+
+**Trigger:** Player clicks "出牌" button → confirmPlay()
+
+| Property | Value |
+|----------|-------|
+| Origin | Hand area (Y: ~345) |
+| Destination | Play area (Player: Y=195, center aligned) |
+| Destination (AI) | Play area (AI1 Y=133 left, AI2 Y=133 right) |
+| Animation | Direct image creation at target position |
+| Sound | `playCard()` volume 0.8 |
+| Cleanup | Previous plays cleared before new ones |
+
+**Code location:** game.js `displayPlay()` at line 1304
+
+### 3.3 AI Card Animation
+
+**Trigger:** AI plays → handleAIPlay()
+
+| Property | Value |
+|----------|-------|
+| Delay before AI turn | 1200ms (`time.delayedCall(1200, ...)`) |
+| Play reasoning bubble | `_showPlayBubble()` appears before play animation |
+| Card display | Instant placement at target coordinates |
+| AI-to-AI delay | 1200ms between AI1 and AI2 turns |
+| AI-to-Player delay | 1500ms after AI finishes |
+
+**Code location:** game.js `doAITurn()` at line 1120
+
+### 3.4 Round End Panel
+
+**Trigger:** Any player runs out of cards (hand.length === 0)
+
+| Phase | Animation | Duration | Ease |
+|-------|-----------|:--------:|:----:|
+| 1. Overlay fade-in | Alpha 0 → 0.65 | 300ms | Linear |
+| 2. Title bounce | Scale 0.3 → 1.0 | 400ms | Back.easeOut |
+| 3. Score panel fade | Alpha 0 → 1 | 300ms | Linear |
+| 4a. Score count-up | Total number ticks from 0 to final | 1200ms | Step (30ms interval) |
+| 4b. Score items | Each row fades in sequentially | 150ms/row | Linear |
+| 5. Buttons bounce | Both buttons scale 0→1 | 300ms | Back.easeOut (200ms delay after items) |
+
+**Total animation time:** ~2.8 seconds before interactivity
+
+**Code location:** game.js `renderRoundEndPanel()` at line 2302
+
+#### Score Count-up Implementation
+
+```javascript
+var duration = 1200;
+var interval = 30;
+var totalSteps = duration / interval;
+var stepValue = totalScore / totalSteps;
+var currentValue = 0;
+var countTimer = scene.time.addEvent({
+  delay: interval,
+  callback: function() {
+    currentValue += stepValue;
+    scoreText.setText('+' + Math.floor(currentValue));
+    if (Math.floor(currentValue) >= totalScore) {
+      scoreText.setText('+' + totalScore);
+      countTimer.remove();
+    }
+  },
+  loop: true
+});
+```
+
+### 3.5 AI Bubble Animation
+
+**Trigger:** AI play/pass/bomb event
+
+| Phase | Animation | Duration | Ease |
+|-------|-----------|:--------:|:----:|
+| Entrance | Scale 0.8 → 1.0, Alpha 0 → 1 | 150ms | Back.easeOut |
+| Hold | Display period (4-5s) | 240-300 frames | — |
+| Exit | Alpha 1 → 0 | 200ms | Linear |
+
+**Bomb bubble special:** Scale 0.7 → 1.1 → 1.0 (bounce overshoot) with red border flash (alpha 0.3↔0.9, 400ms).
+
+**Code location:** game.js `_showPlayBubble()` at line 1973
+
+### 3.6 Card Swap Animation
+
+**Trigger:** Wrong answer / timeout → AI takes player card
+
+| Phase | Animation | Duration | Start Y → End Y |
+|-------|-----------|:--------:|:---------------:|
+| 1. Card highlight | Selected card border glow | 200ms | — |
+| 2. Card lift | Y shift up 30px | 200ms | 345 → 315 |
+| 3. Card fly to AI | Y rise + X shift to AI area | 400ms | 315 → 160 |
+| 4. Rotation & scale | Rotate 10°, scale to 60% | 200ms | concurrently with step 3 |
+| 5. Flip reveal | Face-down → face-up | 200ms | show card front |
+| 6. Result text | "🤖 AI 拿走了 [♠K]" | — | After animation |
+
+**Total duration:** ~1.2s
+
+For **correct answer swap** (player gives + AI gives):
+- Player's card flies from hand to AI area
+- AI's card flies from AI slot to player hand
+- Both cards flip reveal simultaneously
+- Cross paths mid-animation
+
+### 3.7 Card Hint System
+
+**Trigger:** Click "提示" button
+
+| Property | Value |
+|----------|-------|
+| Detection | `findValidPlays()` returns list |
+| Selection | Last card in list highlighted |
+| Highlight | Card border glow (2px, #FFD700, no visual tween) |
+| Card shift | Selected cards Y: -16px |
+| No hint | If no valid plays → "没有能出的牌" toast |
+
+**Code location:** game.js `doHint()` at line 1055
+
+### 3.8 Chaos Mode Animations
+
+**Trigger:** "搞事情" button, question pane, result display
+
+| Phase | Animation | Duration |
+|-------|-----------|:--------:|
+| Type selection grid | Instant display of 2×2 grid | — |
+| Question pane fade | Alpha 0 → 1 | 200ms |
+| Option highlight (hover) | Background color change (white → #81C784) | 100ms |
+| Correct answer flash | Option bg pulses green 3 times | 900ms total |
+| Wrong answer shake | Option shakes left-right 3px × 3 | 300ms |
+| Feedback text | "🎉 答对了!" or "😅 答错了" scale bounce | 200ms |
+| Swap buttons enter | Scale 0.8 → 1.0 | 150ms |
+
+**Code location:** game.js chaos functions at lines 1358-2206
+
+---
+
+## 4. Animation Timing Reference Table
+
+| Animation | Duration (ms) | Ease Type | Sound |
+|-----------|:-------------:|:---------:|:-----:|
+| Card select click | instant | none | selectCard (0.6) |
+| Card deselect click | instant | none | deselectCard (0.5) |
+| Player play cards | instant (direct render) | none | playCard (0.8) |
+| AI think delay | 1200 | — | aiThink (none) |
+| AI-to-player delay | 1500 | — | playerTurn (0.7) |
+| Round-end overlay fade | 300 | Linear | — |
+| Round-end title bounce | 400 | Back.easeOut | win/lose |
+| Score count-up | 1200 | step (30ms) | — |
+| Score items fade-in | 150 per row | Linear | — |
+| Buttons bounce | 300 | Back.easeOut | — |
+| Bubble entrance | 150 | Back.easeOut | — |
+| Bubble exit | 200 | Linear | — |
+| Bomb bubble special | 250 | overshoot bounce | — |
+| Card swap fly | 400 | Sine.easeOut | — |
+| Card swap flip reveal | 200 | Linear | — |
+| Answer correct flash | 900 (3×300ms) | step | — |
+| Answer wrong shake | 300 | step | — |
+| Chaos option hover | 100 | Linear | — |
+
+---
+
+## 5. Audio File Inventory
+
+| File | Type | Variants | Purpose | On Disk |
+|------|:----:|:---------:|---------|:-------:|
+| cardPlace1-3 | SFX | 3 | Card play to table | ✅ |
+| cardSlide1-3 | SFX | 3 | Card selection/deselection | ✅ |
+| chipsCollide1-3 | SFX | 3 | Turn notification, bidding | ✅ |
+| dieShuffle1 | SFX | 1 | Available, not used | ✅ |
+
+**Total: 10 sound files (loaded in preload)**
+
+---
+
+## 6. Future Animation TODO
+
+| Feature | Priority | Notes |
+|---------|:--------:|-------|
+| Card dealing animation | P2 | Cards fly from center to hands when game starts |
+| Card shuffle animation | P2 | Visual deck shuffle before deal |
+| Win particle burst | P1 | Gold/green particle rain on player win (manual or Phaser particle system) |
+| Card flip animation | P2 | Smooth card rotation (scaleX 1→0→1) for blind pick reveal |
+| Loser card collapse | P3 | Remaining cards of loser get smaller/darker |
+| Timer pulse animation | P1 | Countdown bar pulses faster at <5s |
+| Background music | P3 | Add BGM for play and menu phases |
+| Stage transitions | P2 | Smooth transitions between bidding→playing→game-over |
+
+```
+
+---
+
+## `docs/tasks/第一批修复-体验优化.md` (2,375 字节)
+
+```markdown
+# 🦐 第一批修复任务 — 全局体验优化
+
+## 仓库
+`/home/xu_yujing/openclaw/workspaces/fight-the-landlord`
+
+## 任务清单
+
+---
+
+### 🔴 A1 手机全屏 + 缩放模糊
+
+**现象：** 手机不能填满全屏，桌面端看着有点拉伸模糊。
+
+**排查方向：**
+- 当前 Phaser Scale 配置是什么模式（FIT / RESIZE / EXPAND）？
+- Canvas 尺寸 960×600 是否正确？
+- CSS 是否有限制 canvas 尺寸？
+- 移动端 viewport meta 是否正确？
+- 考虑 Scale.RESIZE 或者等比缩放优化
+
+---
+
+### 🔴 A2 手牌排列整齐 + 选中突出
+
+**现象：** 手牌现在是错落重叠排列，期望是均匀展开，仅选中某张牌时那张牌才弹出/突出显示。
+
+**期望效果：**
+- 手牌横向均匀分布，不重叠（或轻微重叠但整齐）
+- 点击某张牌 → 该牌向上/向外偏移突出显示
+- 不选中的牌保持整齐排列
+- 牌面清晰可见
+
+---
+
+### 🔴 A3 历史牌显示
+
+**现象：** 历史出牌区需要显示在屏幕上。
+
+**功能：** 每一轮出的牌在屏幕某个区域展示（桌面区/出牌记录区），方便玩家回顾。
+
+---
+
+### 🟡 C1 口语题修复（题目缺失 + 选项溢出）
+
+**现象：**
+- 有时候只有选项没有题目文字
+- 选项文字从框里溢出，没有换行
+
+**排查方向：**
+- `_renderQuestion` 中 `questionText` 是否可能为空？
+- 选项文本 `wordWrap` 宽度是否不够？当前 `optW - 55`
+- 选项框高度 `optH=64` 是否够文字自适应？
+
+---
+
+### 🟡 C2 AI 出牌气泡文字溢出
+
+**现象：** AI 出牌时气泡没有框住文字，文字一长串看不清就没了。
+
+**排查方向：**
+- `_showPlayBubble` 中气泡宽度计算 `bubbleW` 是否自适应？
+- `wordWrap` 配置是否正确？
+- 气泡高度 `bubbleH` 是否随文字自适应？
+- 当前 4-5 秒停留时间是否够读长台词？
+
+---
+
+### 🟡 D1 音效补全
+
+**现象：** 只有出牌音效，答对/答错/炸弹/胜利/失败等音效都没生效。
+
+**排查方向：**
+- `SoundManager` 是否加载了所有音效文件？
+- 音效文件路径是否正确？
+- 移动端 WebAudio 是否需要用户交互后才解锁？
+- `win()` / `lose()` / `bomb()` 等方法是否正确调用？
+
+---
+
+## 规则
+- 修完一条 commit 一条，message `[FIX] XX xxx`
+- 不要自己提交代码，在群里 @小虾 验收 🦐
+- 先修再汇报
+
+```
+
+---
+
+## `docs/tasks/第二批修复-搞事情系统.md` (2,049 字节)
+
+```markdown
+# 🦐 第二批修复任务 — 搞事情系统专属
+
+## 仓库
+`/home/xu_yujing/openclaw/workspaces/fight-the-landlord`
+
+---
+
+### 🔴 B1 AI抽牌改为互换
+
+**现象：** 当前 AI 抽走玩家的牌是单向的（抢牌），产品要求改为**互换**：
+- 玩家确认交换后，AI 给出一张**最小的牌**（不是随机牌、不是强牌）
+- 等价交换逻辑：玩家交出选中的牌 ← → AI 给出最小牌
+- 答对：玩家选牌 → AI 给最小牌 → 交换
+- 答错：AI 选一张玩家牌 → AI 给最小牌交换（不是纯抢）
+
+**涉及函数：** `_showSwapResult`, `_showSwapUI`
+
+---
+
+### 🔴 B2 抽牌UI优化
+
+**现象：**
+1. 牌面背景没有层次感（对比度低，看不清牌）
+2. 答对后两个按钮是**竖排**（确认在上，取消在下），产品要求**横排**
+
+**修改：**
+- 抽牌界面的卡片加阴影/边框/发光效果，增强层次感
+- 确认按钮 + 取消按钮改为**横向并排**（如 confirmBg x=220, cancelBg x=500，各 200px 宽）
+
+**涉及函数：** `_showSwapUI`
+
+---
+
+### 🟡 B3 搞事情频率 + 盲猜概率
+
+**现象：**
+1. 每次搞事情只有一次机会，要到下一轮出牌后才能再搞
+2. 盲猜换牌抽到 AI 牌的概率太低（3-5 个牌背选 1 个）
+
+**修改：**
+- 搞事情冷却：每轮出牌后重置可用（当前逻辑检查 `gameState === PLAYER_TURN` 时可用即可）
+- 盲猜概率：减少牌背数量，或增加提示，或直接提高中奖率
+  - 方案A：牌背从 3-5 张减少到 2-3 张
+  - 方案B：答对时给 1 次重新猜的机会
+
+**涉及函数：** `doAction`, `_showSwapUI`
+
+---
+
+### 🟢 B4 关闭按钮美化
+
+**现象：** 答题框关闭按钮太丑（红色小方块）
+
+**修改：** 改为圆形关闭按钮，带图标（如 ✕），样色调优雅。或用文字按钮"× 关闭"。
+
+**涉及函数：** `_createChaosOverlay` 中 closeBtnBg + closeBtnText
+
+---
+
+## 规则
+- 修完一条 commit 一条，message `[FIX] Bx xxx`
+- 不要自己提交代码，在群里 @小虾 验收 🦐
+
+```
+
+---
+
+## `memory/2026-05-01.md` (684 字节)
+
+```markdown
+# 2026-05-01 横屏改造进度
+
+## 状态
+- Phase 1 (画布适配): ✅ 已commit
+- Phase 2 (布局坐标重算): ✅ 已commit 
+- Phase 3 (搞事情UI适配): ✅ 已commit
+- Phase 4 (测试验收): ⚡ 进行中
+
+## 最近改动（未commit）
+1. `drawTableBackground` 中硬编码的 `W=600, H=960` → 已改为 `W=960, H=600`
+2. 新增"底牌查看"按钮（5个按钮 > 原4个），坐标按960宽重算
+3. CSS已加 `screen-orientation: landscape`
+4. GameConfig width=960, height=600
+
+## 待办
+- Phase 4 完整测试验收后 commit+push
+- 横屏下所有按钮点击验证
+- 搞事情遮罩按设计文档改为仅覆盖出牌区（非全屏）
+- 2×2选项网格已实现
+
+```
+
+---
+
+## `memory/2026-05-02-night.md` (1,389 字节)
+
+```markdown
+# 2026-05-02 记忆（补录）
+
+## 上午 B27-B39 修复
+详见 memory/2026-05-02.md（已保存）
+
+## 晚上 B40 全屏+横屏填充（v1-v6 迭代）
+
+### v1 竖屏提示覆盖层
+- index.html 加 `#portrait-overlay`，竖屏时显示"请横屏体验"
+- game.js init() 加方向检测 + resize 监听
+- commit 6674ced
+
+### v2 FIT→ENVELOPE（错误，Phaser3 无 ENVELOPE）
+- revert→v3
+
+### v3 恢复FIT + 背景色
+- FIT 恢复，`#game-container` 加 `background: #1B5E20`
+- commit 2449c5c
+
+### v4 全屏按钮 + canvas transform scale
+- 右上角 ⛶ 按钮，进入 Fullscreen API，canvas transform:scale 填满
+- commit 7234716
+
+### v5 zoomCanvasToFill 修正
+- 先重置 canvas 到 960×600，再 transform scale
+- 模糊问题 → v6
+- commit 7a7e323
+
+### v6 容器全屏法（最终方案）
+- zoomCanvasToFill 改为撑满 `#game-container` 容器触发 Phaser.FIT 重算
+- canvas transform 去掉 → 画面清晰
+- `#game-container` 背景渐变色 `linear-gradient(135deg, #1B5E20, #2E7D32, #1B5E20)`
+- commit 22fbad9 + fb900ae（本地，网络问题未push）
+
+## 网络问题
+- GitHub push 超时（HTTPS + SSH 均不通）
+- 等网络恢复后补 push
+
+## 文件路径
+- 项目：`/home/xu_yujing/openclaw/workspaces/fight-the-landlord`
+- 主文件：`src/client/js/game.js` / `src/client/js/CardEngine.js` / `src/client/js/apiClient.js` / `src/client/index.html`
+
+```
+
+---
+
+## `memory/2026-05-02.md` (6,504 字节)
+
+```markdown
+# 2026-05-02 记忆
+
+## 项目信息
+- 项目: `fight-the-landlord`，Phaser 3，960×600
+- 主文件: `src/client/js/game.js` (2895行)
+- 子Agent上下文: `docs/PROJECT_CONTEXT.md` (295行)
+- 代码提交规则: 不主动commit/push，通知小虾验收
+
+---
+
+## 子Agent启动协议（新标准）
+
+启动子Agent必须走三阶段：
+1. **保存记忆** — 先让小弟记录当前状态
+2. **清空上下文** — 旧历史结束
+3. **派活** — 注入 `docs/PROJECT_CONTEXT.md` + 具体任务
+
+## B44-B46 换牌机制（按CardSwap.md）
+- 答对→`_showSwapUI()`: 5个cardBack槽位盲选（1张AI真牌+4空），翻牌+飞入动画
+- 答错→`_showSwapResult()`: 600ms后背面牌飞向AI(y345→160)，到终点翻牌揭示
+- 超时30s→自动走答错路径，绿→黄→红倒计时条
+- 答错手牌为空Bug修复: 不卡UI，显示提示+底部按钮
+
+## Layout-detailed.md 一致性审查（12项）
+- B1: 头像 36×36 → 34×34 (makeAvatarImage)
+- B2: 底牌位置 (460,60)/(480,72) ✅ 一致
+- B3: 王怼怼名称X 200→176
+- B4: 苏甜甜名称X 720→788
+- B5: 状态文字Y 8→9
+- B6: Toast坐标 ✅ 一致
+- B7: 全屏按钮在create()内 ✅
+- B8: 结算动画delay ✅
+- B9: 搞事情遮罩depth 300→400→300 (来回一次修复)
+- B10: 选项高度64px ✅
+- B11: B38底牌融入 ✅
+- B12: 题型隐藏标题 ✅
+
+## B47-B50 4个Bug
+- B47: 搞事情卡死 — 遮罩depth=400挡住UI点击，改回300
+- B48: 手机端AI回复错误 — 排查结果：客户端无差异，推测后端API问题
+- B49: AI气泡移至头像左下方 — bubbleX=90/690, y=55
+- B50: AI出牌间隔800/1500/1200ms — 全部已对齐
+
+## Bidding-detailed.md 一致性审查
+- 叫分按钮totalW公式 bug: bw×5→bw×4 (copy-paste错误，导致按钮左移54px)
+- AI决策树/状态机/底牌流程完全一致
+
+## Gameplay-detailed.md 一致性审查
+- B51: 玩家首次pass流向Bug — `doAITurn(1)→doAITurn(0)` 跳过王怼怼
+- 选牌/按钮/提示/AI回合/出牌记录/非法操作完全一致
+
+## 后端 API 新增/修改（本期）
+
+### B40 — 对话API气泡显示延迟
+- 文件: `src/server/routes/dialogue.js`
+- 新增 `getDisplayDelay(event)` 函数，按事件返回推荐显示时长
+- bomb/taunt: 5000ms, win: 6000ms, play: 4000ms, pass: 3000ms
+- 所有响应（LLM/fallback/error）均带 `displayDelay` 字段
+
+### B41 — 答题后换牌触发
+- 文件: `src/server/routes/chaos.js`
+- 新增 `POST /api/chaos/card-change` 端点
+- 答对按回合概率触发（25%→50%→70%），答错低概率安慰（10%→30%）
+- 从对应AI手牌抽4张候选牌池，答对可换1-2张，答错换1张
+- 返回: triggered, fromAi, swapPool, maxSelect, aiTaunt, reason
+
+### 游戏结算 — POST /api/game/result
+- 文件: `src/server/routes/result.js`（新建）
+- 注册于 `src/server/index.js`
+- Body: { winner, baseScore, bombMultiplier, chaosScore, remainingCards, playerHandCards }
+- 计分: base=底分×8, bombBonus=base×(炸弹倍数-1), chaosBonus=搞事情分, handCardBonus=残牌×4
+- 玩家赢正向，玩家输负向
+
+## CardEngine-detailed.md 一致性审查
+- identifyType 返回值缺少 totalCards/name/isBomb/isRocket/valid 5字段（16处return全部补上）
+- 常量/Card类/Deck类/牌型13种/canBeat/sortCards/辅助函数 全部一致
+- 修复 commit: e20cf41
+
+## SoundAnimation-detailed.md 一致性审查
+- 全部15项通过: 音效10文件/函数8个/AudioContext/选中y±16/出牌坐标/气泡/结算面板时序/标题Back.easeOut/答对720°/答错700ms/Toast/延迟表/Hover颜色
+- 代码与文档完全一致，无需修改
+
+## 设计文档索引（已审）
+| 文档 | 状态 |
+|------|:----:|
+| docs/ChaoShiQing-detailed.md | ✅ 已核验 |
+| docs/CardSwap.md | ✅ 已实现B44-B46 |
+| docs/Layout-detailed.md | ✅ 已核验+B1-B9修复 |
+| docs/Bidding-detailed.md | ✅ 已核验+totalW修复 |
+| docs/Gameplay-detailed.md | ✅ 已核验+B51修复 |
+| docs/Scoring-detailed.md | ✅ 已核验+round/rocket修复 |
+| docs/CardEngine-detailed.md | ✅ 已核验+identifyType修复 |
+| docs/SoundAnimation-detailed.md | ✅ 已核验(完全一致) |
+| docs/PRD-赢牌反馈+AI气泡系统-v1.md | ✅ B40已实现 |
+| docs/PROJECT_CONTEXT.md | ✅ 子Agent上下文 |
+| docs/TOOLS.md | ✅ 子Agent启动规范 |
+
+## 搞事情修复任务 (B1-B6 F1 Q1-Q4) 2026-05-02下午
+- B1: _renderFallbackQuestion 4题加真实questionType(vocabulary/expression/trivia/life_hack)
+- B2: 关闭按钮✖保留 (_showTypeSelection销毁范围调整，_clearQuestionArea同步修复)
+- B3: closeBtnBg交互区域高20→28px
+- B4: 超时手牌空时跳过_showSwapResult避免双重提示重叠
+- B5: 答对跳过=被抢牌 (暂不动，待确认方案)
+- B6: chaosBubbleTimer绑定生命周期，_clearQuestionArea/_destroyChaos中取消
+- F1: 白色卡片顶部660×4px倒计时进度条，绿→黄→红渐变，30s线性缩小
+- Q1: bubbleQueue全局→this.chaosBubbleQueue实例变量
+- Q2: _destroyChaos清空chaosBubbleQueue
+- Q3: 盲选牌可取消选中（AI牌背+玩家手牌双向取消）
+- Q4: AI抢牌坐标注释标注来源
+
+## 全部设计文档审查（全部完成）
+| 文档 | 状态 |
+|------|:----:|
+| Layout-detailed.md | ✅ 12项全审+B1-B9修复 |
+| Bidding-detailed.md | ✅ totalW公式修复 |
+| Gameplay-detailed.md | ✅ pass流向修复B51 |
+| Scoring-detailed.md | ✅ rocket×4+round递增 |
+| CardEngine-detailed.md | ✅ identifyType返回值补5字段 |
+| SoundAnimation-detailed.md | ✅ 15项完全一致 |
+| AIBubble-detailed.md | ✅ 7条P0修复(位置/动画/炸弹/队列/高度/告别) |
+| ChaoShiQing-detailed.md | ✅ 搞事情修复10项 |
+
+## 第一批修复体验优化 (下午)
+- A1: 手机全屏缩放 — CSS去除object-fit:contain，删 max-width/max-height
+- A2: 手牌 overlap=-5（轻微重叠），加回 auto-shrink(totalW>960缩cw)
+- A3: 历史牌面板从右上移到左上方(12,58) 140×240
+- C1: 口语题 wordWrap 宽度 235→250px
+- C2: AI气泡 baseSize=64，保留 wordWrap+自适应高度
+- D1: 新增 SoundManager.bomb()，3处炸弹出牌点触发
+- API: apiGetSimple/apiClient BASE 硬编码 localhost→window.location.origin
+- 气泡文字回 Container 但排在底层之后渲染
+- AI出牌先气泡 800ms 再摆牌
+
+## 第二批搞事情修复 (下午)
+- B1: AI互换，答错给最小牌+答对取最小牌
+- B2: 抽牌卡牌阴影+按钮横排(220+540)
+- B3: 牌背3-5→2-3张，中奖率提升
+- B4: 关闭按钮红方块→优雅半透明圆形
+
+```
+
+---
+
+## `src/client/js/CardEngine.js` (37,885 字节)
+
+```javascript
+/**
+ * card-engine.js - 斗地主牌引擎
+ * 纯 JavaScript，无依赖，浏览器 / Node.js 通用
+ *
+ * API:
+ *   Card(suit, rank)          - 牌对象
+ *   Deck()                    - 54张牌、洗牌、发牌
+ *   identifyType(cards)       - 牌型识别
+ *   canBeat(current, last)    - 出牌校验
+ *   findValidPlays(hand, lastPlay) - 合法出牌枚举
+ *   sortCards(cards)          - 排序
+ *   renderHTML(cards [, opts]) - HTML渲染
+ */
+
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) {
+    module.exports = factory();
+  } else {
+    root.Doudizhu = factory();
+  }
+}(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+
+  // ================================================================
+  // 常量
+  // ================================================================
+
+  var SUITS = ['spade', 'heart', 'club', 'diamond', 'joker'];
+
+  var SUIT_SYMBOLS = {
+    spade: '\u2660',
+    heart: '\u2665',
+    club: '\u2663',
+    diamond: '\u2666',
+    joker: '\uD83C\uDCCF'
+  };
+
+  var RANK_NAMES = [
+    '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A', '2'
+  ];
+
+  var RANK_NAME_MAP = {
+    0: '3', 1: '4', 2: '5', 3: '6', 4: '7', 5: '8', 6: '9', 7: '10',
+    8: 'J', 9: 'Q', 10: 'K', 11: 'A', 12: '2',
+    13: '\u5C0F\u738B', 14: '\u5927\u738B'
+  };
+
+  // 顺子 / 连对 / 飞机可用的最大rank（不包括2和小王大王）
+  var STRAIGHT_MAX_RANK = 11; // A
+
+  var HAND_TYPES = {
+    SINGLE: 'SINGLE',
+    PAIR: 'PAIR',
+    TRIPLE: 'TRIPLE',
+    TRIPLE_PLUS_ONE: 'TRIPLE_PLUS_ONE',
+    TRIPLE_PLUS_TWO: 'TRIPLE_PLUS_TWO',
+    STRAIGHT: 'STRAIGHT',
+    CONSECUTIVE_PAIRS: 'CONSECUTIVE_PAIRS',
+    AIRPLANE: 'AIRPLANE',
+    AIRPLANE_PLUS_SINGLES: 'AIRPLANE_PLUS_SINGLES',
+    AIRPLANE_PLUS_PAIRS: 'AIRPLANE_PLUS_PAIRS',
+    BOMB: 'BOMB',
+    ROCKET: 'ROCKET',
+    FOUR_PLUS_TWO: 'FOUR_PLUS_TWO',
+    FOUR_PLUS_TWO_PAIRS: 'FOUR_PLUS_TWO_PAIRS',
+    INVALID: 'INVALID'
+  };
+
+  var HAND_TYPE_NAMES = {};
+  HAND_TYPE_NAMES[HAND_TYPES.SINGLE] = '\u5355\u5F20';
+  HAND_TYPE_NAMES[HAND_TYPES.PAIR] = '\u5BF9\u5B50';
+  HAND_TYPE_NAMES[HAND_TYPES.TRIPLE] = '\u4E09\u5F20';
+  HAND_TYPE_NAMES[HAND_TYPES.TRIPLE_PLUS_ONE] = '\u4E09\u5E26\u4E00';
+  HAND_TYPE_NAMES[HAND_TYPES.TRIPLE_PLUS_TWO] = '\u4E09\u5E26\u4E8C';
+  HAND_TYPE_NAMES[HAND_TYPES.STRAIGHT] = '\u987A\u5B50';
+  HAND_TYPE_NAMES[HAND_TYPES.CONSECUTIVE_PAIRS] = '\u8FDE\u5BF9';
+  HAND_TYPE_NAMES[HAND_TYPES.AIRPLANE] = '\u98DE\u673A';
+  HAND_TYPE_NAMES[HAND_TYPES.AIRPLANE_PLUS_SINGLES] = '\u98DE\u673A\u5E26\u5355';
+  HAND_TYPE_NAMES[HAND_TYPES.AIRPLANE_PLUS_PAIRS] = '\u98DE\u673A\u5E26\u5BF9';
+  HAND_TYPE_NAMES[HAND_TYPES.BOMB] = '\u70B8\u5F39';
+  HAND_TYPE_NAMES[HAND_TYPES.ROCKET] = '\u706B\u7BAD';
+  HAND_TYPE_NAMES[HAND_TYPES.FOUR_PLUS_TWO] = '\u56DB\u5E26\u4E8C';
+  HAND_TYPE_NAMES[HAND_TYPES.FOUR_PLUS_TWO_PAIRS] = '\u56DB\u5E26\u4E24\u5BF9';
+
+  // ================================================================
+  // Card 类
+  // ================================================================
+
+  function Card(suit, rank) {
+    if (typeof rank !== 'number' || rank < 0 || rank > 14) {
+      throw new Error('Invalid card rank: ' + rank);
+    }
+    if (suit !== 'spade' && suit !== 'heart' && suit !== 'club' && suit !== 'diamond' && suit !== 'joker') {
+      throw new Error('Invalid card suit: ' + suit);
+    }
+    if (rank < 13 && suit === 'joker') {
+      throw new Error('Non-joker rank cannot have joker suit');
+    }
+    if (rank >= 13 && suit !== 'joker') {
+      throw new Error('Joker rank must have joker suit');
+    }
+    this.suit = suit;
+    this.rank = rank;
+  }
+
+  Card.prototype.displayName = function () {
+    return RANK_NAME_MAP[this.rank] || '?';
+  };
+
+  Card.prototype.shortName = function () {
+    if (this.rank === 13) return 'SJ';
+    if (this.rank === 14) return 'BJ';
+    return RANK_NAMES[this.rank];
+  };
+
+  Card.prototype.suitSymbol = function () {
+    return SUIT_SYMBOLS[this.suit];
+  };
+
+  Card.prototype.isJoker = function () {
+    return this.rank >= 13;
+  };
+
+  Card.prototype.isRed = function () {
+    return this.suit === 'heart' || this.suit === 'diamond' || this.rank === 14;
+  };
+
+  Card.prototype.toString = function () {
+    if (this.rank === 13) return '\uD83C\uDCCF SJ';
+    if (this.rank === 14) return '\uD83C\uDCCF BJ';
+    return this.suitSymbol() + this.shortName();
+  };
+
+  Card.prototype.clone = function () {
+    return new Card(this.suit, this.rank);
+  };
+
+  // 从字符串创建（方便测试）
+  // 格式: "♠3" "♥K" "🃏SJ" "🃏BJ"
+  Card.fromString = function (str) {
+        // 正确处理代理对（如 ），确保 charAt 正确拆分 Unicode 字符
+    var codePoints = [];
+    for (var ci = 0; ci < str.length; ci++) {
+      var code = str.charCodeAt(ci);
+      if (code >= 0xD800 && code <= 0xDBFF && ci + 1 < str.length) {
+        codePoints.push(str.slice(ci, ci + 2));
+        ci++;
+      } else {
+        codePoints.push(str.charAt(ci));
+      }
+    }
+    var suitChar = codePoints[0];
+    var suitMap = { '\u2660': 'spade', '\u2665': 'heart', '\u2663': 'club', '\u2666': 'diamond', '\uD83C\uDCCF': 'joker' };
+    var suit = suitMap[suitChar];
+    if (!suit) throw new Error('Unknown suit: ' + suitChar);
+
+    if (suit === 'joker') {
+      var jokerType = codePoints.slice(1).join('').trim();
+      if (jokerType === 'SJ' || jokerType === '\u5C0F\u738B') return new Card('joker', 13);
+      if (jokerType === 'BJ' || jokerType === '\u5927\u738B') return new Card('joker', 14);
+      throw new Error('Invalid joker: ' + str);
+    }
+
+    var rankStr = codePoints.slice(1).join('').trim();
+    var rankMap = {
+      '3': 0, '4': 1, '5': 2, '6': 3, '7': 4, '8': 5, '9': 6, '10': 7,
+      'J': 8, 'Q': 9, 'K': 10, 'A': 11, '2': 12
+    };
+    var rank = rankMap[rankStr];
+    if (rank === undefined) throw new Error('Unknown rank: ' + rankStr);
+    return new Card(suit, rank);
+  };
+
+  // ================================================================
+  // Deck 类
+  // ================================================================
+
+  function Deck() {
+    this.cards = [];
+    this.reset();
+  }
+
+  Deck.prototype.reset = function () {
+    this.cards = [];
+    var suitOrder = ['spade', 'heart', 'club', 'diamond'];
+    for (var r = 0; r < RANK_NAMES.length; r++) {
+      for (var s = 0; s < suitOrder.length; s++) {
+        this.cards.push(new Card(suitOrder[s], r));
+      }
+    }
+    // 2张王
+    this.cards.push(new Card('joker', 13));
+    this.cards.push(new Card('joker', 14));
+    return this;
+  };
+
+  // Fisher-Yates shuffle
+  Deck.prototype.shuffle = function () {
+    for (var i = this.cards.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = this.cards[i];
+      this.cards[i] = this.cards[j];
+      this.cards[j] = tmp;
+    }
+    return this;
+  };
+
+  // deal(nPlayers, cardsPerPlayer)
+  // 标准斗地主：3人，每人17张，3张底牌
+  Deck.prototype.deal = function (nPlayers, cardsPerPlayer) {
+    nPlayers = nPlayers || 3;
+    cardsPerPlayer = cardsPerPlayer || 17;
+    if (this.cards.length !== 54) this.reset();
+
+    var hands = [];
+    for (var i = 0; i < nPlayers; i++) {
+      hands.push([]);
+    }
+
+    var dealt = 0;
+    for (var p = 0; p < nPlayers; p++) {
+      for (var c = 0; c < cardsPerPlayer; c++) {
+        hands[p].push(this.cards[dealt++]);
+      }
+    }
+
+    // 底牌
+    var remaining = this.cards.slice(dealt);
+
+    return {
+      hands: hands,
+      remaining: remaining
+    };
+  };
+
+  // ================================================================
+  // 工具函数
+  // ================================================================
+
+  // 按rank分组
+  function groupByRank(cards) {
+    var groups = {};
+    for (var i = 0; i < cards.length; i++) {
+      var r = cards[i].rank;
+      if (!groups[r]) groups[r] = [];
+      groups[r].push(cards[i]);
+    }
+    return groups;
+  }
+
+  // 生成组合 C(n,k)
+  function* combinations(arr, k) {
+    if (k === 0) { yield []; return; }
+    if (arr.length < k) return;
+    for (var i = 0; i <= arr.length - k; i++) {
+      var first = arr[i];
+      for (var rest of combinations(arr.slice(i + 1), k - 1)) {
+        yield [first].concat(rest);
+      }
+    }
+  }
+
+  // 获取同一rank的所有single kick候选
+  function getAllSinglesPool(groups, excludeRanks) {
+    var pool = [];
+    var excludeSet = {};
+    if (excludeRanks) {
+      for (var i = 0; i < excludeRanks.length; i++) excludeSet[excludeRanks[i]] = true;
+    }
+    var sortedRanks = Object.keys(groups).map(Number).sort(function (a, b) { return a - b; });
+    for (var j = 0; j < sortedRanks.length; j++) {
+      var r = sortedRanks[j];
+      if (excludeSet[r]) continue;
+      for (var k = 0; k < groups[r].length; k++) {
+        pool.push(groups[r][k]);
+      }
+    }
+    return pool;
+  }
+
+  // 获取同一rank的所有pair候选
+  function getAllPairsPool(groups, excludeRanks) {
+    var pool = [];
+    var excludeSet = {};
+    if (excludeRanks) {
+      for (var i = 0; i < excludeRanks.length; i++) excludeSet[excludeRanks[i]] = true;
+    }
+    var sortedRanks = Object.keys(groups).map(Number).sort(function (a, b) { return a - b; });
+    for (var j = 0; j < sortedRanks.length; j++) {
+      var r = sortedRanks[j];
+      if (excludeSet[r]) continue;
+      if (groups[r].length >= 2) {
+        pool.push(groups[r].slice(0, 2));
+      }
+    }
+    return pool;
+  }
+
+  // 去重key（基于ranks序列，不关心花色）
+  function playKey(cards) {
+    return cards.map(function (c) { return c.rank; }).sort(function (a, b) { return a - b; }).join(',');
+  }
+
+  function deduplicate(plays) {
+    var seen = {};
+    var result = [];
+    for (var i = 0; i < plays.length; i++) {
+      var key = playKey(plays[i]);
+      if (!seen[key]) {
+        seen[key] = true;
+        result.push(plays[i]);
+      }
+    }
+    return result;
+  }
+
+  function arraysEqual(a, b) {
+    if (a.length !== b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] !== b[i]) return false;
+    }
+    return true;
+  }
+
+  // ================================================================
+  // identifyType - 牌型识别
+  // ================================================================
+
+  function identifyType(cards) {
+    if (!cards || !Array.isArray(cards) || cards.length === 0) {
+      return { type: HAND_TYPES.INVALID, rank: -1, length: 0, totalCards: 0, isBomb: false, isRocket: false, valid: false };
+    }
+
+    var n = cards.length;
+    var sorted = cards.slice().sort(function (a, b) { return a.rank - b.rank; });
+    var groups = groupByRank(sorted);
+    var ranks = Object.keys(groups).map(Number).sort(function (a, b) { return a - b; });
+    var counts = ranks.map(function (r) { return groups[r].length; });
+
+    // ---- 火箭 ----
+    if (n === 2 && ranks.length === 2 && ranks[0] === 13 && ranks[1] === 14) {
+      return { type: HAND_TYPES.ROCKET, rank: 14, length: 2, totalCards: 2, name: HAND_TYPE_NAMES[HAND_TYPES.ROCKET], isBomb: false, isRocket: true, valid: true };
+    }
+
+    // ---- 炸弹 ----
+    if (n === 4 && ranks.length === 1 && counts[0] === 4) {
+      return { type: HAND_TYPES.BOMB, rank: ranks[0], length: 4, totalCards: 4, name: HAND_TYPE_NAMES[HAND_TYPES.BOMB], isBomb: true, isRocket: false, valid: true };
+    }
+
+    // ---- 单张 ----
+    if (n === 1) {
+      return { type: HAND_TYPES.SINGLE, rank: sorted[0].rank, length: 1, totalCards: 1, name: HAND_TYPE_NAMES[HAND_TYPES.SINGLE], isBomb: false, isRocket: false, valid: true };
+    }
+
+    // ---- 对子 ----
+    if (n === 2 && ranks.length === 1 && counts[0] === 2) {
+      return { type: HAND_TYPES.PAIR, rank: ranks[0], length: 2, totalCards: 2, name: HAND_TYPE_NAMES[HAND_TYPES.PAIR], isBomb: false, isRocket: false, valid: true };
+    }
+
+    // ---- 三张 ----
+    if (n === 3 && ranks.length === 1 && counts[0] === 3) {
+      return { type: HAND_TYPES.TRIPLE, rank: ranks[0], length: 3, totalCards: 3, name: HAND_TYPE_NAMES[HAND_TYPES.TRIPLE], isBomb: false, isRocket: false, valid: true };
+    }
+
+    // ---- 三带一 ----
+    if (n === 4 && ranks.length === 2) {
+      var tripleRank = -1, singleRank = -1;
+      for (var i = 0; i < ranks.length; i++) {
+        if (counts[i] === 3) tripleRank = ranks[i];
+        else if (counts[i] === 1) singleRank = ranks[i];
+      }
+      if (tripleRank >= 0 && singleRank >= 0) {
+        return { type: HAND_TYPES.TRIPLE_PLUS_ONE, rank: tripleRank, length: 4, kickRank: singleRank, totalCards: 4, name: HAND_TYPE_NAMES[HAND_TYPES.TRIPLE_PLUS_ONE], isBomb: false, isRocket: false, valid: true };
+      }
+    }
+
+    // ---- 三带二 ----
+    if (n === 5 && ranks.length === 2) {
+      var tripleRank2 = -1, pairRank = -1;
+      for (var i2 = 0; i2 < ranks.length; i2++) {
+        if (counts[i2] === 3) tripleRank2 = ranks[i2];
+        else if (counts[i2] === 2) pairRank = ranks[i2];
+      }
+      if (tripleRank2 >= 0 && pairRank >= 0) {
+        return { type: HAND_TYPES.TRIPLE_PLUS_TWO, rank: tripleRank2, length: 5, kickRank: pairRank, totalCards: 5, name: HAND_TYPE_NAMES[HAND_TYPES.TRIPLE_PLUS_TWO], isBomb: false, isRocket: false, valid: true };
+      }
+    }
+
+    // ---- 顺子 (5+张连续，3~A，无2/王) ----
+    if (n >= 5 && isConsecutiveSequence(ranks, STRAIGHT_MAX_RANK) && allCountsOne(counts)) {
+      // 检查所有rank <= A
+      if (ranks[ranks.length - 1] <= STRAIGHT_MAX_RANK) {
+        return { type: HAND_TYPES.STRAIGHT, rank: ranks[ranks.length - 1], length: n, totalCards: n, name: HAND_TYPE_NAMES[HAND_TYPES.STRAIGHT], isBomb: false, isRocket: false, valid: true };
+      }
+    }
+
+    // ---- 连对 (3+对连续，3~A: 每张恰好2张，n === ranks.length * 2) ----
+    if (n >= 6 && n % 2 === 0 && n === ranks.length * 2) {
+      var pairCount = n / 2;
+      if (pairCount >= 3 && isConsecutiveSequence(ranks, STRAIGHT_MAX_RANK) && allCountsAtLeast(counts, 2)) {
+        if (ranks[ranks.length - 1] <= STRAIGHT_MAX_RANK) {
+          return { type: HAND_TYPES.CONSECUTIVE_PAIRS, rank: ranks[ranks.length - 1], length: pairCount, totalCards: n, name: HAND_TYPE_NAMES[HAND_TYPES.CONSECUTIVE_PAIRS], isBomb: false, isRocket: false, valid: true };
+        }
+      }
+    }
+
+    // ---- 飞机 (2+个三张连续, 3~A) ----
+    if (n >= 6) {
+      var tripleRanks = [];
+      var leftoverCounts = [];
+      for (var it = 0; it < ranks.length; it++) {
+        if (counts[it] >= 3) {
+          tripleRanks.push(ranks[it]);
+        }
+      }
+      // 找连续的三张
+      if (tripleRanks.length >= 2) {
+        var tripleRun = findConsecutiveRuns(tripleRanks);
+        for (var tr = 0; tr < tripleRun.length; tr++) {
+          var run = tripleRun[tr];
+          var runLen = run.length;
+          var tripleCards = runLen * 3;
+
+          // 纯飞机
+          if (tripleCards === n) {
+            if (run[runLen - 1] <= STRAIGHT_MAX_RANK) {
+              return { type: HAND_TYPES.AIRPLANE, rank: run[runLen - 1], length: runLen, totalCards: tripleCards, name: HAND_TYPE_NAMES[HAND_TYPES.AIRPLANE], isBomb: false, isRocket: false, valid: true };
+            }
+          }
+
+          // 飞机带单: n = tripleCards + runLen
+          if (n === tripleCards + runLen) {
+            if (run[runLen - 1] <= STRAIGHT_MAX_RANK) {
+              return { type: HAND_TYPES.AIRPLANE_PLUS_SINGLES, rank: run[runLen - 1], length: runLen, totalCards: n, name: HAND_TYPE_NAMES[HAND_TYPES.AIRPLANE_PLUS_SINGLES], isBomb: false, isRocket: false, valid: true };
+            }
+          }
+
+          // 飞机带对: n = tripleCards + runLen * 2
+          if (n === tripleCards + runLen * 2) {
+            if (run[runLen - 1] <= STRAIGHT_MAX_RANK) {
+              return { type: HAND_TYPES.AIRPLANE_PLUS_PAIRS, rank: run[runLen - 1], length: runLen, totalCards: n, name: HAND_TYPE_NAMES[HAND_TYPES.AIRPLANE_PLUS_PAIRS], isBomb: false, isRocket: false, valid: true };
+            }
+          }
+        }
+      }
+    }
+
+    // ---- 四带二 ----
+    if (n === 6) {
+      for (var i4 = 0; i4 < ranks.length; i4++) {
+        if (counts[i4] === 4) {
+          // 剩余2张是单张
+          var others = [];
+          for (var io = 0; io < ranks.length; io++) {
+            if (io !== i4) {
+              for (var c = 0; c < counts[io]; c++) others.push(ranks[io]);
+            }
+          }
+          if (others.length === 2) {
+            return { type: HAND_TYPES.FOUR_PLUS_TWO, rank: ranks[i4], length: 6, totalCards: 6, name: HAND_TYPE_NAMES[HAND_TYPES.FOUR_PLUS_TWO], isBomb: false, isRocket: false, valid: true };
+          }
+        }
+      }
+    }
+
+    // ---- 四带两对 ----
+    if (n === 8) {
+      for (var i8 = 0; i8 < ranks.length; i8++) {
+        if (counts[i8] === 4) {
+          var pairCount2 = 0;
+          var valid2 = true;
+          for (var io2 = 0; io2 < ranks.length; io2++) {
+            if (io2 !== i8) {
+              if (counts[io2] === 2) pairCount2++;
+              else { valid2 = false; break; }
+            }
+          }
+          if (valid2 && pairCount2 === 2) {
+            return { type: HAND_TYPES.FOUR_PLUS_TWO_PAIRS, rank: ranks[i8], length: 8, totalCards: 8, name: HAND_TYPE_NAMES[HAND_TYPES.FOUR_PLUS_TWO_PAIRS], isBomb: false, isRocket: false, valid: true };
+          }
+        }
+      }
+    }
+
+    return { type: HAND_TYPES.INVALID, rank: -1, length: 0, totalCards: n, isBomb: false, isRocket: false, valid: false };
+  }
+
+  function isConsecutiveSequence(ranks, maxRank) {
+    if (ranks.length < 2) return false;
+    for (var i = 1; i < ranks.length; i++) {
+      if (ranks[i] !== ranks[i - 1] + 1) return false;
+    }
+    return ranks[ranks.length - 1] <= maxRank;
+  }
+
+  function allCountsOne(counts) {
+    for (var i = 0; i < counts.length; i++) {
+      if (counts[i] !== 1) return false;
+    }
+    return true;
+  }
+
+  function allCountsAtLeast(counts, min) {
+    for (var i = 0; i < counts.length; i++) {
+      if (counts[i] < min) return false;
+    }
+    return true;
+  }
+
+  function findConsecutiveRuns(ranks) {
+    if (ranks.length === 0) return [];
+    var runs = [];
+    var currentRun = [ranks[0]];
+    for (var i = 1; i < ranks.length; i++) {
+      if (ranks[i] === ranks[i - 1] + 1) {
+        currentRun.push(ranks[i]);
+      } else {
+        if (currentRun.length >= 2) runs.push(currentRun);
+        currentRun = [ranks[i]];
+      }
+    }
+    if (currentRun.length >= 2) runs.push(currentRun);
+    return runs;
+  }
+
+  // ================================================================
+  // canBeat - 出牌校验
+  // ================================================================
+
+  function canBeat(current, last) {
+    if (!current || !last || current.length === 0 || last.length === 0) return false;
+
+    var curInfo = identifyType(current);
+    var lastInfo = identifyType(last);
+
+    if (curInfo.type === HAND_TYPES.INVALID) return false;
+    if (lastInfo.type === HAND_TYPES.INVALID) return false;
+
+    // 火箭 > 一切
+    if (curInfo.type === HAND_TYPES.ROCKET) return true;
+    if (lastInfo.type === HAND_TYPES.ROCKET) return false;
+
+    // 炸弹 > 非炸弹（且非火箭）
+    if (curInfo.type === HAND_TYPES.BOMB && lastInfo.type !== HAND_TYPES.BOMB) return true;
+    if (lastInfo.type === HAND_TYPES.BOMB && curInfo.type !== HAND_TYPES.BOMB) return false;
+
+    // 同类比较
+    if (curInfo.type === lastInfo.type) {
+      // 对于有长度的牌型（顺子、连对、飞机等），长度必须相同
+      if (curInfo.type === HAND_TYPES.STRAIGHT ||
+          curInfo.type === HAND_TYPES.CONSECUTIVE_PAIRS ||
+          curInfo.type === HAND_TYPES.AIRPLANE ||
+          curInfo.type === HAND_TYPES.AIRPLANE_PLUS_SINGLES ||
+          curInfo.type === HAND_TYPES.AIRPLANE_PLUS_PAIRS) {
+        if (curInfo.length !== lastInfo.length) return false;
+      }
+      // 炸弹比rank
+      if (curInfo.type === HAND_TYPES.BOMB) {
+        return curInfo.rank > lastInfo.rank;
+      }
+      // 同型比较主rank
+      return curInfo.rank > lastInfo.rank;
+    }
+
+    return false;
+  }
+
+  // ================================================================
+  // 出牌枚举器（findValidPlays 的辅助函数）
+  // ================================================================
+
+  // ---------- 所有单张 ----------
+  function findAllSingles(groups) {
+    var result = [];
+    var sortedRanks = Object.keys(groups).map(Number).sort(function (a, b) { return a - b; });
+    for (var i = 0; i < sortedRanks.length; i++) {
+      var r = sortedRanks[i];
+      for (var j = 0; j < groups[r].length; j++) {
+        result.push([groups[r][j]]);
+      }
+    }
+    return result;
+  }
+
+  // ---------- 所有对子 ----------
+  function findAllPairs(groups) {
+    var result = [];
+    var sortedRanks = Object.keys(groups).map(Number).sort(function (a, b) { return a - b; });
+    for (var i = 0; i < sortedRanks.length; i++) {
+      var r = sortedRanks[i];
+      if (groups[r].length >= 2) {
+        result.push([groups[r][0], groups[r][1]]);
+      }
+    }
+    return result;
+  }
+
+  // ---------- 所有三张 ----------
+  function findAllTriples(groups) {
+    var result = [];
+    var sortedRanks = Object.keys(groups).map(Number).sort(function (a, b) { return a - b; });
+    for (var i = 0; i < sortedRanks.length; i++) {
+      var r = sortedRanks[i];
+      if (groups[r].length >= 3) {
+        result.push(groups[r].slice(0, 3));
+      }
+    }
+    return result;
+  }
+
+  // ---------- 所有炸弹 ----------
+  function findAllBombs(groups) {
+    var result = [];
+    var sortedRanks = Object.keys(groups).map(Number).sort(function (a, b) { return a - b; });
+    for (var i = 0; i < sortedRanks.length; i++) {
+      var r = sortedRanks[i];
+      if (groups[r].length === 4) {
+        result.push(groups[r].slice(0, 4));
+      }
+    }
+    return result;
+  }
+
+  // ---------- 火箭 ----------
+  function findRocket(groups) {
+    if (groups[13] && groups[14]) {
+      return [[groups[13][0], groups[14][0]]];
+    }
+    return [];
+  }
+
+  // ---------- 三带一 ----------
+  function findAllTriplePlusOne(groups) {
+    var result = [];
+    var sortedRanks = Object.keys(groups).map(Number).sort(function (a, b) { return a - b; });
+    for (var i = 0; i < sortedRanks.length; i++) {
+      var tripleRank = sortedRanks[i];
+      if (groups[tripleRank].length >= 3) {
+        var tripleCards = groups[tripleRank].slice(0, 3);
+        var kickPool = getAllSinglesPool(groups, [tripleRank]);
+        for (var k = 0; k < kickPool.length; k++) {
+          result.push(tripleCards.concat([kickPool[k]]));
+        }
+      }
+    }
+    return result;
+  }
+
+  // ---------- 三带二 ----------
+  function findAllTriplePlusTwo(groups) {
+    var result = [];
+    var sortedRanks = Object.keys(groups).map(Number).sort(function (a, b) { return a - b; });
+    for (var i = 0; i < sortedRanks.length; i++) {
+      var tripleRank = sortedRanks[i];
+      if (groups[tripleRank].length >= 3) {
+        var tripleCards = groups[tripleRank].slice(0, 3);
+        var pairPool = getAllPairsPool(groups, [tripleRank]);
+        for (var k = 0; k < pairPool.length; k++) {
+          result.push(tripleCards.concat(pairPool[k]));
+        }
+      }
+    }
+    return result;
+  }
+
+  // ---------- 顺子 ----------
+  function findAllStraights(groups) {
+    var result = [];
+    // 只考虑3~A (rank 0~11)
+    var available = [];
+    for (var r = 0; r <= STRAIGHT_MAX_RANK; r++) {
+      available.push(groups[r] && groups[r].length >= 1);
+    }
+
+    var start = 0;
+    while (start <= STRAIGHT_MAX_RANK - 4) {
+      if (!available[start]) { start++; continue; }
+      var end = start;
+      while (end <= STRAIGHT_MAX_RANK && available[end]) end++;
+      var runLen = end - start;
+      if (runLen >= 5) {
+        // 这个run里所有长度>=5的顺子
+        var maxLen = Math.min(runLen, 8); // B4: 顺子最长8张，避免组合爆炸
+        for (var len = 5; len <= maxLen; len++) {
+          for (var s = start; s + len <= end; s++) {
+            var cards = [];
+            for (var rr = s; rr < s + len; rr++) {
+              cards.push(groups[rr][0]); // 取第一个
+            }
+            result.push(cards);
+          }
+        }
+      }
+      start = end;
+    }
+
+    return result;
+  }
+
+  // ---------- 连对 ----------
+  function findAllConsecutivePairs(groups) {
+    var result = [];
+    var available = [];
+    for (var r = 0; r <= STRAIGHT_MAX_RANK; r++) {
+      available.push(groups[r] && groups[r].length >= 2);
+    }
+
+    var start = 0;
+    while (start <= STRAIGHT_MAX_RANK - 2) {
+      if (!available[start]) { start++; continue; }
+      var end = start;
+      while (end <= STRAIGHT_MAX_RANK && available[end]) end++;
+      var runLen = end - start;
+      if (runLen >= 3) {
+        var maxLen = Math.min(runLen, 6); // B4: 连对最长6对，避免组合爆炸
+        for (var len = 3; len <= maxLen; len++) {
+          for (var s = start; s + len <= end; s++) {
+            var cards = [];
+            for (var rr = s; rr < s + len; rr++) {
+              cards.push(groups[rr][0], groups[rr][1]);
+            }
+            result.push(cards);
+          }
+        }
+      }
+      start = end;
+    }
+
+    return result;
+  }
+
+  // ---------- 飞机 (含带牌) ----------
+  function findAllAirplanes(groups) {
+    var result = [];
+
+    // 找rank 0~11范围内至少有3张的rank
+    var tripleAvailable = [];
+    for (var r = 0; r <= STRAIGHT_MAX_RANK; r++) {
+      tripleAvailable.push(groups[r] && groups[r].length >= 3);
+    }
+
+    var start = 0;
+    while (start <= STRAIGHT_MAX_RANK - 1) {
+      if (!tripleAvailable[start]) { start++; continue; }
+      var end = start;
+      while (end <= STRAIGHT_MAX_RANK && tripleAvailable[end]) end++;
+      var runLen = end - start;
+      if (runLen >= 2) {
+        var maxLen = Math.min(runLen, 4); // B4: 飞机最长4连，避免组合爆炸
+        // 所有长度的连续三张
+        for (var len = 2; len <= maxLen; len++) {
+          for (var s = start; s + len <= end; s++) {
+            var airRanks = [];
+            var airCards = [];
+            for (var rr = s; rr < s + len; rr++) {
+              airRanks.push(rr);
+              airCards.push(groups[rr][0], groups[rr][1], groups[rr][2]);
+            }
+
+            // 纯飞机
+            result.push({ type: HAND_TYPES.AIRPLANE, cards: airCards.slice() });
+
+            // 计算剩余牌（模拟移除飞机主体）
+            var remainingGroups = {};
+            for (var rg in groups) {
+              if (groups.hasOwnProperty(rg)) {
+                var rgNum = Number(rg);
+                if (airRanks.indexOf(rgNum) >= 0) {
+                  if (groups[rg].length > 3) {
+                    remainingGroups[rg] = groups[rg].slice(3);
+                  }
+                } else {
+                  remainingGroups[rg] = groups[rg].slice();
+                }
+              }
+            }
+
+            // 飞机带单: 需要 len 张单张
+            var singlePool = getAllSinglesPool(remainingGroups);
+            if (singlePool.length >= len) {
+              for (var kickCombo of combinations(singlePool, len)) {
+                result.push({ type: HAND_TYPES.AIRPLANE_PLUS_SINGLES, cards: airCards.concat(kickCombo) });
+              }
+            }
+
+            // 飞机带对: 需要 len 对
+            var pairPool = getAllPairsPool(remainingGroups);
+            if (pairPool.length >= len) {
+              for (var pairCombo of combinations(pairPool, len)) {
+                var pairCards = [];
+                for (var pc = 0; pc < pairCombo.length; pc++) {
+                  pairCards.push(pairCombo[pc][0], pairCombo[pc][1]);
+                }
+                result.push({ type: HAND_TYPES.AIRPLANE_PLUS_PAIRS, cards: airCards.concat(pairCards) });
+              }
+            }
+          }
+        }
+      }
+      start = end;
+    }
+
+    return result;
+  }
+
+  // ---------- 四带二 ----------
+  function findAllFourPlusTwo(groups) {
+    var result = [];
+    var sortedRanks = Object.keys(groups).map(Number).sort(function (a, b) { return a - b; });
+    for (var i = 0; i < sortedRanks.length; i++) {
+      var bombRank = sortedRanks[i];
+      if (groups[bombRank].length === 4) {
+        var bombCards = groups[bombRank].slice(0, 4);
+
+        // 四带二单
+        var remaining = {};
+        for (var rg in groups) {
+          if (groups.hasOwnProperty(rg)) {
+            var r = Number(rg);
+            if (r !== bombRank) {
+              remaining[r] = groups[r].slice();
+            }
+          }
+        }
+        var singlePool = getAllSinglesPool(remaining);
+        if (singlePool.length >= 2) {
+          for (var kickCombo of combinations(singlePool, 2)) {
+            result.push({ type: HAND_TYPES.FOUR_PLUS_TWO, cards: bombCards.concat(kickCombo) });
+          }
+        }
+
+        // 四带两对
+        var pairPool = getAllPairsPool(remaining);
+        if (pairPool.length >= 2) {
+          for (var pairCombo of combinations(pairPool, 2)) {
+            var pairCards = [];
+            for (var pc = 0; pc < pairCombo.length; pc++) {
+              pairCards.push(pairCombo[pc][0], pairCombo[pc][1]);
+            }
+            result.push({ type: HAND_TYPES.FOUR_PLUS_TWO_PAIRS, cards: bombCards.concat(pairCards) });
+          }
+        }
+      }
+    }
+    return result;
+  }
+
+  // ================================================================
+  // findValidPlays - 合法出牌枚举（含去重）
+  // ================================================================
+
+  function findValidPlays(hand, lastPlay) {
+    if (!hand || hand.length === 0) return [];
+
+    var groups = groupByRank(hand);
+
+    // 收集所有可能的牌型
+    var allPlays = [];
+
+    // 基础类型
+    var singles = findAllSingles(groups);
+    for (var i = 0; i < singles.length; i++) allPlays.push(singles[i]);
+
+    var pairs = findAllPairs(groups);
+    for (var j = 0; j < pairs.length; j++) allPlays.push(pairs[j]);
+
+    var triples = findAllTriples(groups);
+    for (var k = 0; k < triples.length; k++) allPlays.push(triples[k]);
+
+    // 复合类型
+    var tp1 = findAllTriplePlusOne(groups);
+    for (var m = 0; m < tp1.length; m++) allPlays.push(tp1[m]);
+
+    var tp2 = findAllTriplePlusTwo(groups);
+    for (var n = 0; n < tp2.length; n++) allPlays.push(tp2[n]);
+
+    var straights = findAllStraights(groups);
+    for (var p = 0; p < straights.length; p++) allPlays.push(straights[p]);
+
+    var consecutivePairs = findAllConsecutivePairs(groups);
+    for (var q = 0; q < consecutivePairs.length; q++) allPlays.push(consecutivePairs[q]);
+
+    var airplanes = findAllAirplanes(groups);
+    for (var r = 0; r < airplanes.length; r++) allPlays.push(airplanes[r].cards);
+
+    var bombs = findAllBombs(groups);
+    for (var s = 0; s < bombs.length; s++) allPlays.push(bombs[s]);
+
+    var rocket = findRocket(groups);
+    for (var t = 0; t < rocket.length; t++) allPlays.push(rocket[t]);
+
+    var fourPlusTwo = findAllFourPlusTwo(groups);
+    for (var u = 0; u < fourPlusTwo.length; u++) allPlays.push(fourPlusTwo[u].cards);
+
+    // 去重
+    allPlays = deduplicate(allPlays);
+
+    // 按类型 & 强度排序（方便AI使用）
+    allPlays.sort(function (a, b) {
+      var ai = identifyType(a);
+      var bi = identifyType(b);
+      var orderA = typeSortOrder(ai.type);
+      var orderB = typeSortOrder(bi.type);
+      if (orderA !== orderB) return orderA - orderB;
+      if (ai.rank !== bi.rank) return ai.rank - bi.rank;
+      if (ai.length !== bi.length) return ai.length - bi.length;
+      return a.length - b.length;
+    });
+
+    // 如果没有lastPlay，返回全部
+    if (!lastPlay || lastPlay.length === 0) {
+      return allPlays;
+    }
+
+    // 过滤出能压上的
+    var lastInfo = identifyType(lastPlay);
+    if (!lastInfo || lastInfo.type === HAND_TYPES.INVALID) return [];
+    if (lastInfo.type === HAND_TYPES.ROCKET) return [];
+
+    var result = [];
+    for (var v = 0; v < allPlays.length; v++) {
+      if (canBeat(allPlays[v], lastPlay)) {
+        result.push(allPlays[v]);
+      }
+    }
+    return result;
+  }
+
+  function typeSortOrder(type) {
+    var order = {
+      SINGLE: 0,
+      PAIR: 1,
+      TRIPLE: 2,
+      TRIPLE_PLUS_ONE: 3,
+      TRIPLE_PLUS_TWO: 4,
+      STRAIGHT: 5,
+      CONSECUTIVE_PAIRS: 6,
+      AIRPLANE: 7,
+      AIRPLANE_PLUS_SINGLES: 8,
+      AIRPLANE_PLUS_PAIRS: 9,
+      FOUR_PLUS_TWO: 10,
+      FOUR_PLUS_TWO_PAIRS: 11,
+      BOMB: 12,
+      ROCKET: 13
+    };
+    return order[type] !== undefined ? order[type] : 99;
+  }
+
+  // ================================================================
+  // sortCards - 排序器
+  // ================================================================
+
+  // 按 rank 升序（3最小，大王最大），同rank按 suit
+  function sortCards(cards) {
+    return cards.slice().sort(function (a, b) {
+      if (a.rank !== b.rank) return a.rank - b.rank;
+      // suit: spade > heart > club > diamond > joker
+      var suitOrder = { spade: 0, heart: 1, club: 2, diamond: 3, joker: 4 };
+      return (suitOrder[a.suit] || 99) - (suitOrder[b.suit] || 99);
+    });
+  }
+
+  // 降序排列（大王最大，3最小）
+  function sortCardsDesc(cards) {
+    return cards.slice().sort(function (a, b) {
+      if (a.rank !== b.rank) return b.rank - a.rank;
+      var suitOrder = { spade: 0, heart: 1, club: 2, diamond: 3, joker: 4 };
+      return (suitOrder[a.suit] || 99) - (suitOrder[b.suit] || 99);
+    });
+  }
+
+  // ================================================================
+  // renderHTML - HTML渲染模板
+  // ================================================================
+
+  function renderHTML(cards, opts) {
+    opts = opts || {};
+    var title = opts.title || '\u624B\u724C';
+    var showType = opts.showType !== false;
+    var compact = opts.compact || false;
+
+    var sorted = sortCards(cards);
+    var info = showType ? identifyType(sorted) : null;
+
+    var html = '<div class="ddz-hand">';
+    if (title) {
+      html += '<div class="ddz-hand-title">' + escapeHtml(title);
+      if (info && info.type !== HAND_TYPES.INVALID) {
+        html += ' <span class="ddz-hand-type">[' + (HAND_TYPE_NAMES[info.type] || info.type) + ']</span>';
+      }
+      html += '</div>';
+    }
+    html += '<div class="ddz-cards">';
+    for (var i = 0; i < sorted.length; i++) {
+      html += renderCardHTML(sorted[i], compact);
+    }
+    html += '</div></div>';
+    return html;
+  }
+
+  function renderCardHTML(card, compact) {
+    var colorClass = card.isRed() ? 'ddz-card-red' : 'ddz-card-black';
+    var display = card.displayName();
+    var symbol = card.suitSymbol();
+
+    if (compact) {
+      return '<span class="ddz-card ' + colorClass + '">' +
+        symbol + display + '</span>';
+    }
+
+    return '<div class="ddz-card ' + colorClass + '">' +
+      '<div class="ddz-card-corner-top">' + display + '</div>' +
+      '<div class="ddz-card-center">' + symbol + '</div>' +
+      '<div class="ddz-card-corner-bottom">' + display + '</div>' +
+      '</div>';
+  }
+
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // 渲染完整HTML页面（含CSS）
+  function renderFullPage(cardsArray, opts) {
+    opts = opts || {};
+    var title = opts.title || '\u6597\u5730\u4E3B - \u724C\u5F62\u5C55\u793A';
+
+    var html = '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">' +
+      '<meta name="viewport" content="width=device-width, initial-scale=1.0">' +
+      '<title>' + escapeHtml(title) + '</title>' +
+      '<style>' + getCSS() + '</style></head><body>' +
+      '<div class="ddz-container">';
+
+    if (Array.isArray(cardsArray) && !Array.isArray(cardsArray[0])) {
+      html += renderHTML(cardsArray, opts);
+    } else if (Array.isArray(cardsArray)) {
+      for (var i = 0; i < cardsArray.length; i++) {
+        html += renderHTML(cardsArray[i], { title: '\u73A9\u5BB6' + (i + 1) });
+      }
+    }
+
+    html += '</div></body></html>';
+    return html;
+  }
+
+  function getCSS() {
+    return [
+      'body{background:#1a1a2e;font-family:"Microsoft YaHei","PingFang SC",sans-serif;margin:0;padding:20px}',
+      '.ddz-container{max-width:900px;margin:0 auto}',
+      '.ddz-hand{background:linear-gradient(135deg,#16213e,#0f3460);border-radius:12px;padding:16px;margin-bottom:16px;box-shadow:0 4px 20px rgba(0,0,0,0.3)}',
+      '.ddz-hand-title{color:#e0e0e0;font-size:16px;margin-bottom:10px;font-weight:bold}',
+      '.ddz-hand-type{color:#f0c040;font-size:14px;font-weight:normal}',
+      '.ddz-cards{display:flex;flex-wrap:wrap;gap:6px}',
+      '.ddz-card-red{color:#e74c3c}',
+      '.ddz-card-black{color:#ecf0f1}',
+      '.ddz-card{display:inline-flex;flex-direction:column;align-items:center;justify-content:center;min-width:36px;height:52px;padding:4px;background:linear-gradient(135deg,#2c3e50,#34495e);border:1px solid #4a6278;border-radius:6px;font-size:16px;font-weight:bold;cursor:default;transition:transform 0.2s,box-shadow 0.2s}',
+      '.ddz-card:hover{transform:translateY(-4px);box-shadow:0 4px 12px rgba(240,192,64,0.3);border-color:#f0c040}',
+      '.ddz-card-center{font-size:20px;line-height:1}',
+      '.ddz-card-corner-top,.ddz-card-corner-bottom{font-size:11px;line-height:1}',
+      '.ddz-card-corner-bottom{transform:rotate(180deg);margin-top:2px}',
+    ].join('');
+  }
+
+  // ================================================================
+  // 导出
+  // ================================================================
+
+  return {
+    Card: Card,
+    Deck: Deck,
+    HAND_TYPES: HAND_TYPES,
+    HAND_TYPE_NAMES: HAND_TYPE_NAMES,
+    identifyType: identifyType,
+    canBeat: canBeat,
+    findValidPlays: findValidPlays,
+    sortCards: sortCards,
+    sortCardsDesc: sortCardsDesc,
+    renderHTML: renderHTML,
+    renderFullPage: renderFullPage,
+    groupByRank: groupByRank,
+    combinations: combinations,
+    // 常量
+    SUITS: SUITS,
+    RANK_NAMES: RANK_NAMES,
+    RANK_NAME_MAP: RANK_NAME_MAP
+  };
+}));
+
+```
+
+---
+
+## `src/client/js/CardEngine.test.js` (26,541 字节)
+
+```javascript
+/**
+ * card-engine-test.js - 斗地主牌引擎测试套件
+ * Node.js 直接运行: node card-engine-test.js
+ */
+
+var Doudizhu = require('./CardEngine.js');
+var Card = Doudizhu.Card;
+var Deck = Doudizhu.Deck;
+var HAND_TYPES = Doudizhu.HAND_TYPES;
+var identifyType = Doudizhu.identifyType;
+var canBeat = Doudizhu.canBeat;
+var findValidPlays = Doudizhu.findValidPlays;
+var sortCards = Doudizhu.sortCards;
+var sortCardsDesc = Doudizhu.sortCardsDesc;
+
+// ================================================================
+// 测试辅助
+// ================================================================
+
+var passed = 0;
+var failed = 0;
+var testIndex = 0;
+
+function makeCards() {
+  var result = [];
+  for (var i = 0; i < arguments.length; i++) {
+    if (typeof arguments[i] === 'string') {
+      try {
+        result.push(Card.fromString(arguments[i]));
+      } catch (e) {
+        result.push(arguments[i]); // 可能是数字rank，用makeCard
+      }
+    } else if (typeof arguments[i] === 'number') {
+      // rank-only 快速构造（方便测试）
+      var rank = arguments[i];
+      if (rank === 13) result.push(new Card('joker', 13));
+      else if (rank === 14) result.push(new Card('joker', 14));
+      else {
+        var suits = ['spade', 'heart', 'club', 'diamond'];
+        result.push(new Card(suits[0], rank));
+      }
+    } else {
+      result.push(arguments[i]);
+    }
+  }
+  return result;
+}
+
+function makeCardsByRank() {
+  var result = [];
+  var args = Array.prototype.slice.call(arguments);
+  for (var i = 0; i < args.length; i++) {
+    var rank = args[i];
+    if (rank === 13) result.push(new Card('joker', 13));
+    else if (rank === 14) result.push(new Card('joker', 14));
+    else {
+      var suits = ['spade', 'heart', 'club', 'diamond'];
+      result.push(new Card(suits[i % 4], rank));
+    }
+  }
+  return result;
+}
+
+function assert(condition, message) {
+  testIndex++;
+  if (condition) {
+    passed++;
+    console.log('  \u2713 TEST ' + testIndex + ': ' + message);
+  } else {
+    failed++;
+    console.log('  \u2717 TEST ' + testIndex + ': FAIL - ' + message);
+  }
+}
+
+function assertEqual(actual, expected, message) {
+  testIndex++;
+  if (actual === expected) {
+    passed++;
+    console.log('  \u2713 TEST ' + testIndex + ': ' + message);
+  } else {
+    failed++;
+    console.log('  \u2717 TEST ' + testIndex + ': FAIL - ' + message +
+      ' (expected: ' + JSON.stringify(expected) + ', actual: ' + JSON.stringify(actual) + ')');
+  }
+}
+
+function assertDeepEqual(actual, expected, message) {
+  testIndex++;
+  try {
+    var a = JSON.stringify(actual);
+    var e = JSON.stringify(expected);
+    if (a === e) {
+      passed++;
+      console.log('  \u2713 TEST ' + testIndex + ': ' + message);
+    } else {
+      failed++;
+      console.log('  \u2717 TEST ' + testIndex + ': FAIL - ' + message);
+      console.log('    expected:', e);
+      console.log('    actual:  ', a);
+    }
+  } catch (err) {
+    failed++;
+    console.log('  \u2717 TEST ' + testIndex + ': FAIL - ' + message + ' (exception: ' + err.message + ')');
+  }
+}
+
+function assertType(cards, expectedType, expectedRank, message) {
+  var info = identifyType(cards);
+  testIndex++;
+  var ok = info.type === expectedType;
+  if (expectedRank !== undefined) ok = ok && info.rank === expectedRank;
+  if (ok) {
+    passed++;
+    console.log('  \u2713 TEST ' + testIndex + ': ' + message);
+  } else {
+    failed++;
+    console.log('  \u2717 TEST ' + testIndex + ': FAIL - ' + message +
+      ' (expected ' + expectedType + ' rank=' + expectedRank +
+      ', got ' + info.type + ' rank=' + info.rank + ')');
+  }
+}
+
+console.log('');
+console.log('========================================');
+console.log('  斗地主牌引擎 - 测试套件');
+console.log('========================================');
+console.log('');
+
+// ================================================================
+// 1. Card 对象创建
+// ================================================================
+console.log('--- 1. Card 对象创建 ---');
+
+(function testCardCreation() {
+  var c1 = new Card('spade', 0);
+  assertEqual(c1.rank, 0, 'Card(spade, 0).rank === 0');
+  assertEqual(c1.suit, 'spade', 'Card(spade, 0).suit === "spade"');
+  assertEqual(c1.displayName(), '3', 'Card(spade, 0).displayName() === "3"');
+  assertEqual(c1.shortName(), '3', 'Card(spade, 0).shortName() === "3"');
+  assertEqual(c1.toString(), '\u26603', 'Card(spade, 0) toString');
+  assertEqual(c1.isJoker(), false, 'Card(spade, 0) is not joker');
+  assertEqual(c1.isRed(), false, 'Card(spade, 0) is not red');
+
+  var c2 = new Card('heart', 11);
+  assertEqual(c2.rank, 11, 'Card(heart, 11).rank === 11 (A)');
+  assertEqual(c2.displayName(), 'A', 'Card(heart, 11).displayName() === "A"');
+
+  var c3 = new Card('diamond', 12);
+  assertEqual(c3.displayName(), '2', 'Card(diamond, 12).displayName() === "2"');
+
+  // 小王 && 大王
+  var sj = new Card('joker', 13);
+  assertEqual(sj.displayName(), '\u5C0F\u738B', '小王 displayName');
+  assertEqual(sj.isJoker(), true, '小王 isJoker');
+  assertEqual(sj.isRed(), false, '小王 isRed() === false');
+
+  var bj = new Card('joker', 14);
+  assertEqual(bj.displayName(), '\u5927\u738B', '大王 displayName');
+  assertEqual(bj.isJoker(), true, '大王 isJoker');
+  assertEqual(bj.isRed(), true, '大王 isRed() === true');
+
+  // fromString
+  var fromS = Card.fromString('\u26603');
+  assertEqual(fromS.rank, 0, 'Card.fromString("♠3").rank === 0');
+
+  var fromA = Card.fromString('\u2665A');
+  assertEqual(fromA.rank, 11, 'Card.fromString("♥A").rank === 11');
+
+  var fromSJ = Card.fromString('\uD83C\uDCCFSJ');
+  assertEqual(fromSJ.rank, 13, 'Card.fromString("🃏SJ").rank === 13');
+
+  var fromBJ = Card.fromString('\uD83C\uDCCFBJ');
+  assertEqual(fromBJ.rank, 14, 'Card.fromString("🃏BJ").rank === 14');
+})();
+
+// ================================================================
+// 2. Deck 洗牌发牌
+// ================================================================
+console.log('\n--- 2. Deck 洗牌发牌 ---');
+
+(function testDeck() {
+  var deck = new Deck();
+  assertEqual(deck.cards.length, 54, '新Deck有54张牌');
+
+  deck.shuffle();
+  assertEqual(deck.cards.length, 54, '洗牌后仍有54张牌');
+
+  var result = deck.deal(3, 17);
+  assertEqual(result.hands.length, 3, '发3手牌');
+  assertEqual(result.hands[0].length, 17, '每手17张');
+  assertEqual(result.hands[1].length, 17, '每手17张');
+  assertEqual(result.hands[2].length, 17, '每手17张');
+  assertEqual(result.remaining.length, 3, '3张底牌');
+
+  // 验证所有牌都是不同的（没有重复）
+  var allCards = result.hands[0].concat(result.hands[1]).concat(result.hands[2]).concat(result.remaining);
+  assertEqual(allCards.length, 54, '所有54张牌');
+
+  var uniqueKeys = {};
+  for (var i = 0; i < allCards.length; i++) {
+    var key = allCards[i].suit + ':' + allCards[i].rank;
+    uniqueKeys[key] = (uniqueKeys[key] || 0) + 1;
+  }
+  var allUnique = true;
+  for (var k in uniqueKeys) {
+    if (uniqueKeys[k] !== 1) { allUnique = false; break; }
+  }
+  assert(allUnique, '发牌无重复');
+
+  // 验证各花色数量
+  var suitCount = { spade: 0, heart: 0, club: 0, diamond: 0, joker: 0 };
+  for (var j = 0; j < allCards.length; j++) {
+    suitCount[allCards[j].suit]++;
+  }
+  assertEqual(suitCount.spade, 13, '黑桃13张');
+  assertEqual(suitCount.heart, 13, '红心13张');
+  assertEqual(suitCount.club, 13, '梅花13张');
+  assertEqual(suitCount.diamond, 13, '方块13张');
+  assertEqual(suitCount.joker, 2, '王2张');
+})();
+
+// ================================================================
+// 3. 牌型识别 - 单张
+// ================================================================
+console.log('\n--- 3. 牌型识别 ---');
+
+(function testIdentifySingle() {
+  assertType(makeCards(5), HAND_TYPES.SINGLE, 5, '单张（6点）');
+  assertType(makeCards(0), HAND_TYPES.SINGLE, 0, '单张（3点最小）');
+  assertType(makeCards(12), HAND_TYPES.SINGLE, 12, '单张（2点）');
+  assertType(makeCards(13), HAND_TYPES.SINGLE, 13, '单张（小王）');
+  assertType(makeCards(14), HAND_TYPES.SINGLE, 14, '单张（大王）');
+})();
+
+(function testIdentifyPair() {
+  assertType(makeCards(3, 3), HAND_TYPES.PAIR, 3, '对子（7点×2）');
+  assertType(makeCards(0, 0), HAND_TYPES.PAIR, 0, '对子（3点×2）');
+  assertType(makeCards(12, 12), HAND_TYPES.PAIR, 12, '对子（2点×2）');
+})();
+
+(function testIdentifyTriple() {
+  assertType(makeCards(1, 1, 1), HAND_TYPES.TRIPLE, 1, '三张（4点×3）');
+  assertType(makeCards(11, 11, 11), HAND_TYPES.TRIPLE, 11, '三张（A×3）');
+})();
+
+(function testIdentifyTriplePlusOne() {
+  assertType(makeCards(3, 3, 3, 0), HAND_TYPES.TRIPLE_PLUS_ONE, 3, '三带一（7点×3 + 3）');
+  assertType(makeCards(8, 8, 8, 5), HAND_TYPES.TRIPLE_PLUS_ONE, 8, '三带一（J×3 + 6）');
+})();
+
+(function testIdentifyTriplePlusTwo() {
+  assertType(makeCards(3, 3, 3, 1, 1), HAND_TYPES.TRIPLE_PLUS_TWO, 3, '三带二（7点×3 + 4点×2）');
+  assertType(makeCards(11, 11, 11, 12, 12), HAND_TYPES.TRIPLE_PLUS_TWO, 11, '三带二（A×3 + 2×2）');
+})();
+
+(function testIdentifyStraight() {
+  // 3-4-5-6-7
+  assertType(makeCards(0, 1, 2, 3, 4), HAND_TYPES.STRAIGHT, 4, '顺子 3-4-5-6-7（5张）');
+  // 3-4-5-6-7-8-9
+  assertType(makeCards(0, 1, 2, 3, 4, 5, 6), HAND_TYPES.STRAIGHT, 6, '顺子 3-4-5-6-7-8-9（7张）');
+  // 10-J-Q-K-A
+  assertType(makeCards(7, 8, 9, 10, 11), HAND_TYPES.STRAIGHT, 11, '顺子 10-J-Q-K-A（5张最大）');
+})();
+
+(function testIdentifyConsecutivePairs() {
+  // 33-44-55
+  assertType(makeCards(0, 0, 1, 1, 2, 2), HAND_TYPES.CONSECUTIVE_PAIRS, 2, '连对 33-44-55');
+  // QQ-KK-AA
+  assertType(makeCards(9, 9, 10, 10, 11, 11), HAND_TYPES.CONSECUTIVE_PAIRS, 11, '连对 QQ-KK-AA');
+})();
+
+(function testIdentifyAirplane() {
+  // 333-444
+  assertType(makeCards(0, 0, 0, 1, 1, 1), HAND_TYPES.AIRPLANE, 1, '飞机 333-444');
+  // QQQ-KKK-AAA
+  assertType(makeCards(9, 9, 9, 10, 10, 10, 11, 11, 11), HAND_TYPES.AIRPLANE, 11, '飞机 QQQ-KKK-AAA');
+})();
+
+(function testIdentifyAirplanePlusSingles() {
+  // 333-444 + 5 + 6
+  assertType(makeCards(0, 0, 0, 1, 1, 1, 2, 3), HAND_TYPES.AIRPLANE_PLUS_SINGLES, 1, '飞机带单 333-444+5+6');
+})();
+
+(function testIdentifyAirplanePlusPairs() {
+  // 333-444 + 55 + 66
+  assertType(makeCards(0, 0, 0, 1, 1, 1, 2, 2, 3, 3), HAND_TYPES.AIRPLANE_PLUS_PAIRS, 1, '飞机带对 333-444+55+66');
+})();
+
+(function testIdentifyBomb() {
+  assertType(makeCards(5, 5, 5, 5), HAND_TYPES.BOMB, 5, '炸弹 6点×4');
+  assertType(makeCards(12, 12, 12, 12), HAND_TYPES.BOMB, 12, '炸弹 2点×4（最大炸弹）');
+})();
+
+(function testIdentifyRocket() {
+  assertType(makeCards(13, 14), HAND_TYPES.ROCKET, 14, '火箭 小王+大王');
+})();
+
+(function testIdentifyFourPlusTwo() {
+  // 4个3 + 5 + 6
+  assertType(makeCards(0, 0, 0, 0, 1, 2), HAND_TYPES.FOUR_PLUS_TWO, 0, '四带二 3333+4+5');
+  assertType(makeCards(12, 12, 12, 12, 10, 11), HAND_TYPES.FOUR_PLUS_TWO, 12, '四带二 2222+K+A');
+})();
+
+(function testIdentifyFourPlusTwoPairs() {
+  // 4个3 + 44 + 55
+  assertType(makeCards(0, 0, 0, 0, 1, 1, 2, 2), HAND_TYPES.FOUR_PLUS_TWO_PAIRS, 0, '四带两对 3333+44+55');
+})();
+
+(function testInvalidTypes() {
+  assertEqual(identifyType([]).type, HAND_TYPES.INVALID, '空数组无效');
+  assertEqual(identifyType(makeCards(0, 1)).type, HAND_TYPES.INVALID, '两张不同无效');
+  assertEqual(identifyType(makeCards(0, 1, 5)).type, HAND_TYPES.INVALID, '三张不同无效');
+  assertEqual(identifyType(makeCards(0, 0, 1, 2)).type, HAND_TYPES.INVALID, '2+1+1无效');
+  assertEqual(identifyType(makeCards(0, 0, 0, 1, 2)).type, HAND_TYPES.INVALID, '3+1+1无效（非三带二）');
+  // 顺子5张，但包含2
+  assertEqual(identifyType(makeCards(8, 9, 10, 11, 12)).type, HAND_TYPES.INVALID, '包含2的顺子无效');
+})();
+
+// ================================================================
+// 4. canBeat 出牌校验
+// ================================================================
+console.log('\n--- 4. canBeat 出牌校验 ---');
+
+(function testCanBeatSingle() {
+  var single3 = makeCards(0);
+  var single4 = makeCards(1);
+  var singleK = makeCards(10);
+  var singleA = makeCards(11);
+  var single2 = makeCards(12);
+
+  assert(canBeat(single4, single3), '4能压3');
+  assert(!canBeat(single3, single4), '3不能压4');
+  assert(canBeat(singleA, singleK), 'A能压K');
+  assert(canBeat(single2, singleA), '2能压A');
+
+  // 小王/大王
+  var sj = makeCards(13);
+  var bj = makeCards(14);
+  assert(canBeat(sj, single2), '小王能压2');
+  assert(canBeat(bj, sj), '大王能压小王');
+  assert(!canBeat(single2, bj), '2不能压大王');
+})();
+
+(function testCanBeatPair() {
+  var p33 = makeCards(0, 0);
+  var p44 = makeCards(1, 1);
+  var pAA = makeCards(11, 11);
+  var p22 = makeCards(12, 12);
+
+  assert(canBeat(p44, p33), '44能压33');
+  assert(!canBeat(p33, p44), '33不能压44');
+  assert(canBeat(p22, pAA), '22能压AA');
+})();
+
+(function testCanBeatTriplePlusOne() {
+  var tp1_333_4 = makeCards(0, 0, 0, 1);
+  var tp1_444_5 = makeCards(1, 1, 1, 2);
+  assert(canBeat(tp1_444_5, tp1_333_4), '444+5能压333+4');
+  assert(!canBeat(tp1_333_4, tp1_444_5), '333+4不能压444+5');
+
+  // 不同带牌不影响
+  var tp1_444_3 = makeCards(1, 1, 1, 0);
+  assert(canBeat(tp1_444_3, tp1_333_4), '444+3能压333+4（kick无关）');
+})();
+
+(function testCanBeatTriplePlusTwo() {
+  var tp2_333_44 = makeCards(0, 0, 0, 1, 1);
+  var tp2_444_55 = makeCards(1, 1, 1, 2, 2);
+  assert(canBeat(tp2_444_55, tp2_333_44), '444+55能压333+44');
+
+  // 不同带牌不影响
+  var tp2_444_33 = makeCards(1, 1, 1, 0, 0);
+  assert(canBeat(tp2_444_33, tp2_333_44), '444+33能压333+44（kick无关）');
+})();
+
+(function testCanBeatStraight() {
+  var s1 = makeCards(0, 1, 2, 3, 4);   // 3-4-5-6-7
+  var s2 = makeCards(1, 2, 3, 4, 5);   // 4-5-6-7-8
+  var s1_long = makeCards(0, 1, 2, 3, 4, 5); // 3-4-5-6-7-8
+
+  assert(canBeat(s2, s1), '4-5-6-7-8能压3-4-5-6-7');
+  assert(!canBeat(s1, s2), '3-4-5-6-7不能压4-5-6-7-8');
+  // 长度不同不能比
+  assert(!canBeat(s1_long, s1), '不同长度的顺子不能比较');
+  assert(!canBeat(s1, s1_long), '不同长度的顺子不能比较');
+})();
+
+(function testCanBeatBomb() {
+  var bomb6 = makeCards(1, 1, 1, 1);    // 4444
+  var bombA = makeCards(11, 11, 11, 11); // AAAA
+  var singleK = makeCards(10);
+  var pairQ = makeCards(9, 9);
+  var straight = makeCards(0, 1, 2, 3, 4);
+
+  // 炸弹压非炸弹
+  assert(canBeat(bomb6, singleK), '4444能压单张K');
+  assert(canBeat(bombA, pairQ), 'AAAA能压对子Q');
+  assert(canBeat(bomb6, straight), '4444能压顺子');
+
+  // 炸弹比rank
+  assert(canBeat(bombA, bomb6), 'AAAA能压4444');
+  assert(!canBeat(bomb6, bombA), '4444不能压AAAA');
+})();
+
+(function testCanBeatRocket() {
+  var rocket = makeCards(13, 14);
+  var bomb = makeCards(12, 12, 12, 12);
+  var single2 = makeCards(12);
+
+  assert(canBeat(rocket, single2), '火箭能压单张2');
+  assert(canBeat(rocket, bomb), '火箭能压2222炸弹');
+  assert(!canBeat(bomb, rocket), '炸弹不能压火箭');
+  assert(!canBeat(single2, rocket), '单张2不能压火箭');
+})();
+
+(function testCanBeatFourPlusTwo() {
+  var f42_1 = makeCards(0, 0, 0, 0, 1, 2);   // 3333+4+5
+  var f42_2 = makeCards(1, 1, 1, 1, 2, 3);   // 4444+5+6
+  assert(canBeat(f42_2, f42_1), '4444+5+6能压3333+4+5');
+  assert(!canBeat(f42_1, f42_2), '3333+4+5不能压4444+5+6');
+
+  // 炸弹/火箭能压四带二
+  var bomb = makeCards(11, 11, 11, 11);
+  var rocket = makeCards(13, 14);
+  assert(canBeat(bomb, f42_1), 'AAAA能压四带二');
+  assert(canBeat(rocket, f42_1), '火箭能压四带二');
+})();
+
+(function testCanBeatDifferentTypes() {
+  // 不同类型不能互压（除非一方是炸弹/火箭）
+  var pair = makeCards(0, 0);
+  var triple = makeCards(1, 1, 1);
+  var straight = makeCards(0, 1, 2, 3, 4);
+  var consecutivePairs = makeCards(0, 0, 1, 1, 2, 2);
+
+  assert(!canBeat(triple, pair), '三张不能压对子');
+  assert(!canBeat(pair, triple), '对子不能压三张');
+  assert(!canBeat(straight, consecutivePairs), '顺子不能压连对');
+  assert(!canBeat(consecutivePairs, straight), '连对不能压顺子');
+})();
+
+// ================================================================
+// 5. findValidPlays 合法出牌枚举
+// ================================================================
+console.log('\n--- 5. findValidPlays 合法出牌枚举 ---');
+
+(function testFindValidPlaysNoLastPlay() {
+  // 手牌: 3, 4, 5, 6（各一张）
+  var hand = makeCards(0, 1, 2, 3);
+  var plays = findValidPlays(hand, null);
+
+  // 应有4个单张 + 所有的顺子（3-4-5-6是4张，不能成顺子）
+  // 只有4个单张
+  assertEqual(plays.length, 4, '3344手牌无lastPlay时只有4个单张');
+
+  // 检查是否包含正确的单张
+  var rankCounts = {};
+  for (var i = 0; i < plays.length; i++) {
+    assertEqual(plays[i].length, 1, '每个play应该只有1张');
+    rankCounts[plays[i][0].rank] = (rankCounts[plays[i][0].rank] || 0) + 1;
+  }
+  assertEqual(Object.keys(rankCounts).length, 4, '包含4个不同rank的单张');
+})();
+
+(function testFindValidPlaysWithPairs() {
+  // 手牌: 3,3,4,4,5
+  var hand = makeCards(0, 0, 1, 1, 2);
+
+  // 无lastPlay - 应包含单张、对子、顺子(3-4-5 不够5张)
+  // 单张: 3,3,4,4,5 (重复rank的只算一个play)
+  // 对子: 33, 44
+  // 顺子: 3-4-5 只有3张不够
+  // 所以应该有: 3(×1), 4(×1), 5(×1), 33, 44 = 5个plays
+  var plays = findValidPlays(hand, null);
+  assert(plays.length > 0, '有手牌时findValidPlays返回非空结果');
+
+  // 验证包含对子
+  var hasPair33 = false;
+  var hasPair44 = false;
+  for (var i = 0; i < plays.length; i++) {
+    var pi = identifyType(plays[i]);
+    if (pi.type === HAND_TYPES.PAIR && pi.rank === 0) hasPair33 = true;
+    if (pi.type === HAND_TYPES.PAIR && pi.rank === 1) hasPair44 = true;
+  }
+  assert(hasPair33, '包含对子33');
+  assert(hasPair44, '包含对子44');
+})();
+
+(function testFindValidPlaysWithLastPlay() {
+  // 手牌: 3,4,5,6,7,8,9,10,J,Q,K,A,小王
+  var hand = makeCards(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13);
+  var lastPlay = makeCards(0, 1, 2, 3, 4); // 3-4-5-6-7
+
+  var plays = findValidPlays(hand, lastPlay);
+  // 应该能找到更多顺子（4-5-6-7-8 等）
+  var hasBetterStraight = false;
+  for (var i = 0; i < plays.length; i++) {
+    var pi = identifyType(plays[i]);
+    if (pi.type === HAND_TYPES.STRAIGHT && pi.rank >= 5) {
+      hasBetterStraight = true;
+      break;
+    }
+  }
+  assert(hasBetterStraight, '能找到比3-4-5-6-7更大的顺子');
+})();
+
+(function testFindValidPlaysBombOption() {
+  // 手牌包含炸弹，对手出顺子
+  var bombCards = makeCards(12, 12, 12, 12); // 2222
+  var otherCards = makeCards(0, 1, 2, 3, 4, 5); // 3-4-5-6-7-8
+  var hand = bombCards.concat(otherCards);
+  var lastPlay = makeCards(0, 1, 2, 3, 4); // 3-4-5-6-7
+
+  var plays = findValidPlays(hand, lastPlay);
+  var hasBomb = false;
+  for (var i = 0; i < plays.length; i++) {
+    var pi = identifyType(plays[i]);
+    if (pi.type === HAND_TYPES.BOMB) {
+      hasBomb = true;
+      break;
+    }
+  }
+  assert(hasBomb, '面对顺子时，包含炸弹的选项');
+})();
+
+(function testFindValidPlaysRocket() {
+  // 手牌包含火箭
+  var hand = makeCards(13, 14, 0, 1, 2, 3);
+  var lastPlay = makeCards(4, 4, 4, 4); // 炸弹
+
+  var plays = findValidPlays(hand, lastPlay);
+  var hasRocket = false;
+  for (var i = 0; i < plays.length; i++) {
+    var pi = identifyType(plays[i]);
+    if (pi.type === HAND_TYPES.ROCKET) {
+      hasRocket = true;
+      break;
+    }
+  }
+  assert(hasRocket, '面对炸弹时，包含火箭选项');
+})();
+
+(function testFindValidPlaysNoOption() {
+  // 手牌没有能压过的
+  var hand = makeCards(0, 1, 2);       // 3,4,5
+  var lastPlay = makeCards(13, 14);     // 火箭!
+  var plays = findValidPlays(hand, lastPlay);
+  assertEqual(plays.length, 0, '面对火箭时，无牌可出返回空数组');
+})();
+
+(function testFindValidPlaysFreePlay() {
+  // 全部牌型枚举检查
+  var hand = makeCards(0, 0, 0, 0, 1, 1, 1, 1, 2, 2); // 3333, 4444, 55
+  var plays = findValidPlays(hand, null);
+
+  // 应该包含: 炸弹(3333, 4444), 对子(55), 单张...等
+  // 至少大于2个
+  assert(plays.length >= 3, '复杂手牌能枚举出多种牌型');
+
+  // 验证有炸弹
+  var bombCount = 0;
+  for (var i = 0; i < plays.length; i++) {
+    if (identifyType(plays[i]).type === HAND_TYPES.BOMB) bombCount++;
+  }
+  assertEqual(bombCount, 2, '含有3333和4444两个炸弹');
+})();
+
+// ================================================================
+// 6. 排序器
+// ================================================================
+console.log('\n--- 6. 排序器 ---');
+
+(function testSortCards() {
+  // 打乱顺序: K(10), A(11), 3(0), 5(2), 4(1)
+  var unsorted = makeCards(10, 11, 0, 2, 1);
+  var sorted = sortCards(unsorted);
+
+  assertEqual(sorted[0].rank, 0, '升序排序第一个是3');
+  assertEqual(sorted[1].rank, 1, '升序排序第二个是4');
+  assertEqual(sorted[2].rank, 2, '升序排序第三个是5');
+  assertEqual(sorted[3].rank, 10, '升序排序第四个是K');
+  assertEqual(sorted[4].rank, 11, '升序排序第五个是A');
+})();
+
+(function testSortCardsDesc() {
+  var unsorted = makeCards(0, 14, 1, 13, 2); // 3, BJ, 4, SJ, 5
+  var sorted = sortCardsDesc(unsorted);
+
+  assertEqual(sorted[0].rank, 14, '降序排序第一个是大王');
+  assertEqual(sorted[1].rank, 13, '降序排序第二个是小王');
+  assertEqual(sorted[2].rank, 2, '降序排序第三个是5');
+})();
+
+// ================================================================
+// 7. 边界与边缘用例
+// ================================================================
+console.log('\n--- 7. 边界用例 ---');
+
+(function testEdgeHands() {
+  // 空手
+  assertEqual(findValidPlays([], null).length, 0, '空手牌返回[]');
+
+  // 单张手的自由出牌
+  var singleHand = makeCards(14); // 大王
+  var plays = findValidPlays(singleHand, null);
+  assertEqual(plays.length, 1, '单张大王只有1种出法');
+  assertEqual(plays[0][0].rank, 14, '出大王');
+
+  // 只有小王+大王
+  var rocketHand = makeCards(13, 14);
+  var plays2 = findValidPlays(rocketHand, null);
+  var hasRocket = false;
+  for (var i = 0; i < plays2.length; i++) {
+    if (identifyType(plays2[i]).type === HAND_TYPES.ROCKET) hasRocket = true;
+  }
+  assert(hasRocket, '手牌只有大小王时包含火箭');
+})();
+
+(function testStraightBoundaries() {
+  // 最小的顺子 3-4-5-6-7
+  var minStraight = makeCards(0, 1, 2, 3, 4);
+  assertEqual(identifyType(minStraight).type, HAND_TYPES.STRAIGHT, '最小顺子有效');
+  assertEqual(identifyType(minStraight).rank, 4, '最小顺子topRank为7');
+
+  // 最大的顺子 10-J-Q-K-A
+  var maxStraight = makeCards(7, 8, 9, 10, 11);
+  assertEqual(identifyType(maxStraight).type, HAND_TYPES.STRAIGHT, '最大顺子有效');
+  assertEqual(identifyType(maxStraight).rank, 11, '最大顺子topRank为A');
+
+  // 4张连续不是顺子
+  var notEnough = makeCards(0, 1, 2, 3);
+  assertEqual(identifyType(notEnough).type, HAND_TYPES.INVALID, '4张连续不是顺子');
+})();
+
+(function testAirplaneBoundaries() {
+  // 最小飞机 333-444
+  var minAir = makeCards(0, 0, 0, 1, 1, 1);
+  assertEqual(identifyType(minAir).type, HAND_TYPES.AIRPLANE, '最小飞机有效');
+
+  // 最大飞机 QQQ-KKK-AAA
+  var maxAir = makeCards(9, 9, 9, 10, 10, 10, 11, 11, 11);
+  assertEqual(identifyType(maxAir).type, HAND_TYPES.AIRPLANE, '最大飞机有效');
+})();
+
+(function testBombHierarchy() {
+  // 炸弹大小验证
+  var bomb3 = makeCards(0, 0, 0, 0);
+  var bomb7 = makeCards(3, 3, 3, 3);
+  var bomb2 = makeCards(12, 12, 12, 12);
+
+  assert(canBeat(bomb7, bomb3), '7777能压3333');
+  assert(canBeat(bomb2, bomb7), '2222能压7777');
+  assert(!canBeat(bomb3, bomb7), '3333不能压7777');
+})();
+
+(function testSameRankCannotBeat() {
+  // 同rank不能压
+  var p33a = makeCards(0, 0);
+  var p33b = makeCards(0, 0);
+  // 用不同花色建对子
+  var t1 = new Card('spade', 0);
+  var t2 = new Card('heart', 0);
+  var t3 = new Card('club', 0);
+  var t4 = new Card('diamond', 0);
+  var p33c = [t1, t2];
+  var p33d = [t3, t4];
+
+  assert(!canBeat(p33c, p33d), '同rank对子不能互压');
+  assert(!canBeat(p33d, p33c), '同rank对子不能互压');
+})();
+
+// ================================================================
+// 8. HTML渲染测试
+// ================================================================
+console.log('\n--- 8. HTML渲染测试 ---');
+
+(function testRender() {
+  var cards = makeCards(0, 1, 2, 10, 11, 13, 14);
+  var html = Doudizhu.renderHTML(cards, { title: '测试手牌' });
+  assert(typeof html === 'string', 'renderHTML返回字符串');
+  assert(html.length > 0, 'HTML内容非空');
+  assert(html.indexOf('ddz-hand') >= 0, '包含ddz-hand样式类');
+  assert(html.indexOf('测试手牌') >= 0, '包含标题');
+
+  var fullPage = Doudizhu.renderFullPage(cards);
+  assert(fullPage.indexOf('<!DOCTYPE html>') >= 0, 'renderFullPage包含DOCTYPE');
+  assert(fullPage.indexOf('</html>') >= 0, 'renderFullPage包含</html>');
+})();
+
+// ================================================================
+// 9. 组合生成器
+// ================================================================
+console.log('\n--- 9. 组合生成器 ---');
+
+(function testCombinations() {
+  var arr = [1, 2, 3, 4];
+  var gen = Doudizhu.combinations(arr, 2);
+  var count = 0;
+  var results = [];
+  for (var combo of gen) {
+    results.push(combo);
+    count++;
+  }
+  assertEqual(count, 6, 'C(4,2) = 6种组合');
+  assertDeepEqual(results[0], [1, 2], '第一种组合是[1,2]');
+  assertDeepEqual(results[5], [3, 4], '最后一种组合是[3,4]');
+
+  // C(4,4) = 1
+  var gen2 = Doudizhu.combinations(arr, 4);
+  var count2 = 0;
+  for (var combo2 of gen2) { count2++; }
+  assertEqual(count2, 1, 'C(4,4) = 1种组合');
+
+  // C(4,5) = 0
+  var gen3 = Doudizhu.combinations(arr, 5);
+  var count3 = 0;
+  for (var combo3 of gen3) { count3++; }
+  assertEqual(count3, 0, 'C(4,5) = 0种组合');
+})();
+
+// ================================================================
+// 汇总
+// ================================================================
+console.log('\n========================================');
+console.log('  测试完成');
+console.log('========================================');
+console.log('  ' + '\u2713 通过: ' + passed);
+console.log('  ' + '\u2717 失败: ' + failed);
+console.log('  总计: ' + (passed + failed));
+console.log('========================================');
+
+if (failed > 0) {
+  process.exit(1);
+}
+
+```
+
+---
+
+## `src/client/js/apiClient.js` (9,108 字节)
+
+```javascript
+/**
+ * apiClient.js - 斗地主前端 API 客户端
+ * 对接后端端口 3100，封装所有接口调用
+ */
+
+var API_BASE = (typeof window !== 'undefined' && window.__API_BASE__) ||
+  (typeof process !== 'undefined' && process.env && process.env.API_BASE) ||
+  (typeof window !== 'undefined' ? (window.location.protocol + '//' + window.location.host) : 'http://localhost:3100');
+
+var ApiClient = {
+  // ============================================================
+  // 出牌验证 API
+  // ============================================================
+
+  /**
+   * POST /api/verify/play - 验证出牌合法性
+   * @param {Card[]} current - 当前要出的牌
+   * @param {Card[]|null} lastPlay - 上家出的牌
+   * @param {Card[]|null} hand - 玩家手牌（可选）
+   * @returns {Promise<{valid,type,canBeat,inHand,error}>}
+   */
+  verifyPlay: function (current, lastPlay, hand) {
+    return apiPost('/api/verify/play', {
+      current: serializeCards(current),
+      lastPlay: lastPlay ? serializeCards(lastPlay) : null,
+      hand: hand ? serializeCards(hand) : null
+    });
+  },
+
+  /**
+   * POST /api/verify/find - 枚举所有合法出牌
+   * @param {Card[]} hand - 手牌
+   * @param {Card[]|null} lastPlay - 上家出的牌
+   * @returns {Promise<{total,plays}>}
+   */
+  findPlays: function (hand, lastPlay) {
+    return apiPost('/api/verify/find', {
+      hand: serializeCards(hand),
+      lastPlay: lastPlay ? serializeCards(lastPlay) : null
+    });
+  },
+
+  /**
+   * POST /api/verify/identify - 纯牌型识别
+   * @param {Card[]} cards
+   * @returns {Promise<{type,typeName,rank,valid}>}
+   */
+  identify: function (cards) {
+    return apiPost('/api/verify/identify', {
+      cards: serializeCards(cards)
+    });
+  },
+
+  // ============================================================
+  // AI 出牌 API
+  // ============================================================
+
+  /**
+   * POST /api/ai/play - AI 出牌决策
+   * @param {Card[]} hand - AI 手牌
+   * @param {Card[]|null} lastPlay - 上家出的牌
+   * @param {string} difficulty - 'easy'|'normal'|'hard'
+   * @returns {Promise<{choice,explanation,handRemaining,canPlay}>}
+   */
+  aiPlay: function (hand, lastPlay, difficulty) {
+    return apiPost('/api/ai/play', {
+      hand: serializeCards(hand),
+      lastPlay: lastPlay ? serializeCards(lastPlay) : null,
+      difficulty: difficulty || 'normal'
+    });
+  },
+
+  /**
+   * POST /api/ai/evaluate - 评估手牌强度
+   * @param {Card[]} hand
+   * @returns {Promise<{handSize,stats,score,evaluation}>}
+   */
+  evaluateHand: function (hand) {
+    return apiPost('/api/ai/evaluate', {
+      hand: serializeCards(hand)
+    });
+  },
+
+  // ============================================================
+  // 出题系统 API
+  // ============================================================
+
+  /**
+   * POST /api/quiz/generate - 生成题目
+   * @param {string} type - 'identify'|'canBeat'|'findPlay'|'all'
+   * @param {string} difficulty - 'easy'|'normal'|'hard'
+   * @param {number} count - 数量 (1-10)
+   * @returns {Promise}
+   */
+  generateQuiz: function (type, difficulty, count) {
+    return apiPost('/api/quiz/generate', {
+      type: type || 'all',
+      difficulty: difficulty || 'normal',
+      count: count || 1
+    });
+  },
+
+  // ============================================================
+  // 搞事情系统 API
+  // ============================================================
+
+  /**
+   * POST /api/chaos/generate-question - 生成搞事情题目
+   * @param {string} type - 'random'|'vocabulary'|'expression'|'trivia'|'life_hack'
+   * @param {string} difficulty - 'easy'|'normal'|'hard'|'extreme'
+   * @param {number} count - 题目数量 (1-5)
+   * @returns {Promise}
+   */
+  generateChaosQuestion: function (type, difficulty, count) {
+    return apiPost('/api/chaos/generate-question', {
+      type: type || 'random',
+      difficulty: difficulty || 'normal',
+      count: count || 1
+    });
+  },
+
+  /**
+   * POST /api/chaos/check-trigger - 验证答案&触发效果
+   * @param {object} question - 原题目对象
+   * @param {string} selected - 玩家选的选项 (A/B/C/D)
+   * @returns {Promise<{correct,effect,scoreChange}>}
+   */
+  checkChaosTrigger: function (question, selected) {
+    return apiPost('/api/chaos/check-trigger', {
+      question: question,
+      selected: selected
+    });
+  },
+
+  // ============================================================
+  // 错题本 API
+  // ============================================================
+
+  /**
+   * POST /api/wrong-book/record - 记录错题
+   */
+  recordWrong: function (data) {
+    return apiPost('/api/wrong-book/record', data);
+  },
+
+  /**
+   * GET /api/wrong-book - 获取错题列表
+   */
+  getWrongBook: function (params) {
+    var query = '';
+    if (params) {
+      var parts = [];
+      for (var k in params) {
+        if (params.hasOwnProperty(k) && params[k] !== undefined) {
+          parts.push(encodeURIComponent(k) + '=' + encodeURIComponent(params[k]));
+        }
+      }
+      if (parts.length > 0) query = '?' + parts.join('&');
+    }
+    return apiGet('/api/wrong-book' + query);
+  },
+
+  /**
+   * GET /api/wrong-book/stats - 错题统计
+   */
+  getWrongStats: function (playerId) {
+    var query = playerId ? '?playerId=' + encodeURIComponent(playerId) : '';
+    return apiGet('/api/wrong-book/stats' + query);
+  },
+
+  /**
+   * POST /api/wrong-book/clear - 清空错题本
+   */
+  clearWrongBook: function (playerId) {
+    return apiPost('/api/wrong-book/clear', { playerId: playerId || null });
+  },
+
+  // ============================================================
+  // 叫分 API
+  // ============================================================
+
+  /**
+   * POST /api/bidding/start - 开始叫分
+   * @param {Array} hands - [玩家手牌, AI1手牌, AI2手牌]
+   * @param {Array} remaining - 3张底牌
+   * @returns {Promise}
+   */
+  startBidding: function (hands, remaining) {
+    return apiPost('/api/bidding/start', {
+      playerId: 'player',
+      hands: hands,
+      remaining: remaining
+    });
+  },
+
+  /**
+   * POST /api/bidding/place - 叫分
+   * @param {string} biddingId
+   * @param {number} playerIndex - 0=玩家, 1=AI1, 2=AI2
+   * @param {number} bid - 0=不叫, 1/2/3=叫地主
+   * @returns {Promise}
+   */
+  placeBid: function (biddingId, playerIndex, bid) {
+    return apiPost('/api/bidding/place', {
+      biddingId: biddingId,
+      playerIndex: playerIndex,
+      bid: bid
+    });
+  },
+
+  // ============================================================
+  // AI 对话 API
+  // ============================================================
+
+  /**
+   * POST /api/ai/dialogue - 获取AI台词
+   * @param {string} aiId - 'duidui'|'tiantian'
+   * @param {string} event - 'play'|'pass'|'bomb'|'win'|'lose'
+   * @param {string} context - 上下文（可选）
+   * @returns {Promise<{line:string}>}
+   */
+  generateDialogue: function (aiId, event, context) {
+    return apiPost('/api/ai/dialogue', {
+      aiId: aiId,
+      event: event,
+      context: context || ''
+    });
+  }
+};
+
+// ============================================================
+// 底层 HTTP 方法
+// ============================================================
+
+function apiPost(path, body) {
+  var url = API_BASE + path;
+  return new Promise(function (resolve, reject) {
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', url, true);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState === 4) {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            resolve(JSON.parse(xhr.responseText));
+          } catch (e) {
+            reject(new Error('JSON parse error: ' + e.message));
+          }
+        } else {
+          reject(new Error('HTTP ' + xhr.status + ': ' + xhr.responseText));
+        }
+      }
+    };
+    xhr.onerror = function () {
+      reject(new Error('Network error - is the server running on port 3100?'));
+    };
+    xhr.send(JSON.stringify(body));
+  });
+}
+
+function apiGet(path) {
+  var url = API_BASE + path;
+  return new Promise(function (resolve, reject) {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState === 4) {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            resolve(JSON.parse(xhr.responseText));
+          } catch (e) {
+            reject(new Error('JSON parse error: ' + e.message));
+          }
+        } else {
+          reject(new Error('HTTP ' + xhr.status));
+        }
+      }
+    };
+    xhr.onerror = function () {
+      reject(new Error('Network error'));
+    };
+    xhr.send();
+  });
+}
+
+// ============================================================
+// Card → API 序列化
+// ============================================================
+
+function serializeCards(cards) {
+  return cards.map(function (c) {
+    return {
+      suit: c.suit,
+      rank: c.rank,
+      display: c.displayName ? c.displayName() : '',
+      isRed: c.isRed ? c.isRed() : (c.suit === 'heart' || c.suit === 'diamond')
+    };
+  });
+}
+
+```
+
+---
+
+## `src/client/js/game.js` (121,152 字节)
+
+```javascript
+/**
+ * game.js - 斗地主 Phaser 3 主游戏
+ * 960x600 横屏布局
+ * 依赖: Phaser 3 CDN + CardEngine.js + apiClient.js
+ */
+
+// ================================================================
+// Phaser 配置
+// ================================================================
+var GAME_STATE = {
+  INIT: 'INIT',
+  BIDDING: 'BIDDING',
+  PLAYER_TURN: 'PLAYER_TURN',
+  VALIDATING: 'VALIDATING',
+  WAITING_AI: 'WAITING_AI',
+  ROUND_END: 'ROUND_END',
+  CHAOS_MODE: 'CHAOS_MODE'
+};
+
+var GameConfig = {
+  type: Phaser.AUTO,
+  width: 960,
+  height: 600,
+  parent: 'game-container',
+  backgroundColor: '#0D3B0F',
+  dom: { createContainer: true },
+  // 开启高清 DPI 渲染 + 强制抗锯齿
+  resolution: window.devicePixelRatio || 1,
+  autoRound: false, // 允许亚像素渲染
+  antialias: true,  // 开启抗锯齿
+  antialiasGL: true, // WebGL 级别抗锯齿
+  scale: {
+    mode: Phaser.Scale.FIT,
+    autoCenter: Phaser.Scale.CENTER_BOTH
+  },
+  audio: {
+    disableWebAudio: false,
+    noAudio: false
+  },
+  scene: [GameScene]
+};
+
+var game = new Phaser.Game(GameConfig);
+
+// ================================================================
+// SoundManager - Web Audio API 音效
+// ================================================================
+var SoundManager = {
+  scene: null,
+  audioReady: false,
+  init: function (scene) {
+    this.scene = scene;
+    var self = this;
+    function tryResume() {
+      if (self.audioReady) return;
+      var ctx = scene.sound && scene.sound.context;
+      if (ctx && ctx.state === 'suspended') {
+        ctx.resume().then(function () {
+          self.audioReady = true;
+          self.playBGM(); // 激活时尝试播放背景音乐
+        }).catch(function () {});
+      } else if (ctx && ctx.state === 'running') {
+        self.audioReady = true;
+        self.playBGM();
+      }
+      if (!ctx) self.audioReady = true;
+    }
+    scene.input.on('pointerdown', tryResume);
+    scene.time.delayedCall(500, tryResume);
+  },
+  // 播放背景音乐（带容错，找不到文件也不会报错崩溃）
+  bgmNames: ['bgm_chinese', 'bgm_jazz', 'bgm_ambient'],
+  bgmIndex: 0,
+  currentBgm: null,
+  playBGM: function() {
+    if (this.bgmPlaying || !this.scene) return;
+    try {
+      var name = this.bgmNames[this.bgmIndex];
+      var bgm = this.scene.sound.add(name, { loop: true, volume: 0.25 });
+      bgm.play();
+      this.bgmPlaying = true;
+      this.currentBgm = bgm;
+    } catch (e) {
+      console.warn('BGM未找到，已跳过');
+    }
+  },
+  switchBGM: function() {
+    // 停止当前BGM
+    if (this.currentBgm) {
+      this.currentBgm.stop();
+      this.currentBgm.destroy();
+      this.currentBgm = null;
+    }
+    this.bgmPlaying = false;
+    // 切换到下一首
+    this.bgmIndex = (this.bgmIndex + 1) % this.bgmNames.length;
+    var names = ['古风', '爵士', '氛围'];
+    console.log('BGM切换为: ' + names[this.bgmIndex]);
+    // 播放新BGM
+    try {
+      var name = this.bgmNames[this.bgmIndex];
+      var bgm = this.scene.sound.add(name, { loop: true, volume: 0.25 });
+      bgm.play();
+      this.bgmPlaying = true;
+      this.currentBgm = bgm;
+    } catch (e) {
+      console.warn('BGM切换失败');
+    }
+    return names[this.bgmIndex];
+  },
+  // 纯本地动态 TTS 语音引擎
+  speak: function(text, aiId) {
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    var msg = new SpeechSynthesisUtterance(text);
+    msg.lang = 'zh-CN';
+    if (aiId === 'duidui') {
+      msg.pitch = 0.7;   // 王怼怼：低沉、傲慢
+      msg.rate = 1.1;
+    } else {
+      msg.pitch = 1.6;   // 苏甜甜：高频、可爱
+      msg.rate = 1.25;
+    }
+    window.speechSynthesis.speak(msg);
+  },
+  _ensureReady: function () {
+    if (this.audioReady) return true;
+    var ctx = this.scene && this.scene.sound && this.scene.sound.context;
+    if (ctx && ctx.state === 'suspended') {
+      ctx.resume();
+      return false;
+    }
+    if (!ctx) this.audioReady = true;
+    return this.audioReady;
+  },
+  _random: function (base, count) {
+    return base + (Math.floor(Math.random() * count) + 1);
+  },
+  playCard: function () { if(this._ensureReady()) this.scene.sound.play(this._random('cardPlace', 3), { volume: 0.8 }); },
+  selectCard: function () { if(this._ensureReady()) this.scene.sound.play(this._random('cardSlide', 3), { volume: 0.6 }); },
+  deselectCard: function () { if(this._ensureReady()) this.scene.sound.play(this._random('cardSlide', 3), { volume: 0.5 }); },
+  playerTurn: function () { if(this._ensureReady()) this.scene.sound.play(this._random('chipsCollide', 3), { volume: 0.7 }); },
+  bid: function () { if(this._ensureReady()) this.scene.sound.play(this._random('chipsCollide', 3), { volume: 0.7 }); },
+  passBid: function () { if(this._ensureReady()) this.scene.sound.play(this._random('cardSlide', 3), { volume: 0.5 }); },
+  win: function () { if(this._ensureReady()) this.scene.sound.play('cardPlace3', { volume: 0.9 }); },
+  lose: function () { if(this._ensureReady()) this.scene.sound.play('cardSlide1', { volume: 0.6 }); },
+  aiThink: function () {},
+  bomb: function () {
+    if(this._ensureReady()) this.scene.sound.play(this._random('cardPlace', 3), { volume: 1.0, detune: -400 });
+    try { this.scene.sound.play('voice_duidui_bomb', { volume: 0.8 }); } catch(e) {}
+  },
+  pauseAll: function () { if (this.scene) this.scene.sound.pauseAll(); },
+  resumeAll: function () { if (this.scene) this.scene.sound.resumeAll(); },
+  playVoice: function(key) {
+    if (!this.scene || !this._ensureReady()) return;
+    try {
+      this.scene.sound.play(key, { volume: 0.8 });
+    } catch(e) { /* 语音文件没加载到就静默跳过 */ }
+  }
+};
+
+// ================================================================
+// \u724C\u9762\u56FE\u7247\u5E2E\u52A9\u51FD\u6570
+// ================================================================
+function getCardImageKey(card) {
+  if (card.suit === 'joker') return 'cardJoker';
+  var suitMap = { spade:'Spades', heart:'Hearts', club:'Clubs', diamond:'Diamonds' };
+  var rankNames = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'];
+  return 'card' + suitMap[card.suit] + rankNames[card.rank];
+}
+
+// ================================================================
+// 工具函数
+// ================================================================
+function makeAvatarImage(scene, key, x, y, bgColor, name) {
+  var g = scene.add.graphics();
+  g.fillStyle(bgColor, 1);
+  g.fillRoundedRect(x - 20, y - 20, 40, 40, 10);
+  g.lineStyle(2, 0xFFFFFF, 0.8);
+  g.strokeRoundedRect(x - 28, y - 28, 56, 56, 10);
+  var img = scene.add.image(x, y, key).setDisplaySize(34, 34).setDepth(12);
+  return img;
+}
+
+// ================================================================
+// GameScene
+// ================================================================
+function GameScene() {
+  Phaser.Scene.call(this, { key: 'GameScene' });
+  this.selectedCards = [];
+  this.handCards = [];
+  this.playerHand = [];
+  this.cardDomElements = [];
+  this.domContainer = null;
+  this.gameState = GAME_STATE.INIT;
+  this.lastPlay = null;
+  this.lastPlayInfo = null;
+  this.lastPlayPlayer = null;
+  this.passCount = 0;
+  this.isAPIMode = true;
+  this.round = 1;
+  this.maxRounds = 10;
+}
+
+GameScene.prototype = Object.create(Phaser.Scene.prototype);
+GameScene.prototype.constructor = GameScene;
+
+GameScene.prototype.init = function () {
+  var self = this;
+
+  var deck = new Doudizhu.Deck();
+  deck.shuffle();
+  var dealResult = deck.deal(3, 17);
+  this.playerHand = Doudizhu.sortCards(dealResult.hands[0]);
+  this.ai1Hand = dealResult.hands[1];
+  this.ai2Hand = dealResult.hands[2];
+  this.remainingCards = dealResult.remaining;
+  this.selectedCards = [];
+  this.gameState = GAME_STATE.BIDDING;
+  this.lastPlay = null;
+  this.lastPlayInfo = null;
+  this.lastPlayPlayer = null;
+  this.passCount = 0;
+  this.biddingState = null;
+  this.biddingUI = [];
+  this.landlordIndex = -1;
+  this.isLandlord = false;
+  this.playHistory = [];
+  this.gameStartTime = Date.now();
+  this.totalBombs = 0;
+  this.rocketCount = 0;
+  this.chaosScore = 0;
+  this.chaosTimeoutTimer = null;
+  // 重置气泡队列全局变量
+  this.chaosBubbleTimer = null;
+  this.chaosBubbleQueue = [];
+  bubbleShowing = false;
+};
+
+GameScene.prototype.preload = function () {
+  // \u5934\u50CF
+  this.load.image('avatar_wang', 'assets/avatars/wang_duidui.png');
+  this.load.image('avatar_su', 'assets/avatars/su_tiantian.png');
+
+  // \u724C\u9762\u56FE\u7247 (54\u5F20)
+  var suitNames = ['Clubs','Diamonds','Hearts','Spades'];
+  var rankNames = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'];
+  for (var si = 0; si < suitNames.length; si++) {
+    for (var ri = 0; ri < rankNames.length; ri++) {
+      var key = 'card' + suitNames[si] + rankNames[ri];
+      this.load.image(key, 'assets/cards/' + key + '.png');
+    }
+  }
+  this.load.image('cardJoker', 'assets/cards/cardJoker.png');
+  this.load.image('cardBack', 'assets/cards/cardBack_blue1.png');
+
+  // \u97F3\u6548
+  for (var ai = 1; ai <= 3; ai++) {
+    this.load.audio('cardPlace' + ai, 'assets/sounds/cardPlace' + ai + '.mp3');
+    this.load.audio('cardSlide' + ai, 'assets/sounds/cardSlide' + ai + '.mp3');
+    this.load.audio('chipsCollide' + ai, 'assets/sounds/chipsCollide' + ai + '.mp3');
+  }
+  this.load.audio('dieShuffle1', 'assets/sounds/dieShuffle1.mp3');
+  this.load.audio('bgm_chinese', 'assets/sounds/bgm_chinese.mp3');
+  this.load.audio('bgm_jazz', 'assets/sounds/bgm_jazz.mp3');
+  this.load.audio('bgm_ambient', 'assets/sounds/bgm_ambient.mp3');
+  // 额外音效
+  this.load.audio('cardShuffle', 'assets/sounds/cardShuffle.mp3');
+  this.load.audio('cardFan1', 'assets/sounds/cardFan1.mp3');
+  this.load.audio('packOpen1', 'assets/sounds/packOpen1.mp3');
+  this.load.audio('cardPlace4', 'assets/sounds/cardPlace4.mp3');
+  this.load.audio('cardSlide4', 'assets/sounds/cardSlide4.mp3');
+  this.load.audio('cardShove1', 'assets/sounds/cardShove1.mp3');
+  this.load.audio('chipLay1', 'assets/sounds/chipLay1.mp3');
+  this.load.audio('chipsStack1', 'assets/sounds/chipsStack1.mp3');
+  this.load.audio('chipsHandle1', 'assets/sounds/chipsHandle1.mp3');
+
+  // 角色语音（怼怼8句 + 甜甜7句）
+  this.load.audio('voice_duidui_taunt', 'assets/sounds/voice_duidui_taunt.mp3');
+  this.load.audio('voice_duidui_correct', 'assets/sounds/voice_duidui_correct.mp3');
+  this.load.audio('voice_duidui_wrong', 'assets/sounds/voice_duidui_wrong.mp3');
+  this.load.audio('voice_duidui_swap', 'assets/sounds/voice_duidui_swap.mp3');
+  this.load.audio('voice_duidui_bomb', 'assets/sounds/voice_duidui_bomb.mp3');
+  this.load.audio('voice_duidui_rocket', 'assets/sounds/voice_duidui_rocket.mp3');
+  this.load.audio('voice_duidui_hurry', 'assets/sounds/voice_duidui_hurry.mp3');
+  this.load.audio('voice_duidui_pass', 'assets/sounds/voice_duidui_pass.mp3');
+  this.load.audio('voice_tiantian_start', 'assets/sounds/voice_tiantian_start.mp3');
+  this.load.audio('voice_tiantian_correct', 'assets/sounds/voice_tiantian_correct.mp3');
+  this.load.audio('voice_tiantian_wrong', 'assets/sounds/voice_tiantian_wrong.mp3');
+  this.load.audio('voice_tiantian_timeout', 'assets/sounds/voice_tiantian_timeout.mp3');
+  this.load.audio('voice_tiantian_swap', 'assets/sounds/voice_tiantian_swap.mp3');
+  this.load.audio('voice_tiantian_turn', 'assets/sounds/voice_tiantian_turn.mp3');
+  this.load.audio('voice_tiantian_chaos', 'assets/sounds/voice_tiantian_chaos.mp3');
+};
+
+GameScene.prototype.create = function () {
+  var self = this;
+  // 将摄像机往左移动，让960x600的核心游玩区永远居中在长屏中央
+  var offsetX = (this.sys.game.config.width - 960) / 2;
+  this.cameras.main.setScroll(-offsetX, 0);
+  drawTableBackground(this);
+  createTopBar(this);
+  createAIArea(this);
+  createPlayArea(this);
+  createHandArea(this);
+  createActionButtons(this);
+
+  this.renderPlayerHand();
+  this.setStatusText('\u8F6E\u5230\u4F60\u51FA\u724C\uFF08\u81EA\u7531\u51FA\u724C\uFF09');
+
+  // 初始化音效
+  SoundManager.init(this);
+
+  // 创建出牌记录区域
+  createPlayHistoryArea(this);
+
+  this.time.delayedCall(500, function () {
+    self.checkAPIConnection();
+  });
+
+  var fsBtn = self.add.text(940, 24, '⛶', {
+    fontSize: '22px', color: '#FFFFFF',
+    backgroundColor: '#00000066', padding: { x: 8, y: 6 }
+  }).setOrigin(1, 0.5).setInteractive().setDepth(200);
+
+  fsBtn.on('pointerdown', function () {
+    // 在"等比留边"和"裁剪放大"之间切换
+    if (game.scale.scaleMode === Phaser.Scale.FIT) {
+      game.scale.scaleMode = Phaser.Scale.ENVELOP;
+      showToast(self, '已切换为：放大沉浸模式');
+    } else {
+      game.scale.scaleMode = Phaser.Scale.FIT;
+      showToast(self, '已切换为：等比全览模式');
+    }
+    game.scale.updateScale();
+
+    // 触发系统级全屏
+    var el = document.documentElement;
+    if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+      if (el.requestFullscreen) el.requestFullscreen();
+      else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+    }
+  });
+
+  // 首次点击自动全屏
+  var autoFSdone = false;
+  self.input.once('pointerdown', function () {
+    if (autoFSdone) return;
+    autoFSdone = true;
+    var el = document.documentElement;
+    if (el.requestFullscreen) el.requestFullscreen().catch(function(){});
+    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+  });
+
+  // BGM切换按钮
+  var bgmBtn = self.add.text(900, 56, '🎵', {
+    fontSize: '16px', color: '#FFFFFF',
+    backgroundColor: '#00000066',
+    padding: { x: 6, y: 4 }
+  }).setOrigin(0.5, 0).setInteractive().setDepth(200);
+  bgmBtn.on('pointerdown', function () {
+    var name = SoundManager.switchBGM();
+    showToast(self, 'BGM: ' + name);
+  });
+
+  // 叫分阶段
+  this.time.delayedCall(800, function () {
+    self.startBiddingPhase();
+  });
+};
+
+// ================================================================
+// 背景
+// ================================================================
+function drawTableBackground(scene) {
+  var W = 960, H = 600;
+  var bg = scene.add.graphics();
+  // 更平滑高级的中心径向渐变感（通过叠加半透明图形模拟）
+  bg.fillGradientStyle(0x2E7D32, 0x2E7D32, 0x0D3B0F, 0x0D3B0F, 1);
+  bg.fillRect(-1000, -500, 3000, 2000);
+  // 桌面高光（模拟吊灯打在牌桌上的质感）
+  var glow = scene.add.graphics();
+  glow.fillStyle(0x4CAF50, 0.12);
+  glow.fillEllipse(W / 2, H / 2 - 40, 680, 420);
+  glow.fillStyle(0x66BB6A, 0.08);
+  glow.fillEllipse(W / 2, H / 2 - 40, 450, 280);
+  // 牌桌内嵌金线边框，提升高级感
+  var border = scene.add.graphics();
+  border.lineStyle(2, 0xFFD700, 0.15); // 微弱的金色描边
+  border.strokeRoundedRect(16, 56, W - 32, H - 136, 12);
+  // 弱化原有的出牌框提示线
+  var diamond = scene.add.graphics();
+  diamond.lineStyle(1, 0x66BB6A, 0.08);
+  var cx = W / 2, cy = H / 2 - 40;
+  diamond.strokeRect(cx - 80, cy - 83, 118, 166);
+  diamond.strokeRect(cx - 48, cy - 59, 96, 118);
+  // 中心弱化装饰
+  diamond.strokeCircle(cx, cy - 10, 67);
+  diamond.strokeCircle(cx, cy - 10, 93);
+}
+
+// ================================================================
+// 顶部状态栏
+// ================================================================
+function createTopBar(scene) {
+  var tb = scene.add.graphics();
+  tb.fillStyle(0x000000, 0.35);
+  tb.fillRect(0, 0, 960, 56).setDepth(10);
+
+  scene.roundText = scene.add.text(12, 18, '第 1/10 回合', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '14px', color: '#E8F5E9', fontStyle: 'bold'
+  }).setDepth(11);
+
+  // AI1 (王怼怼) - 居左排版
+  var wAvatar = makeAvatarImage(scene, 'avatar_wang', 160, 28, 0x4FC3F7);
+  scene.add.text(195, 12, '王怼怼', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '13px', color: '#E8F5E9', fontStyle: 'bold'
+  }).setDepth(11);
+  scene.ai1Count = scene.add.text(195, 30, '剩余 17 张', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '11px', color: '#A5D6A7'
+  }).setDepth(11);
+
+  // AI2 (苏甜甜) - 居右排版
+  var sAvatar = makeAvatarImage(scene, 'avatar_su', 800, 28, 0xFFB74D);
+  scene.add.text(765, 12, '苏甜甜', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '13px', color: '#E8F5E9', fontStyle: 'bold'
+  }).setOrigin(1, 0).setDepth(11);
+  scene.ai2Count = scene.add.text(765, 30, '剩余 17 张', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '11px', color: '#A5D6A7'
+  }).setOrigin(1, 0).setDepth(11);
+
+  // 中央状态文字
+  scene.statusText = scene.add.text(480, 18, '', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '14px', color: '#A5D6A7', fontStyle: 'bold'
+  }).setOrigin(0.5, 0).setDepth(11);
+
+  var sep = scene.add.graphics();
+  sep.lineStyle(1.5, 0x66BB6A, 0.3);
+  sep.lineBetween(0, 56, 960, 56);
+  sep.setDepth(11);
+}
+
+// ================================================================
+// AI 区域
+// ================================================================
+function createAIArea(scene) {
+  // AI moved to top bar
+}
+
+// ================================================================
+// 中央出牌区
+// ================================================================
+function createPlayArea(scene) {
+  var cx = 480;
+  var playBg = scene.add.graphics();
+  playBg.fillStyle(0x000000, 0.1);
+  playBg.fillRoundedRect(160, 59, 640, 206, 10).setDepth(10);
+
+  scene.add.text(cx, 218, '\u51FA\u724C\u533A', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '10px', color: '#66BB6A', alpha: 0.4
+  }).setOrigin(0.5).setDepth(11);
+
+  scene.ai1PlayLabel = scene.add.text(182, 65, '\u738B\u603C\u603C\uFF1A', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '10px', color: '#A5D6A7'
+  }).setDepth(11);
+  scene.ai1PlayCardsGraphics = scene.add.graphics().setDepth(11);
+
+  scene.ai2PlayLabel = scene.add.text(690, 65, '\u82CF\u751C\u751C\uFF1A', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '10px', color: '#A5D6A7'
+  }).setDepth(11);
+  scene.ai2PlayCardsGraphics = scene.add.graphics().setDepth(11);
+
+  scene.myPlayLabel = scene.add.text(cx, 270, '\u4F60\u51FA\uFF1A', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '10px', color: '#A5D6A7'
+  }).setOrigin(0.5).setDepth(11);
+  scene.myPlayCardsGraphics = scene.add.graphics().setDepth(11);
+
+  scene.add.text(460, 60, '\u5E95\u724C: ? ? ?', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '8px', color: '#66BB6A', alpha: 0.4
+  }).setDepth(11);
+}
+
+// ================================================================
+// 手牌区
+// ================================================================
+function createHandArea(scene) {
+  var handBg = scene.add.graphics();
+  handBg.fillStyle(0x000000, 0.15);
+  handBg.fillRoundedRect(20, 300, 920, 115, 10).setDepth(10);
+  scene.add.text(68, 305, '\u4F60\u7684\u624B\u724C', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '11px', color: '#A5D6A7'
+  }).setDepth(11);
+}
+
+GameScene.prototype.renderPlayerHand = function () {
+  var self = this;
+  var hand = this.playerHand;
+  if (!hand || hand.length === 0) return;
+
+  // \u9500\u6BC1\u65E7\u7684\u624B\u724C\u5BF9\u8C61
+  for (var di = 0; di < this.cardDomElements.length; di++) {
+    var old = this.cardDomElements[di];
+    if (old) {
+      if (old.img) old.img.destroy();
+      old.destroy();
+    }
+  }
+  this.cardDomElements = [];
+  this.handCards = [];
+
+  var n = hand.length, cw = 56, ch = 80;
+  // 手牌轻微重叠10%（约5px），保持牌面可读
+  var overlap = -5;
+  var totalW = cw * n + overlap * (n - 1);
+  if (totalW > 960) {
+    cw = (960 - overlap * (n - 1)) / n;
+    ch = cw * 80 / 56;
+    totalW = 960;
+  }
+  var startX = (960 - totalW) / 2;
+  var baseY = 345;
+
+  for (var ii = 0; ii < n; ii++) {
+    var card = hand[ii];
+    var cx = startX + ii * (cw + overlap) + cw / 2;
+    var cy = baseY;
+    var key = getCardImageKey(card);
+
+    var img = self.add.image(cx, cy, key).setDisplaySize(cw, ch).setDepth(110);
+
+    // \u70B9\u51FB\u4E0E\u9009\u62E9
+    img.setInteractive();
+    img.setData('cardIdx', ii);
+    img.setData('card', card);
+    img.setData('selected', false);
+    img.setData('origY', cy);
+
+    img.on('pointerdown', function () {
+      if (self.gameState !== GAME_STATE.PLAYER_TURN) {
+        showToast(self, '\u73B0\u5728\u4E0D\u662F\u4F60\u7684\u51FA\u724C\u9636\u6BB5');
+        return;
+      }
+      var idx2 = this.getData('cardIdx');
+      var s = this.getData('selected');
+      if (s) {
+        this.y += 16;
+        this.setData('selected', false);
+        var pos = self.selectedCards.indexOf(idx2);
+        if (pos >= 0) self.selectedCards.splice(pos, 1);
+        SoundManager.deselectCard();
+      } else {
+        this.y -= 16;
+        this.setData('selected', true);
+        self.selectedCards.push(idx2);
+        SoundManager.selectCard();
+      }
+    });
+
+    self.cardDomElements.push(img);
+    self.handCards.push(img);
+  }
+};
+// ================================================================
+
+GameScene.prototype._clearCardSelection = function () {
+  for (var ci = 0; ci < this.cardDomElements.length; ci++) {
+    var el = this.cardDomElements[ci];
+    if (!el) continue;
+    var s = el.getData('selected');
+    if (s) {
+      var origY = el.getData('origY');
+      if (origY !== undefined) { el.y = origY; }
+      el.setData('selected', false);
+    }
+  }
+};
+GameScene.prototype._highlightCard = function (el) {
+  if (!el) return;
+  el.setData('selected', true);
+  var origY = el.getData('origY');
+  if (origY !== undefined) { el.y = origY - 16; }
+};
+
+// ================================================================
+// 叫分阶段
+// ================================================================
+
+GameScene.prototype.startBiddingPhase = function () {
+  var self = this;
+  this.gameState = GAME_STATE.BIDDING;
+  this.setStatusText('\u53EB\u5206\u9636\u6BB5...');
+
+  // 构建3人手牌的简短JSON用于API
+  var handsForAPI = [
+    this.playerHand.map(function (c) { return { suit: c.suit, rank: c.rank }; }),
+    this.ai1Hand.map(function (c) { return { suit: c.suit, rank: c.rank }; }),
+    this.ai2Hand.map(function (c) { return { suit: c.suit, rank: c.rank }; })
+  ];
+  var remainingForAPI = this.remainingCards.map(function (c) {
+    return { suit: c.suit, rank: c.rank };
+  });
+
+  // 隐藏功能按钮
+  this.hideActionButtons();
+
+  if (this.isAPIMode && typeof ApiClient !== 'undefined') {
+    ApiClient.startBidding(handsForAPI, remainingForAPI)
+      .then(function (res) {
+        self.onBiddingStarted(res);
+      })
+      .catch(function () {
+        // API 不可用，本地模式：随机定地主
+        self.localAssignLandlord();
+      });
+  } else {
+    self.localAssignLandlord();
+  }
+};
+
+GameScene.prototype.onBiddingStarted = function (res) {
+  this.biddingState = res;
+  this.biddingId = res.biddingId;
+
+  this.setStatusText('\u53EB\u5206\u9636\u6BB5');
+
+  if (res.turn === 0) {
+    // 轮到玩家叫分
+    this.showBiddingUI();
+  } else if (res.turn === 1) {
+    // 轮到王怼怼
+    this.setStatusText('\u738B\u603C\u603C\u601D\u8003\u4E2D...');
+    var self = this;
+    this.time.delayedCall(1000, function () {
+      self.doAIBidding(1);
+    });
+  } else {
+    // 轮到苏甜甜
+    this.setStatusText('\u82CF\u751C\u751C\u601D\u8003\u4E2D...');
+    var self2 = this;
+    this.time.delayedCall(1000, function () {
+      self2.doAIBidding(2);
+    });
+  }
+};
+
+GameScene.prototype.showBiddingUI = function () {
+  var self = this;
+  this.hideBiddingUI();
+
+  var cx = 480;
+  var uiY = 280;
+  var bids = [
+    { label: '\u4E0D\u53EB', value: 0, color: 0xFF6B6B },
+    { label: '1\u5206', value: 1, color: 0x4ECDC4 },
+    { label: '2\u5206', value: 2, color: 0xFFD93D },
+    { label: '3\u5206', value: 3, color: 0xFF6B35 }
+  ];
+
+  // 提示文字
+  var promptText = this.add.text(cx, 170, '\u8BF7\u53EB\u5206', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '15px', color: '#FFFFFF', fontStyle: 'bold'
+  }).setOrigin(0.5).setDepth(200);
+  this.biddingUI.push(promptText);
+
+  var bw = 96, bh = 52, gap = 12;
+  var totalW = bw * 4 + gap * 3;
+  var startX = (960 - totalW) / 2;
+
+  for (var i = 0; i < bids.length; i++) {
+    var b = bids[i];
+    var bx = startX + i * (bw + gap);
+
+    var bg = this.add.graphics().setDepth(200);
+    bg.fillStyle(b.color, 1);
+    bg.fillRoundedRect(bx, uiY, bw, bh, 10);
+    bg.setInteractive(new Phaser.Geom.Rectangle(bx, uiY, bw, bh), Phaser.Geom.Rectangle.Contains);
+
+    var txt = this.add.text(bx + bw / 2, uiY + bh / 2, b.label, {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '14px', color: '#FFFFFF', fontStyle: 'bold'
+    }).setOrigin(0.5).setDepth(201);
+
+    (function (val, buttonEl) {
+      bg.on('pointerup', function () {
+        self.handlePlayerBid(val);
+      });
+    })(b.value, bg);
+
+    this.biddingUI.push(bg);
+    this.biddingUI.push(txt);
+  }
+
+  // 手牌强度提示
+  var state = this.biddingState;
+  if (state && state.handStrength !== undefined) {
+    var strength = state.handStrength;
+    var label = strength >= 20 ? '\u624B\u724C\u5F88\u5F3A' : (strength >= 14 ? '\u624B\u724C\u4E0D\u9519' : (strength >= 9 ? '\u624B\u724C\u4E00\u822C' : '\u624B\u724C\u8F83\u5F31'));
+    var infoText = this.add.text(cx, 260, '\u2605 ' + label + ' (\u5F3A\u5EA6\u5206: ' + strength + ')', {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '10px', color: '#A5D6A7'
+    }).setOrigin(0.5).setDepth(200);
+    this.biddingUI.push(infoText);
+  }
+};
+
+GameScene.prototype.hideBiddingUI = function () {
+  for (var i = 0; i < this.biddingUI.length; i++) {
+    if (this.biddingUI[i]) this.biddingUI[i].destroy();
+  }
+  this.biddingUI = [];
+};
+
+GameScene.prototype.handlePlayerBid = function (bid) {
+  var self = this;
+  this.hideBiddingUI();
+
+  var bidLabel = bid === 0 ? '\u4E0D\u53EB' : bid + '\u5206';
+  this.setStatusText('\u4F60\u53EB\u4E86 ' + bidLabel);
+  if (bid > 0) { SoundManager.bid(); } else { SoundManager.passBid(); }
+
+  if (this.isAPIMode && this.biddingId) {
+    ApiClient.placeBid(this.biddingId, 0, bid)
+      .then(function (res) {
+        self.onBiddingResult(res);
+      })
+      .catch(function () {
+        self.setStatusText('\u53EB\u5206\u670D\u52A1\u5F02\u5E38\uFF0C\u672C\u5730\u6A21\u5F0F');
+        self.localAssignLandlord();
+      });
+  } else {
+    this.localAssignLandlord();
+  }
+};
+
+GameScene.prototype.onBiddingResult = function (res) {
+  if (res.phase === 'done') {
+    // 叫分结束，确定地主
+    this.finishBidding(res);
+    return;
+  }
+
+  if (res.phase === 'redeal') {
+    this.setStatusText('\u4E09\u5BB6\u90FD\u4E0D\u53EB\uFF0C\u91CD\u65B0\u53D1\u724C');
+    showToast(this, '\u91CD\u65B0\u53D1\u724C...');
+    var self = this;
+    this.time.delayedCall(1500, function () {
+      self.restartGame();
+    });
+    return;
+  }
+
+  // 轮到下一个玩家
+  if (res.currentBidder === 'ai1') {
+    this.setStatusText('\u738B\u603C\u603C\u601D\u8003\u4E2D...');
+    var self = this;
+    this.time.delayedCall(1000, function () {
+      self.doAIBidding(1);
+    });
+  } else if (res.currentBidder === 'ai2') {
+    this.setStatusText('\u82CF\u751C\u751C\u601D\u8003\u4E2D...');
+    var self = this;
+    this.time.delayedCall(1000, function () {
+      self.doAIBidding(2);
+    });
+  } else if (res.currentBidder === 'player') {
+    // 又轮到玩家
+    this.showBiddingUI();
+  }
+};
+
+GameScene.prototype.doAIBidding = function (aiIndex) {
+  var self = this;
+  var hand = aiIndex === 1 ? this.ai1Hand : this.ai2Hand;
+  var aiName = aiIndex === 1 ? '\u738B\u603C\u603C' : '\u82CF\u751C\u751C';
+
+  var currentBid = this.biddingState ? this.biddingState.highestBid : 0;
+
+  // 本地 AI 叫分逻辑
+  var groups = {};
+  for (var i = 0; i < hand.length; i++) {
+    groups[hand[i].rank] = (groups[hand[i].rank] || 0) + 1;
+  }
+  var score = 0;
+  if (groups[14]) score += 6;
+  if (groups[13]) score += 4;
+  if (groups[12]) score += 2;
+  for (var r in groups) {
+    if (groups[r] === 4) score += 12;
+    else if (groups[r] === 3) score += 4;
+  }
+
+  var bid = 0;
+  if (score >= 20) bid = 3;
+  else if (score >= 14) bid = 2;
+  else if (score >= 9) bid = 1;
+  else bid = 0;
+
+  if (bid <= currentBid) {
+    if (score >= 20 && currentBid < 3) bid = 3;
+    else bid = 0;
+  }
+
+  var bidLabel = bid === 0 ? '\u4E0D\u53EB' : bid + '\u5206';
+  this.setStatusText(aiName + ' \u53EB\u4E86 ' + bidLabel);
+
+  if (this.isAPIMode && this.biddingId) {
+    ApiClient.placeBid(this.biddingId, aiIndex, bid)
+      .then(function (res) {
+        self.onBiddingResult(res);
+      })
+      .catch(function () {
+        self.setStatusText('\u53EB\u5206\u670D\u52A1\u5F02\u5E38');
+        self.localAssignLandlord();
+      });
+  } else {
+    this.localAssignLandlord();
+  }
+};
+
+// ================================================================
+// 地主/农民身份标识
+// ================================================================
+GameScene.prototype.updateLandlordUI = function() {
+  if (this.landlordBadgePlayer) this.landlordBadgePlayer.destroy();
+  if (this.landlordBadgeAi1) this.landlordBadgeAi1.destroy();
+  if (this.landlordBadgeAi2) this.landlordBadgeAi2.destroy();
+  if (this.landlordIndex === 0) {
+    this.landlordBadgePlayer = this.add.text(68, 385, '👑 地主', {
+      fontFamily: '"PingFang SC",sans-serif',
+      fontSize: '12px', color: '#000000',
+      backgroundColor: '#FFD700',
+      padding: {x: 4, y: 2},
+      fontStyle: 'bold'
+    }).setDepth(11);
+  } else if (this.landlordIndex === 1) {
+    this.landlordBadgeAi1 = this.add.text(145, 9, '👑', {
+      fontSize: '16px'
+    }).setDepth(12);
+  } else if (this.landlordIndex === 2) {
+    this.landlordBadgeAi2 = this.add.text(765, 9, '👑', {
+      fontSize: '16px'
+    }).setDepth(12);
+  }
+};
+
+GameScene.prototype.finishBidding = function (res) {
+  this.landlordIndex = res.highestBidder;
+  this.isLandlord = (res.highestBidder === 0);
+  this.updateLandlordUI();
+
+  // 显示底牌
+  this.showBottomCards(res.landlordCards);
+
+  // 如果玩家是地主，把底牌加入手牌
+  if (res.highestBidder === 0 && res.landlordHand) {
+    this.playerHand = res.landlordHand.map(function (c) {
+      return new Doudizhu.Card(c.suit, c.rank);
+    });
+    this.playerHand = Doudizhu.sortCards(this.playerHand);
+    this.renderPlayerHand();
+  }
+
+  // 如果 AI 是地主，把底牌加入 AI 手牌
+  if (res.highestBidder === 1) {
+    var bottomCards = (res.landlordCards || []).map(function (c) {
+      return new Doudizhu.Card(c.suit, c.rank);
+    });
+    for (var i = 0; i < bottomCards.length; i++) {
+      this.ai1Hand.push(bottomCards[i]);
+    }
+    this.updateAICount(1);
+  }
+  if (res.highestBidder === 2) {
+    var bottomCards2 = (res.landlordCards || []).map(function (c) {
+      return new Doudizhu.Card(c.suit, c.rank);
+    });
+    for (var i = 0; i < bottomCards2.length; i++) {
+      this.ai2Hand.push(bottomCards2[i]);
+    }
+    this.updateAICount(2);
+  }
+
+  this.setStatusText(res.winnerText + ' \u5F00\u59CB\u51FA\u724C');
+  showToast(this, res.winnerText);
+
+  var self = this;
+  this.time.delayedCall(1200, function () {
+    self.gameState = GAME_STATE.PLAYER_TURN;
+    self.setStatusText('\u8F6E\u5230\u4F60\u51FA\u724C\uFF08\u81EA\u7531\u51FA\u724C\uFF09');
+    self.showActionButtons();
+    SoundManager.playerTurn();
+  });
+};
+
+GameScene.prototype.showBottomCards = function (cards) {
+  // \u6E05\u9664\u65E7\u7684\u5E95\u724C\u56FE\u7247
+  if (this.bottomCardImgs) {
+    for (var bi = 0; bi < this.bottomCardImgs.length; bi++) this.bottomCardImgs[bi].destroy();
+  }
+  this.bottomCardImgs = [];
+
+  if (this.bottomCardText) this.bottomCardText.destroy();
+
+  if (!cards || cards.length === 0) {
+    // \u6CA1\u6709\u5E95\u724C\u65F6\u663E\u793A\u95EE\u53F7
+    this.bottomCardText = this.add.text(480, 72, '\u5E95\u724C: ? ? ?', {
+      fontFamily: '\u201CPingFang SC\u201D,\u201CMicrosoft YaHei\u201D,sans-serif',
+      fontSize: '8px', color: '#66BB6A', alpha: 0.4
+    }).setOrigin(0.5).setDepth(20);
+    return;
+  }
+  // B38: \u53D6\u6D88\u663E\u793A\u5E95\u724C\u724C\u80CC\u56FE\u7247\uFF0C\u5E95\u724C\u76F4\u63A5\u878D\u5165\u5730\u4E3B\u624B\u724C
+};
+
+// ================================================================
+// 叫地主 - 本地逻辑
+// ================================================================
+GameScene.prototype.localAssignLandlord = function () {
+  this.landlordIndex = Math.floor(Math.random() * 3);
+  this.isLandlord = (this.landlordIndex === 0);
+  this.updateLandlordUI();
+  if (this.landlordIndex === 0) {
+    for (var i = 0; i < this.remainingCards.length; i++) {
+      this.playerHand.push(this.remainingCards[i]);
+    }
+    this.playerHand = Doudizhu.sortCards(this.playerHand);
+    this.renderPlayerHand();
+  } else if (this.landlordIndex === 1) {
+    for (var i = 0; i < this.remainingCards.length; i++) {
+      this.ai1Hand.push(this.remainingCards[i]);
+    }
+    this.updateAICount(1);
+  } else {
+    for (var i = 0; i < this.remainingCards.length; i++) {
+      this.ai2Hand.push(this.remainingCards[i]);
+    }
+    this.updateAICount(2);
+  }
+  this.showBottomCards(this.remainingCards);
+  this.setStatusText('开始出牌');
+  var self = this;
+  this.time.delayedCall(1200, function () {
+    self.gameState = GAME_STATE.PLAYER_TURN;
+    self.setStatusText('轮到你出牌（自由出牌）');
+    self.showActionButtons();
+  });
+};
+
+// ================================================================
+// 重开游戏 & 隐藏功能按钮
+// ================================================================
+GameScene.prototype.restartGame = function () {
+  // 销毁所有 UI 元素
+  this.hideBiddingUI();
+  this.scene.restart();
+};
+
+// 隐藏功能按钮
+GameScene.prototype.hideActionButtons = function () {
+  if (!this.actionButtons) return;
+  for (var i = 0; i < this.actionButtons.length; i++) {
+    if (this.actionButtons[i]) this.actionButtons[i].destroy();
+  }
+  this.actionButtons = [];
+};
+
+GameScene.prototype.showActionButtons = function () {
+  this.hideActionButtons();
+  createActionButtons(this);
+};
+
+// ================================================================
+// API 连接 & 游戏逻辑
+// ================================================================
+
+GameScene.prototype.setStatusText = function (text) {
+  if (this.statusText) this.statusText.setText(text);
+};
+
+GameScene.prototype.checkAPIConnection = function () {
+  var self = this;
+  if (typeof ApiClient === 'undefined') {
+    console.warn('ApiClient not loaded, using local mode');
+    self.isAPIMode = false;
+    return;
+  }
+  // \u53EA\u68C0\u67E5\u670D\u52A1\u5668\u662F\u5426\u5728\u7EBF\uFF0C\u4E0D\u53D1\u771F\u5B9E\u724C\u68C0\u6D4B
+  apiGetSimple('/api/health')
+    .then(function (res) {
+      console.log('API OK, using API mode');
+      self.isAPIMode = true;
+      self.setStatusText('\u8FDE\u63A5\u670D\u52A1\u5668\u6210\u529F');
+    })
+    .catch(function (err) {
+      console.warn('API unavailable, using local mode:', err.message);
+      self.isAPIMode = false;
+      self.setStatusText('\u672C\u5730\u6A21\u5F0F\uFF08\u672A\u68C0\u6D4B\u5230\u540E\u7AEF\uFF09');
+    });
+};
+
+function apiGetSimple(path) {
+  var url = (typeof window !== 'undefined' ? (window.location.protocol + '//' + window.location.host) : 'http://localhost:3100') + path;
+  return new Promise(function (resolve, reject) {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState === 4) {
+        if (xhr.status >= 200 && xhr.status < 300) resolve(xhr.responseText);
+        else reject(new Error('HTTP ' + xhr.status));
+      }
+    };
+    xhr.onerror = function () { reject(new Error('Network error')); };
+    xhr.send();
+  });
+}
+
+GameScene.prototype.doPlayerPlay = function () {
+  var self = this;
+  // 1. \u72B6\u6001\u62E6\u622A
+  if (self.gameState !== GAME_STATE.PLAYER_TURN) {
+    showToast(self, '\u73B0\u5728\u4E0D\u662F\u4F60\u7684\u51FA\u724C\u9636\u6BB5');
+    return;
+  }
+  if (this.selectedCards.length === 0) {
+    showToast(this, '\u8BF7\u5148\u9009\u62E9\u624B\u724C');
+    return;
+  }
+  // 2. \u83B7\u53D6\u9009\u4E2D\u7684\u724C\u5E76\u672C\u5730\u8BC6\u522B\u724C\u578B
+  var playCards = this.selectedCards.map(function (idx) { return self.playerHand[idx]; });
+  var info = Doudizhu.identifyType(playCards);
+  if (info.type === Doudizhu.HAND_TYPES.INVALID) {
+    showToast(this, '\u975E\u6CD5\u724C\u578B\u7EC4\u5408');
+    return;
+  }
+  // 3. \u672C\u5730\u9A8C\u8BC1\u80FD\u5426\u538B\u8FC7\u4E0A\u5BB6
+  if (this.lastPlay && this.lastPlay.length > 0) {
+    if (!Doudizhu.canBeat(playCards, this.lastPlay)) {
+      showToast(this, '\u4E0D\u80FD\u538B\u8FC7\u4E0A\u5BB6\u7684\u724C');
+      return;
+    }
+  }
+  // 4. [\u6838\u5FC3\u4FEE\u590D] \u5E9F\u5F03 API \u7F51\u7EDC\u8BF7\u6C42\uFF0C\u76F4\u63A5\u5224\u5B9A\u6210\u529F\u5E76\u51FA\u724C
+  this.confirmPlay(playCards, info);
+};
+
+GameScene.prototype.confirmPlay = function (playCards, info) {
+  var self = this;
+  var playSet = {};
+  for (var i = 0; i < playCards.length; i++) {
+    var key = playCards[i].suit + ':' + playCards[i].rank;
+    playSet[key] = (playSet[key] || 0) + 1;
+  }
+  for (var j = this.playerHand.length - 1; j >= 0; j--) {
+    var key = this.playerHand[j].suit + ':' + this.playerHand[j].rank;
+    if (playSet[key] > 0) { playSet[key]--; this.playerHand.splice(j, 1); }
+  }
+
+  this.lastPlay = playCards;
+  this.lastPlayInfo = info;
+  this.lastPlayPlayer = 'player';
+  this.passCount = 0;
+  this.displayPlay(playCards, 'player');
+  this.setStatusText('\u5DF2\u51FA ' + (Doudizhu.HAND_TYPE_NAMES[info.type] || info.type));
+  this.selectedCards = [];
+  this.renderPlayerHand();
+
+  // \u51FA\u724C\u8BB0\u5F55+\u97F3\u6548
+  this.addPlayHistory('player', playCards);
+  SoundManager.playCard();
+  if (info.type === 'BOMB' || info.type === 'ROCKET') { this.totalBombs++; SoundManager.bomb(); }
+  if (info.type === 'ROCKET') this.rocketCount++;
+
+  if (this.playerHand.length === 0) {
+    SoundManager.win();
+    this.renderRoundEndPanel('player');
+    return;
+  }
+  this.gameState = GAME_STATE.WAITING_AI;
+  this.time.delayedCall(600, function () { self.doAITurn(0); });
+};
+
+GameScene.prototype.doPlayerPass = function () {
+  if (this.gameState !== GAME_STATE.PLAYER_TURN) return;
+  if (!this.lastPlay || this.lastPlay.length === 0) {
+    showToast(this, '\u81EA\u7531\u51FA\u724C\u9636\u6BB5\u4E0D\u80FD\u8DF3\u8FC7');
+    return;
+  }
+  this.passCount++;
+  showToast(this, '\u4E0D\u51FA');
+  this.setStatusText('\u4F60\u9009\u62E9\u4E0D\u51FA');
+  this.selectedCards = [];
+  this.addPlayHistory('player', true);
+  if (this.passCount >= 2) {
+    this.clearTablePlays();
+    this.passCount = 0;
+    this.lastPlay = null;
+    this.lastPlayInfo = null;
+    // \u81EA\u7531\u51FA\u724C\u6743\u7ED9\u4E0A\u4E00\u8F6E\u6700\u540E\u51FA\u724C\u8005
+    if (this.lastPlayPlayer !== 'player') {
+      var aiIdx = this.lastPlayPlayer === 'ai1' ? 0 : 1;
+      var aiName = this.lastPlayPlayer === 'ai1' ? '\u738B\u603C\u603C' : '\u82CF\u751C\u751C';
+      var selfB1 = this;
+      this.setStatusText('\u4E24\u5BB6\u90FD\u8FC7\uFF0C\u8F6E\u5230' + aiName);
+      this.gameState = GAME_STATE.WAITING_AI;
+      this.time.delayedCall(800, function () { selfB1.doAITurn(aiIdx); });
+    } else {
+      this.gameState = GAME_STATE.PLAYER_TURN;
+      this.setStatusText('\u4E24\u5BB6\u90FD\u8FC7\uFF0C\u8F6E\u5230\u4F60\u81EA\u7531\u51FA\u724C');
+    }
+    return;
+  }
+  var self = this;
+  this.gameState = GAME_STATE.WAITING_AI;
+  this.time.delayedCall(800, function () { self.doAITurn(0); });
+};
+
+GameScene.prototype.doHint = function () {
+  if (this.gameState !== GAME_STATE.PLAYER_TURN) return;
+  this.setStatusText('\u8BA1\u7B97\u53EF\u51FA\u724C\u578B...');
+  // \u6838\u5FC3\u4F18\u5316\uFF1A\u4F7F\u7528 CardEngine \u672C\u5730\u5F15\u64CE\uFF0C\u5B9E\u73B0 0 \u5EF6\u8FDF\u79D2\u51FA\u63D0\u793A
+  this.localHint();
+};
+
+GameScene.prototype.localHint = function () {
+  var plays = Doudizhu.findValidPlays(this.playerHand, this.lastPlay);
+  if (plays.length === 0) {
+    showToast(this, '\u6CA1\u6709\u80FD\u51FA\u7684\u724C');
+    this.setStatusText('\u6CA1\u6709\u80FD\u51FA\u7684\u724C');
+    return;
+  }
+  var hintPlay = plays[0];
+  this._clearCardSelection();
+  this.selectedCards = [];
+  var hintRanks = {};
+  for (var j = 0; j < hintPlay.length; j++) {
+    hintRanks[hintPlay[j].suit + ':' + hintPlay[j].rank] = true;
+  }
+  for (var k = 0; k < this.cardDomElements.length; k++) {
+    var card = this.cardDomElements[k].getData('card');
+    var key = card.suit + ':' + card.rank;
+    if (hintRanks[key]) {
+      this._highlightCard(this.cardDomElements[k]);
+      this.selectedCards.push(k);
+    }
+  }
+  var info = Doudizhu.identifyType(hintPlay);
+  this.setStatusText('\u63D0\u793A: ' + (Doudizhu.HAND_TYPE_NAMES[info.type] || info.type));
+};
+
+GameScene.prototype.highlightHint = function (hint) {
+  this._clearCardSelection();
+  this.selectedCards = [];
+  if (!hint.cards) return;
+  for (var j = 0; j < this.cardDomElements.length; j++) {
+    var card = this.cardDomElements[j].getData('card');
+    for (var k = 0; k < hint.cards.length; k++) {
+      if (card.suit === hint.cards[k].suit && card.rank === hint.cards[k].rank) {
+        this._highlightCard(this.cardDomElements[j]);
+        this.selectedCards.push(j);
+        break;
+      }
+    }
+  }
+};
+
+GameScene.prototype.doAITurn = function (aiIndex) {
+  var self = this;
+  var hand = aiIndex === 0 ? this.ai1Hand : this.ai2Hand;
+  var aiName = aiIndex === 0 ? '\u738B\u603C\u603C' : '\u82CF\u751C\u751C';
+
+  this.gameState = GAME_STATE.WAITING_AI;
+  this.setStatusText(aiName + ' \u601D\u8003\u4E2D...');
+  SoundManager.aiThink();
+
+  if (hand.length === 0) {
+    this.renderRoundEndPanel(aiIndex === 0 ? 'ai1' : 'ai2');
+    return;
+  }
+
+  if (this.isAPIMode && typeof ApiClient !== 'undefined') {
+    this.time.delayedCall(1200, function () {
+      if (typeof ApiClient !== 'undefined') {
+        ApiClient.aiPlay(hand, self.lastPlay)
+          .then(function (res) {
+            if (res.canPlay === false || !res.choice) {
+              self.handleAIPass(aiIndex, aiName);
+            } else {
+              self.handleAIPlay(aiIndex, aiName, res);
+            }
+          })
+          .catch(function () { self.localAIPlay(aiIndex, aiName); });
+      } else {
+        self.localAIPlay(aiIndex, aiName);
+      }
+    });
+  } else {
+    this.localAIPlay(aiIndex, aiName);
+  }
+};
+
+GameScene.prototype.handleAIPlay = function (aiIndex, aiName, res) {
+  var hand = aiIndex === 0 ? this.ai1Hand : this.ai2Hand;
+  var apiCards = res.choice.cards || [];
+  var playCards = [];
+  for (var i = 0; i < apiCards.length; i++) {
+    var c = apiCards[i];
+    for (var j = 0; j < hand.length; j++) {
+      if (hand[j].suit === c.suit && hand[j].rank === c.rank) {
+        playCards.push(hand[j]);
+        hand.splice(j, 1);
+        break;
+      }
+    }
+  }
+  if (playCards.length !== apiCards.length) {
+    // \u5339\u914D\u5931\u8D25\u65F6\u4F7F\u7528\u5DF2\u6210\u529F\u5339\u914D\u7684\u724C\uFF0C\u800C\u4E0D\u662F\u5E9F\u5F03\u5168\u90E8
+    if (playCards.length > 0) {
+      var partialInfo = Doudizhu.identifyType(playCards);
+      if (partialInfo.type !== 'INVALID') {
+        // \u5339\u914D\u90E8\u5206\u6709\u6548\u724C\u578B\uFF0C\u7528\u5B83
+        console.warn('Partial match:', playCards.length, '/', apiCards.length);
+      } else {
+        this.localAIPlay(aiIndex, aiName);
+        return;
+      }
+    } else {
+      this.localAIPlay(aiIndex, aiName);
+      return;
+    }
+  }
+  var info = Doudizhu.identifyType(playCards);
+  this.lastPlay = playCards;
+  this.lastPlayInfo = info;
+  this.lastPlayPlayer = aiIndex === 0 ? 'ai1' : 'ai2';
+  this.passCount = 0;
+  // 先出气泡，模拟AI思考感
+  var bubbleKey = info.type === 'BOMB' || info.type === 'ROCKET' ? 'bomb' : 'play';
+  this._showPlayBubble(aiIndex === 0 ? 'duidui' : 'tiantian', bubbleKey, info.type);
+  if (info.type === 'BOMB' || info.type === 'ROCKET') { this.totalBombs++; SoundManager.bomb(); }
+  if (info.type === 'ROCKET') this.rocketCount++;
+  this.addPlayHistory(aiIndex === 0 ? 'ai1' : 'ai2', playCards);
+  var self = this;
+  // 800ms后摆牌+更新UI
+  this.time.delayedCall(800, function () {
+    self.displayPlay(playCards, aiIndex === 0 ? 'ai1' : 'ai2');
+    self.setStatusText(aiName + ' \u51FA\u4E86 ' + (Doudizhu.HAND_TYPE_NAMES[info.type] || info.type));
+    self.updateAICount(aiIndex);
+    if (hand.length === 0) {
+      self.renderRoundEndPanel(aiIndex === 0 ? 'ai1' : 'ai2');
+      return;
+    }
+    if (aiIndex === 0) {
+      self.setStatusText(aiName + ' \u51FA\u4E86 ' + (Doudizhu.HAND_TYPE_NAMES[info.type] || info.type) + '\uFF0C\u8F6E\u5230\u82CF\u751C\u751C');
+      self.time.delayedCall(1200, function () { self.doAITurn(1); });
+    } else {
+      self.gameState = GAME_STATE.PLAYER_TURN;
+      SoundManager.playerTurn();
+      self.setStatusText('\u8F6E\u5230\u4F60\u51FA\u724C');
+    }
+  });
+};
+
+GameScene.prototype.handleAIPass = function (aiIndex, aiName) {
+  this.passCount++;
+  this.setStatusText(aiName + ' \u4E0D\u51FA');
+  this.updateAICount(aiIndex);
+  this.addPlayHistory(aiIndex === 0 ? 'ai1' : 'ai2', true);
+  this._showPlayBubble(aiIndex === 0 ? 'duidui' : 'tiantian', 'pass', '');
+  if (this.passCount >= 2) {
+    this.clearTablePlays();
+    this.passCount = 0;
+    this.lastPlay = null;
+    this.lastPlayInfo = null;
+    // \u81EA\u7531\u51FA\u724C\u6743\u7ED9\u4E0A\u4E00\u8F6E\u6700\u540E\u51FA\u724C\u8005\uFF08\u4E0D\u662F\u5F53\u524Dpass\u7684\u4EBA\uFF09
+    if (this.lastPlayPlayer === 'player') {
+      this.gameState = GAME_STATE.PLAYER_TURN;
+      this.setStatusText('\u4E24\u5BB6\u90FD\u8FC7\uFF0C\u8F6E\u5230\u4F60\u81EA\u7531\u51FA\u724C');
+    } else {
+      var lastAiIdx = this.lastPlayPlayer === 'ai1' ? 0 : 1;
+      var lastAiName = this.lastPlayPlayer === 'ai1' ? '\u738B\u603C\u603C' : '\u82CF\u751C\u751C';
+      this.setStatusText('\u4E24\u5BB6\u90FD\u8FC7\uFF0C\u8F6E\u5230' + lastAiName);
+      var selfB1b = this;
+      this.time.delayedCall(1200, function () { selfB1b.doAITurn(lastAiIdx); });
+    }
+    return;
+  }
+  if (aiIndex === 0) {
+    // AI1 passed, now AI2's turn
+    var self = this;
+    this.setStatusText(aiName + ' \u4E0D\u51FA\uFF0C\u8F6E\u5230\u82CF\u751C\u751C');
+    this.time.delayedCall(1200, function () { self.doAITurn(1); });
+  } else {
+    this.gameState = GAME_STATE.PLAYER_TURN;
+    this.setStatusText('\u8F6E\u5230\u4F60\u51FA\u724C');
+  }
+};
+
+GameScene.prototype.localAIPlay = function (aiIndex, aiName) {
+  var hand = aiIndex === 0 ? this.ai1Hand : this.ai2Hand;
+  var plays = Doudizhu.findValidPlays(hand, this.lastPlay);
+  if (plays.length === 0) { this.handleAIPass(aiIndex, aiName); return; }
+  // \u7B80\u5355\u7B56\u7565: \u4F18\u5148\u51FA\u6700\u5C0F\u7684\u724C\u578B\uFF08\u5355\u5F20>\u5BF9\u5B50>\u4E09\u5F20>\u987A\u5B50>\u70B8\u5F39\uFF09
+  var chosen = plays[0];
+  // \u5982\u679C\u662F\u81EA\u7531\u51FA\u724C\u4E14\u6709\u5355\u5F20\u53EF\u51FA\uff0c\u9009\u6700\u5C0F\u7684\u5355\u5F20
+  if (!this.lastPlay || this.lastPlay.length === 0) {
+    var singlePlay = null;
+    for (var pi = 0; pi < plays.length; pi++) {
+      if (plays[pi].length === 1) { singlePlay = plays[pi]; break; }
+    }
+    if (singlePlay) chosen = singlePlay;
+  }
+  var info = Doudizhu.identifyType(chosen);
+  for (var i = 0; i < chosen.length; i++) {
+    for (var j = 0; j < hand.length; j++) {
+      if (hand[j].suit === chosen[i].suit && hand[j].rank === chosen[i].rank) {
+        hand.splice(j, 1); break;
+      }
+    }
+  }
+  this.lastPlay = chosen;
+  this.lastPlayInfo = info;
+  this.lastPlayPlayer = aiIndex === 0 ? 'ai1' : 'ai2';
+  this.passCount = 0;
+  this.displayPlay(chosen, aiIndex === 0 ? 'ai1' : 'ai2');
+  this.setStatusText(aiName + ' \u51FA\u4E86 ' + (Doudizhu.HAND_TYPE_NAMES[info.type] || info.type));
+  this.updateAICount(aiIndex);
+  // \u51FA\u724C\u8BB0\u5F55+\u97F3\u6548
+  this.addPlayHistory(aiIndex === 0 ? 'ai1' : 'ai2', chosen);
+  var bubbleKey = info.type === 'BOMB' || info.type === 'ROCKET' ? 'bomb' : 'play';
+  this._showPlayBubble(aiIndex === 0 ? 'duidui' : 'tiantian', bubbleKey, info.type);
+  if (info.type === 'BOMB' || info.type === 'ROCKET') { this.totalBombs++; SoundManager.bomb(); }
+  if (info.type === 'ROCKET') this.rocketCount++;
+  if (hand.length === 0) {
+    this.renderRoundEndPanel(aiIndex === 0 ? 'ai1' : 'ai2');
+    return;
+  }
+  if (aiIndex === 0) {
+    // AI1 played (local), now AI2's turn
+    var self = this;
+    this.time.delayedCall(1200, function () { self.doAITurn(1); });
+  } else {
+    this.gameState = GAME_STATE.PLAYER_TURN;
+    SoundManager.playerTurn();
+    this.setStatusText('\u8F6E\u5230\u4F60\u51FA\u724C');
+  }
+};
+
+GameScene.prototype.updateAICount = function (aiIndex) {
+  var count = aiIndex === 0 ? this.ai1Hand.length : this.ai2Hand.length;
+  var text = '\u5269\u4F59 ' + count + ' \u5F20';
+  if (aiIndex === 0 && this.ai1Count) this.ai1Count.setText(text);
+  if (aiIndex === 1 && this.ai2Count) this.ai2Count.setText(text);
+};
+
+GameScene.prototype.displayPlay = function (cards, player) {
+  // \u6E05\u7406\u65E7\u7684\u51FA\u724C\u56FE\u7247
+  var gfxKey = player === 'player' ? 'myPlayCardsGfx' : (player === 'ai1' ? 'ai1PlayCardsGfx' : 'ai2PlayCardsGfx');
+  var oldGfx = this[gfxKey];
+  if (oldGfx) {
+    for (var gi = 0; gi < oldGfx.length; gi++) oldGfx[gi].destroy();
+  }
+  this[gfxKey] = [];
+
+  if (!cards || cards.length === 0) return;
+
+  // \u786E\u5B9A\u4F4D\u7F6E
+  var positions = {
+    player: { x: 360, y: 195, w: 50, h: 72, origin: 0.5 },
+    ai1:    { x: 280, y: 133, w: 42, h: 60, origin: 0.5 },
+    ai2:    { x: 680, y: 133, w: 42, h: 60, origin: 0.5 }
+  };
+  var pos = positions[player] || positions.player;
+  var n = cards.length;
+  var overlap = Math.min(pos.w * 0.6, (480 - pos.w) / Math.max(n - 1, 1));
+  var totalW = pos.w + (n - 1) * overlap;
+  var startX = pos.x - totalW / 2;
+  var arr = this[gfxKey];
+
+  for (var pi = 0; pi < n; pi++) {
+    var pcx = startX + pi * overlap + pos.w / 2;
+    var pkey = getCardImageKey(cards[pi]);
+    var pimg = this.add.image(pcx, pos.y, pkey).setDisplaySize(pos.w, pos.h).setDepth(21);
+    arr.push(pimg);
+    // 移除旧的牌面叠加文字 — 卡片图片已显示完整牌面，多余文字覆盖导致看不清
+  }
+};
+GameScene.prototype.doAction = function () {
+  var self = this;
+  if (this.gameState !== GAME_STATE.PLAYER_TURN && this.gameState !== GAME_STATE.CHAOS_MODE) return;
+
+  // 暂停出牌音效
+  SoundManager.pauseAll();
+
+  // 设置螺旋模式
+  this.gameState = GAME_STATE.CHAOS_MODE;
+  this.chaosScore = this.chaosScore || 0;
+  this.setStatusText('选题型...');
+
+  // 选择被搞的AI角色
+  var aiId = Math.random() < 0.5 ? 'duidui' : 'tiantian';
+  var aiName = aiId === 'duidui' ? '王怼怼' : '苏甜甜';
+
+  // 创建遮罩 -> 先显示题型选择
+  self._createChaosOverlay(aiId, function () {
+    self._showTypeSelection(aiId, aiName);
+  });
+};
+
+GameScene.prototype._showTypeSelection = function (aiId, aiName) {
+  var self = this;
+  self.chaosTypeSelection = true;
+  // B34: 显示题型选择时隐藏主标题，避免重叠
+  if (self.chaosTitle) self.chaosTitle.setVisible(false);
+
+  var types = [
+    { id: 'vocabulary', label: '四六级单词', icon: '📚', desc: '看释义选单词，AI给你出牌' },
+    { id: 'expression', label: '口语表达', icon: '💬', desc: '地道俚语挑战，口语达人' },
+    { id: 'trivia', label: '冷知识', icon: '🧠', desc: '奇怪的知识增加了' },
+    { id: 'life_hack', label: '生活常识', icon: '🏠', desc: '生活小窍门，你真的会吗' }
+  ];
+
+  var title2 = self.add.text(480, 77, '📋 选个题型，开始搞事情', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '14px', color: '#333333', fontStyle: 'bold'
+  }).setOrigin(0.5).setDepth(302);
+  self.chaosElements.push(title2);
+
+  // 2x2 网格：题型卡片
+  var cardX = [220, 500];
+  var cardY = [107, 181];
+  var cardW = 260, cardH = 88;
+
+  for (var ti = 0; ti < types.length; ti++) {
+    var t = types[ti];
+    var cx = cardX[ti % 2];
+    var cy = cardY[Math.floor(ti / 2)];
+
+    // 采用 Container 方案实现中心点完美的呼吸缩放动效
+    var cardGroup = self.add.container(cx + cardW / 2, cy + cardH / 2).setDepth(302);
+    var cardBg = self.add.graphics();
+    cardBg.fillStyle(0xF8FAFF, 1);
+    cardBg.fillRoundedRect(-cardW / 2, -cardH / 2, cardW, cardH, 12);
+    cardBg.lineStyle(1.5, 0xCCD8FF, 1);
+    cardBg.strokeRoundedRect(-cardW / 2, -cardH / 2, cardW, cardH, 12);
+
+    var iconTxt = self.add.text(-cardW / 2 + 16, -cardH / 2 + 16, t.icon, {
+      fontFamily: 'sans-serif', fontSize: '28px'
+    });
+
+    var labelTxt = self.add.text(-cardW / 2 + 60, -cardH / 2 + 18, t.label, {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '15px', color: '#222222', fontStyle: 'bold'
+    });
+
+    var descTxt = self.add.text(-cardW / 2 + 60, -cardH / 2 + 44, t.desc, {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '11px', color: '#888888'
+    });
+
+    cardGroup.add([cardBg, iconTxt, labelTxt, descTxt]);
+    cardGroup.setSize(cardW, cardH);
+    cardGroup.setInteractive();
+    self.chaosElements.push(cardGroup);
+
+    (function (typeId, group, bg) {
+      group.on('pointerover', function () {
+        self.tweens.add({ targets: group, scale: 1.05, duration: 150, ease: 'Power2' });
+        bg.clear().fillStyle(0xE8EEFF, 1).fillRoundedRect(-cardW / 2, -cardH / 2, cardW, cardH, 12)
+          .lineStyle(2, 0x7C4DFF, 1).strokeRoundedRect(-cardW / 2, -cardH / 2, cardW, cardH, 12);
+      });
+      group.on('pointerout', function () {
+        self.tweens.add({ targets: group, scale: 1.0, duration: 150, ease: 'Power2' });
+        bg.clear().fillStyle(0xF8FAFF, 1).fillRoundedRect(-cardW / 2, -cardH / 2, cardW, cardH, 12)
+          .lineStyle(1.5, 0xCCD8FF, 1).strokeRoundedRect(-cardW / 2, -cardH / 2, cardW, cardH, 12);
+      });
+      group.on('pointerdown', function () {
+        if (self.chaosTypeSelection) {
+          self.chaosTypeSelection = false;
+          if (self.chaosTitle) self.chaosTitle.setVisible(true);
+          for (var di = self.chaosElements.length - 1; di >= 8; di--) {
+            if (self.chaosElements[di]) self.chaosElements[di].destroy();
+          }
+          self.chaosElements = self.chaosElements.slice(0, 8);
+          self._showChaosQuestion(aiId, aiName, typeId);
+        }
+      });
+    })(t.id, cardGroup, cardBg);
+  }
+};
+
+// ================================================================
+// 搞事情 - 创建遮罩
+// ================================================================
+GameScene.prototype._createChaosOverlay = function (aiId, callback) {
+  if (this.chaosOverlay) return;
+  var self = this;
+
+  // 1. 半透明遮罩（加深暗度增强沉浸感）
+  var overlay = self.add.graphics();
+  overlay.fillStyle(0x000000, 0.85);
+  overlay.fillRect(0, 0, 960, 600).setDepth(300);
+  overlay.setInteractive(new Phaser.Geom.Rectangle(0, 0, 960, 600), Phaser.Geom.Rectangle.Contains);
+  self.chaosElements = [overlay];
+  self.chaosOverlay = overlay;
+
+  // 2. 白色题目卡片背景（增加阴影与层次感）
+  var cardShadow = self.add.graphics();
+  cardShadow.fillStyle(0x000000, 0.4);
+  cardShadow.fillRoundedRect(155, 60, 660, 320, 16).setDepth(300);
+  self.chaosElements.push(cardShadow);
+
+  var cardBg = self.add.graphics();
+  cardBg.fillStyle(0xFFFFFF, 1);
+  cardBg.fillRoundedRect(150, 55, 660, 320, 16);
+  // 内发光 / 主题紫色边框
+  cardBg.lineStyle(3, 0x7C4DFF, 0.8);
+  cardBg.strokeRoundedRect(150, 55, 660, 320, 16);
+  cardBg.setDepth(301);
+  self.chaosElements.push(cardBg);
+  self.chaosCardBg = cardBg;
+
+  // 3. 标题（美化排版）
+  var title = self.add.text(480, 77, "🔥 搞事情！答题挑战", {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '22px',
+    color: '#7C4DFF',
+    fontStyle: 'bold',
+    stroke: '#FFFFFF',
+    strokeThickness: 3
+  }).setOrigin(0.5, 0).setDepth(302);
+  self.chaosElements.push(title);
+  self.chaosTitle = title;
+
+  // 4. 分数显示（变为胶囊样式）
+  var scoreBg = self.add.graphics();
+  scoreBg.fillStyle(0xFFD700, 0.2);
+  scoreBg.fillRoundedRect(630, 75, 85, 28, 14).setDepth(302);
+  var scoreText = self.add.text(672, 89, "得分: " + (self.chaosScore || 0), {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '13px',
+    color: '#D84315',
+    fontStyle: 'bold'
+  }).setOrigin(0.5).setDepth(303);
+  self.chaosElements.push(scoreBg, scoreText);
+  self.chaosScoreText = scoreText;
+
+  // AI 台词气泡
+  self._showAiBubble(aiId, 'easy', 420);
+  self._chaosAiId = aiId;
+
+  // 5. 新版圆形关闭按钮（悬浮在卡片右上角边缘，红底白叉）
+  var closeBtnBg = self.add.graphics();
+  closeBtnBg.fillStyle(0xFF4757, 1);
+  closeBtnBg.fillCircle(810, 55, 18).setDepth(304);
+  closeBtnBg.lineStyle(3, 0xFFFFFF, 1);
+  closeBtnBg.strokeCircle(810, 55, 18).setDepth(304);
+  closeBtnBg.setInteractive(new Phaser.Geom.Circle(810, 55, 18), Phaser.Geom.Circle.Contains);
+  closeBtnBg.on('pointerup', function () { self._destroyChaos(); });
+  var closeBtnText = self.add.text(810, 55, "✖", {
+    fontFamily: 'sans-serif',
+    fontSize: '18px',
+    color: '#FFFFFF',
+    fontStyle: 'bold'
+  }).setOrigin(0.5).setDepth(305);
+  self.chaosElements.push(closeBtnBg, closeBtnText);
+
+  if (callback) callback();
+};// ================================================================
+// 搞事情 - 显示题目（含4个选项）
+// ================================================================
+GameScene.prototype._showChaosQuestion = function (aiId, aiName, type) {
+  var self = this;
+  self.setStatusText(aiName + ' 出题中...');
+  // 1. 屏幕中间加个醒目的加载提示面板
+  var loadingBg = self.add.graphics();
+  loadingBg.fillStyle(0x000000, 0.7);
+  loadingBg.fillRoundedRect(380, 200, 200, 60, 12).setDepth(350);
+  var loadingTxt = self.add.text(480, 230, '⏳ ' + aiName + ' 正在生成题目...', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '14px', color: '#FFFFFF', fontStyle: 'bold'
+  }).setOrigin(0.5).setDepth(351);
+  self.chaosElements.push(loadingBg, loadingTxt);
+  self._chaosLoadingElements = [loadingBg, loadingTxt]; // 暂存，稍后销毁
+
+  // 随机播放搞事情开场语音
+  var chaosVoice = Math.random() > 0.5 ? 'voice_duidui_taunt' : 'voice_tiantian_chaos';
+  SoundManager.playVoice(chaosVoice);
+
+  if (this.isAPIMode && typeof ApiClient !== 'undefined') {
+    ApiClient.generateChaosQuestion(type || 'random', 'normal', 1)
+      .then(function (res) {
+        // 先销毁加载面板（在渲染题目前）
+        if (self._chaosLoadingElements) {
+          self._chaosLoadingElements.forEach(function(el) { if(el) el.destroy(); });
+          self._chaosLoadingElements = null;
+        }
+        if (res.success && res.questions && res.questions.length > 0) {
+          self._renderQuestion(res.questions[0], aiId);
+        } else {
+          self._renderFallbackQuestion(aiId);
+        }
+      })
+      .catch(function () {
+        if (self._chaosLoadingElements) {
+          self._chaosLoadingElements.forEach(function(el) { if(el) el.destroy(); });
+          self._chaosLoadingElements = null;
+        }
+        self._renderFallbackQuestion(aiId);
+      });
+  } else {
+    if (self._chaosLoadingElements) {
+      self._chaosLoadingElements.forEach(function(el) { if(el) el.destroy(); });
+      self._chaosLoadingElements = null;
+    }
+    self._renderFallbackQuestion(aiId);
+  }
+};
+
+// ================================================================
+// 搞事情 - 渲染题目
+// ================================================================
+GameScene.prototype._renderQuestion = function (q, aiId) {
+  var self = this;
+  // 销毁加载提示
+  if (self._chaosLoadingElements) {
+    self._chaosLoadingElements.forEach(function(el) { if(el) el.destroy(); });
+    self._chaosLoadingElements = null;
+  }
+  self._clearQuestionArea();
+
+  var typeLabel = q.questionType || q.type || '知识题';
+  var typeIcon = '🧠';
+  if (typeLabel.indexOf('voc') >= 0 || typeLabel.indexOf('word') >= 0) typeIcon = '📚';
+  if (typeLabel.indexOf('expr') >= 0) typeIcon = '💬';
+  if (typeLabel.indexOf('trivia') >= 0) typeIcon = '💡';
+  if (typeLabel.indexOf('life') >= 0) typeIcon = '🏠';
+
+  var tag = self.add.text(220, 97, typeIcon + ' ' + typeLabel, {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '13px', color: '#FF6B35', fontStyle: 'bold'
+  }).setDepth(302);
+  self.chaosElements.push(tag);
+
+  // 保留口语题兼容：q.expression, q.word
+  var questionText = q.question || q.text || q.word || '';
+  if (!questionText && q.scene) {
+    questionText = '场景：' + q.scene + '\n对话：' + (q.dialogue || '');
+  }
+  if (!questionText) questionText = '【题目解析降级，请直接根据选项推理】';
+  var qText = self.add.text(220, 114, questionText, {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '15px', color: '#222222', fontStyle: 'bold',
+    wordWrap: { width: 580, useAdvancedWrap: true }, lineSpacing: 4
+  }).setDepth(302);
+  self.chaosElements.push(qText);
+
+  var options = q.options || {};
+  var optionKeys = ['A', 'B', 'C', 'D'];
+  self.chaosQuestionAnswered = false;
+
+  var optH = 76;
+  var optW = 290;
+  var gridX = [175, 480];
+  var gridY = [160, 245];
+
+  for (var oi = 0; oi < optionKeys.length; oi++) {
+    var ok = optionKeys[oi];
+    var optText = options[ok];
+    if (!optText) continue;
+
+    var gx = gridX[oi % 2];
+    var gy = gridY[Math.floor(oi / 2)];
+
+    // 保留微拟物阴影
+    var optShadow = self.add.graphics();
+    optShadow.fillStyle(0x000000, 0.06);
+    optShadow.fillRoundedRect(gx+2, gy+3, optW, optH, 8).setDepth(301);
+
+    var optBg = self.add.graphics();
+    optBg.fillStyle(0xF5F5F5, 1);
+    optBg.fillRoundedRect(gx, gy, optW, optH, 8).setDepth(302);
+    optBg.lineStyle(2, 0xE0E0E0, 1);
+    optBg.strokeRoundedRect(gx, gy, optW, optH, 8);
+    optBg.setInteractive(new Phaser.Geom.Rectangle(gx, gy, optW, optH), Phaser.Geom.Rectangle.Contains);
+
+    var optMarkBg = self.add.graphics();
+    optMarkBg.fillStyle(0x4ECDC4, 1);
+    optMarkBg.fillCircle(gx + 24, gy + optH / 2, 14).setDepth(303);
+    var optMarkTxt = self.add.text(gx + 24, gy + optH / 2, ok, {
+      fontFamily: '"PingFang SC",sans-serif',
+      fontSize: '14px', color: '#FFFFFF', fontStyle: 'bold'
+    }).setOrigin(0.5).setDepth(304);
+
+    var optTxt = self.add.text(gx + 46, gy + optH / 2, optText, {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '13px', color: '#333333',
+      wordWrap: { width: optW - 56, useAdvancedWrap: true },
+      lineSpacing: 2
+    }).setOrigin(0, 0.5).setDepth(303);
+
+    optBg.setData('optKey', ok);
+    optBg.setData('optBg', optBg);
+    optBg.setData('optTxt', optTxt);
+    optBg.setData('optMarkBg', optMarkBg);
+    optBg.setData('optMarkTxt', optMarkTxt);
+    optBg.setData('answer', q.answer);
+    optBg.setData('origGx', gx);
+    optBg.setData('origGy', gy);
+
+    (function (optBg, ok) {
+      optBg.on('pointerdown', function () {
+        if (self.chaosQuestionAnswered) return;
+        self.chaosQuestionAnswered = true;
+        self._handleOptionClick(self, optBg, ok, aiId, q);
+      });
+    })(optBg, ok);
+
+    self.chaosElements.push(optShadow, optBg, optMarkBg, optMarkTxt, optTxt);
+  }
+
+  // 倒计时栏
+  if (self.chaosTimeoutTimer) {
+    self.chaosTimeoutTimer.remove();
+    self.chaosTimeoutTimer = null;
+  }
+  var progressBarBg = self.add.graphics();
+  progressBarBg.fillStyle(0x000000, 0.1);
+  progressBarBg.fillRoundedRect(150, 55, 660, 4, 2).setDepth(305);
+  var progressBar = self.add.graphics().setDepth(306);
+  self.chaosElements.push(progressBarBg, progressBar);
+  var timerStart = Date.now();
+  var timerDuration = 30000;
+  self.chaosTimeoutTimer = self.time.addEvent({
+    delay: 50, loop: true,
+    callback: function () {
+      var elapsed = Date.now() - timerStart;
+      var remaining = 1 - Math.min(elapsed / timerDuration, 1);
+      var color = remaining > 0.5 ? 0x4ECDC4 : (remaining > 0.2 ? 0xFFC107 : 0xFF5252);
+      progressBar.clear().fillStyle(color, 1).fillRoundedRect(150, 55, 660 * remaining, 4, 2);
+      if (elapsed >= timerDuration) {
+        if (self.chaosTimeoutTimer) {
+          self.chaosTimeoutTimer.remove();
+          self.chaosTimeoutTimer = null;
+        }
+        self._handleChaosTimeout(aiId);
+      }
+    }
+  });
+};
+// ================================================================
+// 搞事情 - 处理选项点击
+// ================================================================
+GameScene.prototype._handleOptionClick = function (self, optBg, optKey, aiId, q) {
+  if (self.chaosTimeoutTimer) {
+    self.chaosTimeoutTimer.remove();
+    self.chaosTimeoutTimer = null;
+  }
+  var answer = optBg.getData('answer');
+  var isCorrect = (optKey === answer);
+  if (isCorrect) {
+    self.chaosScore = (self.chaosScore || 0) + 1;
+    if (self.chaosScoreText) self.chaosScoreText.setText('得分: ' + self.chaosScore);
+    SoundManager.win();
+    SoundManager.playVoice(Math.random() > 0.5 ? 'voice_duidui_correct' : 'voice_tiantian_correct');
+  } else {
+    SoundManager.lose();
+    SoundManager.playVoice(Math.random() > 0.5 ? 'voice_duidui_wrong' : 'voice_tiantian_wrong');
+  }
+  self._clearQuestionArea();
+
+  var feedbackScene = isCorrect ? 'correct' : 'wrong';
+  var fbIcon = self.add.text(480, 115, (isCorrect ? '✅ 答对了！+1' : '❌ 答错了！'), {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '20px', color: (isCorrect ? '#4CAF50' : '#E53935'), fontStyle: 'bold'
+  }).setOrigin(0.5).setDepth(305);
+  self.chaosElements.push(fbIcon);
+
+  // 动态叠加 Y 坐标，防止长答案重叠
+  var fbY = 145;
+  if (!isCorrect && q.answer) {
+    var correctAns = self.add.text(220, fbY, '正确答案: ' + q.answer + '. ' + (q.options[q.answer] || ''), {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '14px', color: '#4CAF50', fontStyle: 'bold',
+      wordWrap: { width: 520, useAdvancedWrap: true }, lineSpacing: 4
+    }).setDepth(305);
+    self.chaosElements.push(correctAns);
+    fbY += correctAns.height + 15;
+  }
+  if (q.explanation) {
+    var expl = self.add.text(220, fbY, '解析: ' + q.explanation, {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '13px', color: '#555555',
+      wordWrap: { width: 520, useAdvancedWrap: true }, lineSpacing: 4
+    }).setDepth(305);
+    self.chaosElements.push(expl);
+    fbY += expl.height + 15;
+  }
+  self._showAiBubble(aiId, feedbackScene, fbY + 5);
+  if (isCorrect) {
+    self._showSwapUI(aiId, fbY);
+  } else {
+    self._showSwapResult(aiId, false, fbY);
+  }
+};
+
+// ================================================================
+// B46: 搞事情超时处理
+// ================================================================
+GameScene.prototype._handleChaosTimeout = function (aiId) {
+  var self = this;
+  self.chaosQuestionAnswered = true;
+  self._clearQuestionArea();
+  // Y=120 避开 Y=77的标题重叠
+  var fbIcon = self.add.text(480, 120, '⏱ 超时了！', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '20px', color: '#FF5252', fontStyle: 'bold'
+  }).setOrigin(0.5).setDepth(305);
+  self.chaosElements.push(fbIcon);
+  SoundManager.playVoice('voice_tiantian_timeout');
+  if (!self.playerHand || self.playerHand.length === 0) {
+    self._showSwapButtons(aiId, 160);
+    return;
+  }
+  self._showSwapResult(aiId, false, 120);
+};
+
+// ================================================================
+// B3: 答完题换牌 — 答对玩家从AI拿牌、答错AI从玩家拿牌
+// ================================================================
+// ================================================================
+// B45: 答错AI抢牌（按CardSwap.md第4章）
+// ================================================================
+GameScene.prototype._showSwapResult = function (aiId, isCorrect, fbY) {
+  var self = this;
+  var aiHand = aiId === 'duidui' ? self.ai1Hand : self.ai2Hand;
+  var aiName = aiId === 'duidui' ? '王怼怼' : '苏甜甜';
+  // 将牌面映射为全中文简体
+  var getChineseCardName = function(c) {
+    if (!c) return '无';
+    if (c.suit === 'joker') return c.rank > 14 ? '大王' : '小王';
+    var suits = { 'spade': '黑桃', 'heart': '红桃', 'club': '梅花', 'diamond': '方块' };
+    var ranks = { 1: 'A', 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'J', 12: 'Q', 13: 'K', 14: 'A', 15: '2' };
+    return (suits[c.suit] || '') + (ranks[c.rank] || c.rank);
+  };
+  // 确认面板的起始位置，根据上一块动态决定，保证不遮挡
+  var confirmPanelY = Math.max(fbY + 10, 150);
+  if (!self.playerHand || self.playerHand.length === 0) {
+    var emptyMsg = self.add.text(480, confirmPanelY + 30, '你的手牌为空，AI无牌可拿', {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '14px', color: '#FFB74D', fontStyle: 'bold'
+    }).setOrigin(0.5).setDepth(310);
+    self.chaosElements.push(emptyMsg);
+    self._showSwapButtons(aiId, confirmPanelY + 80);
+    return;
+  }
+  var idx = Math.floor(Math.random() * self.playerHand.length);
+  var lostCard = self.playerHand[idx];
+  var aiMinCard = null;
+  var aiMinIdx = -1;
+  if (aiHand && aiHand.length > 0) {
+    for (var k = 0; k < aiHand.length; k++) {
+      if (aiMinCard === null || aiHand[k].rank < aiMinCard.rank) {
+        aiMinCard = aiHand[k];
+        aiMinIdx = k;
+      }
+    }
+  }
+  var panelBg = self.add.graphics();
+  panelBg.fillStyle(0xFFF8E1, 1);
+  panelBg.fillRoundedRect(220, confirmPanelY, 520, 130, 10).setDepth(308);
+  panelBg.lineStyle(2, 0xFFC107, 1);
+  panelBg.strokeRoundedRect(220, confirmPanelY, 520, 130, 10).setDepth(308);
+  self.chaosElements.push(panelBg);
+  var hintTxt = self.add.text(480, confirmPanelY + 20, '⚠️ 惩罚：' + aiName + ' 决定用它的最小牌换走你的一张牌！', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '14px', color: '#E65100', fontStyle: 'bold'
+  }).setOrigin(0.5).setDepth(309);
+  self.chaosElements.push(hintTxt);
+  // 绘制展示牌面的通用方法（带阴影）
+  var drawCardWithShadow = function(x, y, cardObj) {
+    var shadow = self.add.graphics();
+    shadow.fillStyle(0x000000, 0.2);
+    shadow.fillRoundedRect(x - 20 + 3, y - 28 + 3, 40, 56, 4).setDepth(309);
+    self.chaosElements.push(shadow);
+    var key = getCardImageKey(cardObj);
+    var img = self.add.image(x, y, key).setDisplaySize(40, 56).setDepth(310);
+    self.chaosElements.push(img);
+  };
+  var t1 = self.add.text(380, confirmPanelY + 65, '你的牌:', {
+    fontFamily: '"PingFang SC"', fontSize: '13px', color: '#333'
+  }).setOrigin(1, 0.5).setDepth(309);
+  drawCardWithShadow(410, confirmPanelY + 65, lostCard);
+  var swapIcon = self.add.text(480, confirmPanelY + 65, '🔄', {
+    fontSize: '26px'
+  }).setOrigin(0.5).setDepth(309);
+  var t2 = self.add.text(530, confirmPanelY + 65, 'AI的牌:', {
+    fontFamily: '"PingFang SC"', fontSize: '13px', color: '#333'
+  }).setOrigin(0, 0.5).setDepth(309);
+  if (aiMinCard) {
+    drawCardWithShadow(590, confirmPanelY + 65, aiMinCard);
+  } else {
+    self.add.text(590, confirmPanelY + 65, '无牌', {
+      fontSize: '14px', color: '#E65100'
+    }).setOrigin(0.5).setDepth(309);
+  }
+  self.chaosElements.push(t1, swapIcon, t2);
+  var btnBg = self.add.graphics();
+  btnBg.fillStyle(0xFF5252, 1);
+  btnBg.fillRoundedRect(420, confirmPanelY + 105, 120, 36, 8).setDepth(310);
+  btnBg.setInteractive(new Phaser.Geom.Rectangle(420, confirmPanelY + 105, 120, 36), Phaser.Geom.Rectangle.Contains);
+  var btnTxt = self.add.text(480, confirmPanelY + 123, '接受惩罚', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '15px', color: '#FFF', fontStyle: 'bold'
+  }).setOrigin(0.5).setDepth(311);
+  self.chaosElements.push(btnBg, btnTxt);
+  btnBg.on('pointerup', function() {
+    SoundManager.playVoice(aiId === 'duidui' ? 'voice_duidui_swap' : 'voice_tiantian_swap');
+    btnBg.destroy();
+    btnTxt.destroy();
+    hintTxt.destroy();
+    self.playerHand.splice(idx, 1);
+    aiHand.push(lostCard);
+    if (aiMinIdx >= 0) {
+      aiHand.splice(aiMinIdx, 1);
+      self.playerHand.push(aiMinCard);
+      self.playerHand = Doudizhu.sortCards(self.playerHand);
+    }
+    self.renderPlayerHand();
+    self.updateAICount(aiId === 'duidui' ? 0 : 1);
+    var pName = getChineseCardName(lostCard);
+    var aName = getChineseCardName(aiMinCard);
+    var swapText = self.add.text(480, confirmPanelY + 115, '✅ 互换完毕：' + aiName + ' 用 [' + aName + '] 换了你的 [' + pName + ']', {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '14px', color: '#4CAF50', fontStyle: 'bold'
+    }).setOrigin(0.5).setDepth(310);
+    self.chaosElements.push(swapText);
+    self._showSwapButtons(aiId, confirmPanelY + 150);
+  });
+};
+// ================================================================
+// B44 + B46: 答对盲选交换 + 30s倒计时
+// 按 CardSwap.md 第3、5章实现
+// ================================================================
+GameScene.prototype._showSwapUI = function (aiId, fbY) {
+  var self = this;
+  var aiHand = aiId === 'duidui' ? self.ai1Hand : self.ai2Hand;
+  var aiName = aiId === 'duidui' ? '王怼怼' : '苏甜甜';
+
+  if (!aiHand || aiHand.length === 0 || !self.playerHand || self.playerHand.length === 0) {
+    self._showSwapResult(aiId, false, fbY);
+    return;
+  }
+
+  var selectedPlayerCardIdx = -1;
+  var selectedPlayerCardEl = null;
+  var selectedBackIdx = -1;
+  var selectedBackEl = null;
+  var swapElements = [];
+
+  // 半透明遮罩
+  var swapOverlay = self.add.graphics();
+  swapOverlay.fillStyle(0x000000, 0.6);
+  swapOverlay.fillRect(0, 0, 960, 600).setDepth(350);
+  swapOverlay.setInteractive(new Phaser.Geom.Rectangle(0, 0, 960, 600), Phaser.Geom.Rectangle.Contains);
+  swapElements.push(swapOverlay);
+
+  // 标题
+  var titleTxt = self.add.text(480, 90, '🎉 答对了！赢一张牌！', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '18px', color: '#FFD700', fontStyle: 'bold',
+    stroke: '#000000', strokeThickness: 2
+  }).setOrigin(0.5).setDepth(351);
+  swapElements.push(titleTxt);
+
+  var hintTxt = self.add.text(480, 112, '选一张你的牌交出，然后猜AI的牌位置', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '11px', color: '#AAAAAA'
+  }).setOrigin(0.5).setDepth(351);
+  swapElements.push(hintTxt);
+
+  // 玩家手牌（正面展示，选一张交出）
+  var playerLabel = self.add.text(480, 140, '你的手牌（点击选一张交出）', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '12px', color: '#4FC3F7', fontStyle: 'bold'
+  }).setOrigin(0.5).setDepth(351);
+  swapElements.push(playerLabel);
+
+  var myHandSorted = Doudizhu.sortCards(self.playerHand.slice());
+  var myCardW = 44, myCardH = 64, myOverlap = 30;
+  var myTotalW = myCardW + (myHandSorted.length - 1) * myOverlap;
+  var myStartX = (960 - myTotalW) / 2;
+
+  for (var mi = 0; mi < myHandSorted.length; mi++) {
+    var mcx = myStartX + mi * myOverlap + myCardW / 2;
+    var mkey = getCardImageKey(myHandSorted[mi]);
+    var mcard = self.add.image(mcx, 175, mkey).setDisplaySize(myCardW, myCardH).setDepth(352);
+    mcard.setInteractive();
+    swapElements.push(mcard);
+    (function (idx, card) {
+      card.on('pointerdown', function () {
+        if (selectedPlayerCardEl && selectedPlayerCardEl !== card) {
+          selectedPlayerCardEl.setDisplaySize(myCardW, myCardH).setDepth(352);
+        }
+        if (selectedPlayerCardEl === card) {
+          // Q3: 已选中→取消
+          card.setDisplaySize(myCardW, myCardH).setDepth(352);
+          selectedPlayerCardIdx = -1;
+          selectedPlayerCardEl = null;
+          return;
+        }
+        selectedPlayerCardIdx = idx;
+        selectedPlayerCardEl = card;
+        card.setDisplaySize(myCardW + 6, myCardH + 6).setDepth(355);
+      });
+    })(mi, mcard);
+  }
+
+  // 下方牌背盲选（3-5张，1张是真AI牌）
+  var backLabel = self.add.text(480, 230, '猜猜哪张是AI的牌（完全盲选）', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '12px', color: '#FFB74D', fontStyle: 'bold'
+  }).setOrigin(0.5).setDepth(351);
+  swapElements.push(backLabel);
+
+  var numBacks = 2 + Math.floor(Math.random() * 2); // 2-3
+  var backW = 40, backH = 56, backOverlap = 34;
+  var backTotalW = backW + (numBacks - 1) * backOverlap;
+  var backStartX = (960 - backTotalW) / 2;
+
+  var aiHandSorted = Doudizhu.sortCards(aiHand.slice());
+  var realAICard = aiHandSorted[0];  // 排序后取最小
+  var realAICardSlot = Math.floor(Math.random() * numBacks);
+
+  var backCardPositions = [];
+
+  for (var bi = 0; bi < numBacks; bi++) {
+    var bcx = backStartX + bi * backOverlap + backW / 2;
+    var isReal = (bi === realAICardSlot);
+    // 牌背阴影
+    var cardShadow = self.add.graphics();
+    cardShadow.fillStyle(0x000000, 0.3);
+    cardShadow.fillRoundedRect(bcx - backW/2 - 2, 260 - backH/2 - 2, backW + 4, backH + 4, 4).setDepth(351);
+    swapElements.push(cardShadow);
+    var backCard = self.add.image(bcx, 260, 'cardBack').setDisplaySize(backW, backH).setDepth(352);
+    backCard.setInteractive();
+    backCard.setData('isReal', isReal);
+    swapElements.push(backCard);
+    backCardPositions.push({ x: bcx, y: 260 });
+
+    (function (bIdx, cardEl, crdX, crdY) {
+      cardEl.on('pointerdown', function () {
+        if (selectedBackEl && selectedBackEl !== cardEl) {
+          selectedBackEl.setDisplaySize(backW, backH).setDepth(352);
+        }
+        if (selectedBackEl === cardEl) {
+          // Q3: 已选中→取消
+          cardEl.setDisplaySize(backW, backH).setDepth(352);
+          selectedBackIdx = -1;
+          selectedBackEl = null;
+          updateConfirmBtn();
+          return;
+        }
+        selectedBackIdx = bIdx;
+        selectedBackEl = cardEl;
+        cardEl.setDisplaySize(backW + 6, backH + 6).setDepth(355);
+        updateConfirmBtn();
+      });
+    })(bi, backCard, bcx, 260);
+  }
+
+  function updateConfirmBtn() {
+    if (selectedPlayerCardIdx >= 0 && selectedBackIdx >= 0) {
+      confirmBg.clear().fillStyle(0x4ECDC4, 1).fillRoundedRect(220, 390, 200, 44, 10).setDepth(353);
+    } else {
+      confirmBg.clear().fillStyle(0x4ECDC4, 0.5).fillRoundedRect(220, 390, 200, 44, 10).setDepth(353);
+    }
+  }
+
+  // 确认按钮（左）
+  var confirmBg = self.add.graphics();
+  confirmBg.fillStyle(0x4ECDC4, 0.5);
+  confirmBg.fillRoundedRect(220, 390, 200, 44, 10).setDepth(353);
+  var confirmTxt = self.add.text(320, 412, '✅ 确认交换', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '15px', color: '#FFFFFF', fontStyle: 'bold'
+  }).setOrigin(0.5).setDepth(354);
+  confirmBg.setInteractive(new Phaser.Geom.Rectangle(220, 390, 200, 44), Phaser.Geom.Rectangle.Contains);
+  swapElements.push(confirmBg, confirmTxt);
+
+  confirmBg.on('pointerup', function () {
+    if (selectedPlayerCardIdx < 0 || selectedBackIdx < 0) return;
+
+    var myCard = myHandSorted[selectedPlayerCardIdx];
+    var pReal = -1;
+    for (var p = 0; p < self.playerHand.length; p++) {
+      if (self.playerHand[p].suit === myCard.suit && self.playerHand[p].rank === myCard.rank) {
+        pReal = p;
+        break;
+      }
+    }
+    if (pReal < 0) return;
+    var pCard = self.playerHand[pReal];
+
+    var isWin = (selectedBackIdx === realAICardSlot);
+    var selectedBackPos = backCardPositions[selectedBackIdx];
+
+    // 销毁所有swap UI元素，避免挡住视线
+    for (var ei = 0; ei < swapElements.length; ei++) {
+      if (swapElements[ei]) swapElements[ei].destroy();
+    }
+
+    // 核心修复：无论是否猜中，都给玩家强制换牌！
+    // 猜中给 realAICard，猜错随机从 AI 手里抽一张
+    var aiTargetCard = isWin ? realAICard : aiHand[Math.floor(Math.random() * aiHand.length)];
+
+    // 在选中的牌背位置创建飞出的动画卡片
+    var revealCard = self.add.image(selectedBackPos.x, selectedBackPos.y, getCardImageKey(aiTargetCard))
+      .setDisplaySize(backW, backH).setDepth(400);
+
+    // 飞入动画
+    self.tweens.add({
+      targets: revealCard,
+      x: 480, y: 345,
+      scaleX: 0.8, scaleY: 0.8, angle: 720, duration: 600, ease: 'Cubic.easeOut',
+      onComplete: function () {
+        revealCard.destroy();
+
+        // 执行底层数据互换
+        var aReal = -1;
+        for (var a = 0; a < aiHand.length; a++) {
+          if (aiHand[a].suit === aiTargetCard.suit && aiHand[a].rank === aiTargetCard.rank) {
+            aReal = a; break;
+          }
+        }
+        if (aReal >= 0) {
+          self.playerHand.splice(pReal, 1);
+          aiHand.splice(aReal, 1);
+          self.playerHand.push(aiTargetCard);
+          aiHand.push(pCard);
+          self.playerHand = Doudizhu.sortCards(self.playerHand);
+        }
+
+        // 重新渲染，让玩家立刻看到牌变了
+        self.renderPlayerHand();
+        self.updateAICount(aiId === 'duidui' ? 0 : 1);
+
+        // 弹出明确的交换成功提示
+        var pSuitStr = Doudizhu.SUIT_NAMES ? Doudizhu.SUIT_NAMES[pCard.suit] : '';
+        var pRankStr = Doudizhu.RANK_NAME_MAP[pCard.rank] || '';
+        var aSuitStr = Doudizhu.SUIT_NAMES ? Doudizhu.SUIT_NAMES[aiTargetCard.suit] : '';
+        var aRankStr = Doudizhu.RANK_NAME_MAP[aiTargetCard.rank] || '';
+
+        var resultText = isWin ? '🎯 欧皇手气！用' : '🔄 盲抽成功！用';
+        var swapMsg = self.add.text(480, fbY + 20, resultText + '[' + pSuitStr + pRankStr + ']换了AI的[' + aSuitStr + aRankStr + ']', {
+          fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+          fontSize: '15px', color: isWin ? '#FFD700' : '#4CAF50', fontStyle: 'bold',
+          stroke: '#000000', strokeThickness: 2
+        }).setOrigin(0.5).setDepth(310);
+        self.chaosElements.push(swapMsg);
+
+        self._showSwapButtons(aiId, Math.max(fbY + 60, 280));
+      }
+    });
+  });
+
+  // 取消按钮（右）
+  var cancelBg = self.add.graphics();
+  cancelBg.fillStyle(0x78909C, 1);
+  cancelBg.fillRoundedRect(540, 390, 200, 44, 10).setDepth(353);
+  var cancelTxt = self.add.text(640, 412, '✖ 跳过交换', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '15px', color: '#FFFFFF', fontStyle: 'bold'
+  }).setOrigin(0.5).setDepth(354);
+  cancelBg.setInteractive(new Phaser.Geom.Rectangle(540, 390, 200, 44), Phaser.Geom.Rectangle.Contains);
+  swapElements.push(cancelBg, cancelTxt);
+
+  cancelBg.on('pointerup', function () {
+    for (var ei = 0; ei < swapElements.length; ei++) {
+      if (swapElements[ei]) swapElements[ei].destroy();
+    }
+    self._showSwapResult(aiId, false, fbY);
+  });
+};
+
+GameScene.prototype._showSwapButtons = function (aiId, btnY) {
+  var self = this;
+  // 安全清理: 销毁所有 depth >= 400 的临时元素
+  self.children.each(function(child) {
+    if (child && child.type === 'Image' && child.depth >= 400) {
+      child.destroy();
+    }
+  });
+  var againBg = self.add.graphics();
+  againBg.fillStyle(0x4ECDC4, 1);
+  againBg.fillRoundedRect(220, btnY, 220, 40, 10).setDepth(305);
+  var againTxt = self.add.text(330, btnY + 20, '🔄 再来一题', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '13px', color: '#FFFFFF', fontStyle: 'bold'
+  }).setOrigin(0.5).setDepth(306);
+  againBg.setInteractive(new Phaser.Geom.Rectangle(220, btnY, 220, 40), Phaser.Geom.Rectangle.Contains);
+  againBg.on('pointerup', function () {
+    self.chaosQuestionAnswered = false;
+    self._clearQuestionArea();
+    var aiId2 = Math.random() < 0.5 ? 'duidui' : 'tiantian';
+    self._showChaosQuestion(aiId2, aiId2 === 'duidui' ? '王怼怼' : '苏甜甜');
+  });
+  self.chaosElements.push(againBg, againTxt);
+  var closeBg = self.add.graphics();
+  closeBg.fillStyle(0xFF6B6B, 1);
+  closeBg.fillRoundedRect(510, btnY, 220, 40, 10).setDepth(305);
+  var closeTxt = self.add.text(620, btnY + 20, '✖ 关掉回牌', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '13px', color: '#FFFFFF', fontStyle: 'bold'
+  }).setOrigin(0.5).setDepth(306);
+  closeBg.setInteractive(new Phaser.Geom.Rectangle(510, btnY, 220, 40), Phaser.Geom.Rectangle.Contains);
+  closeBg.on('pointerup', function () {
+    self._destroyChaos();
+  });
+  self.chaosElements.push(closeBg, closeTxt);
+};GameScene.prototype._renderFallbackQuestion = function (aiId) {
+  var self = this;
+  var fallbackQuestions = [
+    {
+      question: 'The word "abandon" means:',
+      options: { A: '\u653E\u5F03', B: '\u63A5\u53D7', C: '\u5EFA\u7ACB', D: '\u53D1\u73B0' },
+      answer: 'A', explanation: 'abandon \u610F\u4E3A"\u653E\u5F03"\uFF0C\u662F\u56DB\u7EA7\u5FC3\u8BCD\u6C47\u3002',
+      questionType: 'vocabulary'
+    },
+    {
+      question: '\u201CI\'m feeling under the weather\u201D \u610F\u601D\u662F:',
+      options: { A: '\u5728\u5929\u6C14\u4E0B\u9762', B: '\u751F\u75C5\u4E86', C: '\u559C\u6B22\u4E0D\u540C\u5929\u6C14', D: '\u50BB\u50BB\u7B28\u7B28' },
+      answer: 'B', explanation: '"Under the weather"\u662F\u5730\u9053\u53E3\u8BEd\uFF0C\u610F\u4E3A"\u751F\u75C5\u4E0D\u8212\u670D"\u3002',
+      questionType: 'expression'
+    },
+    {
+      question: '\u54EA\u4E2A\u52A8\u7269\u51E0\u4E4E\u4E0D\u751F\u764C\u75C7\uFF1F',
+      options: { A: '\u9CA8\u9C7C', B: '\u5927\u8C61', C: '\u88F8\u9F20\u9F20', D: '\u4E4C\u9F9F' },
+      answer: 'C', explanation: '🧬 \u88F8\u9F20\u9F20\u51E0\u4E4E\u4ECE\u4E0D\u60A3\u764C\u75C7\uFF01\u5B83\u4EEC\u4F53\u5185\u6709\u7279\u6B8A\u7684\u900F\u660E\u8D28\u9178\u80FD\u963B\u6B62\u764C\u7EC6\u80DE\u5206\u88C2\u3002',
+      questionType: 'trivia'
+    },
+    {
+      question: '\u54EA\u79CD\u65B9\u6CD5\u80FD\u8BA9\u5207\u6D0B\u8471\u4E0D\u6D41\u6CEA\uFF1F',
+      options: { A: '\u51B7\u51BB30\u5206\u949F', B: '\u542B\u4E00\u53E3\u6C34', C: '\u6234\u6CF3\u955C', D: '\u5FAE\u6CE2\u52A010\u79D2' },
+      answer: 'C', explanation: '🕶️ \u6234\u6CF3\u955C\u662F\u6700\u76F4\u63A5\u7684\u7269\u7406\u65B9\u6CD5——\u963B\u6B62\u50AC\u6CEA\u6C14\u4F53\u63A5\u89E6\u773C\u775B\u3002\u51B7\u51BB\u4E5F\u6709\u6548\u4F46\u6548\u679C\u6709\u9650\u3002',
+      questionType: 'life_hack'
+    }
+  ];
+  var q = fallbackQuestions[Math.floor(Math.random() * fallbackQuestions.length)];
+  self._renderQuestion(q, aiId);
+};
+
+// ================================================================
+// 气泡队列系统 — 防止多个事件同时弹出重叠
+// ================================================================
+// Q1: 改为实例变量 chaosBubbleQueue 管理
+var BUBBLE_QUEUE_MAX = 3;
+var bubbleShowing = false;
+
+// Q1: 改为 GameScene 方法
+GameScene.prototype._processBubbleQueue = function () {
+  if (!this.chaosBubbleQueue) return;
+  if (this.chaosBubbleQueue.length === 0) {
+    bubbleShowing = false;
+    return;
+  }
+  bubbleShowing = true;
+  var item = this.chaosBubbleQueue.shift();
+  item.render();
+};
+
+// ================================================================
+// 出牌 - AI 气泡（调API，不通则回退本地池）
+// ================================================================
+GameScene.prototype._showPlayBubble = function (aiId, event, context) {
+  var self = this;
+
+  var renderBubble = function (line) {
+    // 直接替换: 杀掉旧气泡和旧定时器
+    if (self.playBubbleTimer) {
+      self.playBubbleTimer.remove();
+      self.playBubbleTimer = null;
+    }
+    if (self.playBubbleContainer) {
+      self.playBubbleContainer.destroy();
+      self.playBubbleContainer = null;
+    }
+    if (self.playBubbleElements) {
+      for (var bi = 0; bi < self.playBubbleElements.length; bi++) {
+        if (self.playBubbleElements[bi]) self.playBubbleElements[bi].destroy();
+      }
+    }
+    self.playBubbleElements = [];
+
+    var isDuidui = (aiId === 'duidui');
+    var isEmergency = (event === 'bomb');
+    var y = 50;
+    var aiDisplayName = isDuidui ? '王怼怼' : '苏甜甜';
+    var avatarX = isDuidui ? 176 : 788;
+    var avatarY = y + 16;
+    var avatarColor = isDuidui ? 0x4FC3F7 : 0xFFB74D;
+
+    // 方块形气泡
+    // C2: 增大气泡尺寸防止长文字溢出
+    var baseSize = 64;
+    // 先创建临时文本获取精确尺寸
+    var tempStyle = isEmergency ? {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '16px', color: '#FFCDD2', fontStyle: 'bold',
+      wordWrap: { width: 200, useAdvancedWrap: true }
+    } : {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '14px', color: '#FFFFFF',
+      wordWrap: { width: 200, useAdvancedWrap: true }
+    };
+    var tempTxt = self.add.text(0, 0, line, tempStyle);
+    var tempBounds = tempTxt.getBounds();
+    tempTxt.destroy();
+    var bubbleW = Math.min(200, Math.max(80, tempBounds.width + 30));
+    var bubbleH = Math.max(50, tempBounds.height + 24);
+    var bubbleX = avatarX - bubbleW / 2;
+    var bubbleY = y + 36;
+    var cornerRadius = isDuidui ? 12 : 4;
+    var bubbleBgColor = isEmergency ? 0x500A00 : (isDuidui ? 0x1B5E20 : 0x311B92);
+    var bubbleBorderColor = isEmergency ? 0xFF5252 : (isDuidui ? 0x66BB6A : 0xCE93D8);
+
+    // AI 头像圆圈
+    var avatar = self.add.graphics();
+    avatar.fillStyle(avatarColor, 1);
+    avatar.fillCircle(avatarX, avatarY, 22).setDepth(20);
+    avatar.lineStyle(2, 0xFFFFFF, 0.6);
+    avatar.strokeCircle(avatarX, avatarY, 22).setDepth(20);
+    var avatarTxt = self.add.text(avatarX, avatarY, isDuidui ? '😎' : '😊', {
+      fontFamily: 'sans-serif', fontSize: '18px'
+    }).setOrigin(0.5).setDepth(21);
+    self.playBubbleElements.push(avatar, avatarTxt);
+
+    // AI 名字 - 名字放在头像正下方，不再与气泡顶部对齐
+    var nameTxt = self.add.text(avatarX, avatarY + 30, aiDisplayName, {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '11px', color: '#A5D6A7', fontStyle: 'bold'
+    }).setOrigin(0.5, 0);
+    self.playBubbleElements.push(nameTxt);
+
+    // 气泡高度自适应: 先创建文字获取高度，再用高度绘制气泡
+    var textStyle = isEmergency ? {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '16px', color: '#FFCDD2', fontStyle: 'bold',
+      wordWrap: { width: bubbleW - 28, useAdvancedWrap: true }
+    } : {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '14px', color: '#FFFFFF',
+      wordWrap: { width: bubbleW - 28, useAdvancedWrap: true },
+      lineSpacing: 4
+    };
+    var textX = isDuidui ? (bubbleX + 14) : (bubbleX + 10);
+    var bubbleTxt = self.add.text(bubbleX + 14, 0, line, textStyle);
+    var textBounds = bubbleTxt.getBounds();
+    bubbleH = Math.max(bubbleH, textBounds.height + 20);
+    bubbleTxt.setPosition(textX, bubbleY + bubbleH / 2).setOrigin(0, 0.5);
+
+    // 台词气泡背景（填充+边框分开，炸弹时边框可独立闪烁）
+    var bubbleBg = self.add.graphics();
+    bubbleBg.fillStyle(0x000000, 0.8);
+    if (cornerRadius > 0) {
+      bubbleBg.fillRoundedRect(bubbleX, bubbleY, bubbleW, bubbleH, cornerRadius).setDepth(20);
+    } else {
+      bubbleBg.fillRect(bubbleX, bubbleY, bubbleW, bubbleH).setDepth(20);
+    }
+    self.playBubbleElements.push(bubbleBg);
+
+    var bubbleBorder = self.add.graphics();
+    bubbleBorder.lineStyle(isEmergency ? 2 : 1.5, bubbleBorderColor, 0.5);
+    if (cornerRadius > 0) {
+      bubbleBorder.strokeRoundedRect(bubbleX, bubbleY, bubbleW, bubbleH, cornerRadius).setDepth(20);
+    } else {
+      bubbleBorder.strokeRect(bubbleX, bubbleY, bubbleW, bubbleH).setDepth(20);
+    }
+    self.playBubbleElements.push(bubbleBorder);
+    self._playBubbleBorder = bubbleBorder;
+
+    // 三角形箭头（怼怼朝左、甜甜朝右）
+    var arrow = self.add.graphics();
+    arrow.fillStyle(0x000000, 0.8);
+    if (isDuidui) {
+      // 左侧箭头指向左边头像
+      arrow.fillTriangle(
+        bubbleX, bubbleY + bubbleH / 2,
+        bubbleX - 10, bubbleY + bubbleH / 2 - 6,
+        bubbleX - 10, bubbleY + bubbleH / 2 + 6
+      ).setDepth(20);
+    } else {
+      // 右侧箭头指向右边头像
+      arrow.fillTriangle(
+        bubbleX + bubbleW, bubbleY + bubbleH / 2,
+        bubbleX + bubbleW + 10, bubbleY + bubbleH / 2 - 6,
+        bubbleX + bubbleW + 10, bubbleY + bubbleH / 2 + 6
+      ).setDepth(20);
+    }
+    self.playBubbleElements.push(arrow);
+    // 文字最后push到底部渲染在上层
+    self.playBubbleElements.push(bubbleTxt);
+
+    // 弹入动画: Container 包裹所有元素
+    self.playBubbleContainer = self.add.container(0, 0, self.playBubbleElements).setDepth(500);
+    if (isEmergency) {
+      self.playBubbleContainer.setScale(0.7).setAlpha(0);
+      self.tweens.add({
+        targets: self.playBubbleContainer,
+        scale: 1.1, alpha: 1, duration: 100, ease: 'Back.easeOut',
+        onComplete: function () {
+          self.tweens.add({
+            targets: self.playBubbleContainer,
+            scale: 1.0, duration: 80, ease: 'Sine.easeOut'
+          });
+        }
+      });
+    } else {
+      self.playBubbleContainer.setScale(0.8).setAlpha(0);
+      self.tweens.add({
+        targets: self.playBubbleContainer,
+        scale: 1.0, alpha: 1,
+        duration: 150, ease: 'Back.easeOut'
+      });
+    }
+
+    // 炸弹边框闪烁
+    if (isEmergency) {
+      self.tweens.add({
+        targets: bubbleBorder,
+        alpha: { from: 0.3, to: 0.9 },
+        duration: 400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut'
+      });
+    }
+
+    // 直接替换模式: 定时销毁（含退出动画）
+    var displayMs = event === 'bomb' ? 5000 : 4000;
+    self.playBubbleTimer = self.time.delayedCall(displayMs, function () {
+      self.tweens.add({
+        targets: self.playBubbleContainer,
+        alpha: 0, duration: 200, ease: 'Linear',
+        onComplete: function () {
+          if (self.playBubbleContainer) {
+            self.playBubbleContainer.destroy();
+            self.playBubbleContainer = null;
+          }
+          self.playBubbleElements = [];
+          self.playBubbleTimer = null;
+        }
+      });
+    });
+  };
+
+  // 直接替换: 立即执行，不入队列
+  if (self.isAPIMode && typeof ApiClient !== 'undefined' && ApiClient.generateDialogue) {
+    ApiClient.generateDialogue(aiId, event, context)
+      .then(function (res) {
+        renderBubble(res.line || pickAiLine(aiId, event));
+      })
+      .catch(function () {
+        renderBubble(pickAiLine(aiId, event));
+      });
+  } else {
+    renderBubble(pickAiLine(aiId, event));
+  }
+};
+
+// ================================================================
+// 搞事情 - AI \u6C14\u6CE1
+// ================================================================
+GameScene.prototype._showAiBubble = function (aiId, sceneKey, y) {
+  var self = this;
+
+  var renderBubble = function (line) {
+    // \u6E05\u9664\u65E7\u6C14\u6CE1
+    if (self.chaosBubbleElements) {
+      for (var bi = 0; bi < self.chaosBubbleElements.length; bi++) {
+        self.chaosBubbleElements[bi].destroy();
+      }
+    }
+    self.chaosBubbleElements = [];
+
+    var aiDisplayName = aiId === 'duidui' ? '\u738B\u603C\u603C' : '\u82CF\u751C\u751C';
+
+    // C2: 气泡自适应高度，防止长文字溢出
+    var bubbleW = Math.min(540, 200 + line.length * 10);
+    var bubbleH = Math.max(44, 36 + Math.ceil(line.length / 20) * 18);
+    var bubbleX = 230;
+    var bubbleY = y + 10;
+
+    // AI \u5934\u50CF\u5706\u5708
+    var avatar = self.add.graphics();
+    avatar.fillStyle(aiId === 'duidui' ? 0x4FC3F7 : 0xFFB74D, 1);
+  avatar.fillCircle(80, y + 16, 22).setDepth(500);
+  avatar.lineStyle(2, 0xFFFFFF, 0.5);
+  avatar.strokeCircle(80, y + 16, 22).setDepth(500);
+  var avatarTxt = self.add.text(80, y + 16, aiId === 'duidui' ? '😎' : '😊', {
+    fontFamily: 'sans-serif', fontSize: '18px'
+  }).setOrigin(0.5).setDepth(501);
+  self.chaosBubbleElements.push(avatar, avatarTxt);
+
+  // AI \u540D\u5B57\uFF08\u52A0\u5927\uFF09
+  var nameTxt = self.add.text(105, y - 4, aiDisplayName, {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '12px', color: '#FFFFFF', fontStyle: 'bold'
+  }).setDepth(500);
+  self.chaosBubbleElements.push(nameTxt);
+
+  // \u53F0\u8BCD\u6C14\u6CE1\uFF08\u5B9E\u5FC3\u7EFF\u8272\u6C14\u6CE1\u5E26\u8FB9\u6846\uFF09
+  var bubble = self.add.graphics();
+  bubble.fillStyle(0x1B5E20, 0.85);
+  bubble.fillRoundedRect(bubbleX, bubbleY, bubbleW, bubbleH, 12).setDepth(500);
+  bubble.lineStyle(1.5, 0x66BB6A, 0.5);
+  bubble.strokeRoundedRect(bubbleX, bubbleY, bubbleW, bubbleH, 12).setDepth(500);
+  self.chaosBubbleElements.push(bubble);
+
+  // \u4E09\u89D2\u7BAD\u5934\u6307\u5411\u5DE6\u4FA7\u89D2\u8272
+  var arrow = self.add.graphics();
+  arrow.fillStyle(0x1B5E20, 0.85);
+  arrow.fillTriangle(
+    bubbleX, bubbleY + bubbleH / 2,
+    bubbleX - 12, bubbleY + bubbleH / 2 - 6,
+    bubbleX - 12, bubbleY + bubbleH / 2 + 6
+  ).setDepth(500);
+  self.chaosBubbleElements.push(arrow);
+
+    // 台词文本
+  var bubbleTxt = self.add.text(bubbleX + 14, bubbleY + bubbleH / 2, line, {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '14px', color: '#FFFFFF',
+    wordWrap: { width: bubbleW - 28 },
+    lineSpacing: 2
+  }).setOrigin(0, 0.5).setDepth(501);
+  self.chaosBubbleElements.push(bubbleTxt);
+
+  // 搞事情气泡显示3.5秒后自动销毁，解锁队列
+  self.time.delayedCall(3500, function () {
+    if (self.chaosBubbleElements) {
+      for (var ti = 0; ti < self.chaosBubbleElements.length; ti++) {
+        if (self.chaosBubbleElements[ti]) self.chaosBubbleElements[ti].destroy();
+      }
+      self.chaosBubbleElements = [];
+    }
+    self._processBubbleQueue();
+  });
+  };
+
+  var queuedTask = function () {
+    var line = pickAiLine(aiId, sceneKey);
+    renderBubble(line);
+  };
+
+  self.chaosBubbleQueue.push({ render: queuedTask });
+  if (self.chaosBubbleQueue.length > BUBBLE_QUEUE_MAX) self.chaosBubbleQueue.shift();
+  if (!bubbleShowing) self._processBubbleQueue();
+};
+// ================================================================
+// 搞事情 - 清除题目区域
+// ================================================================
+GameScene.prototype._clearQuestionArea = function () {
+  var self = this;
+  if (!self.chaosElements) return;
+  // \u4FDD\u7559\u524D3\u4E2A\u5143\u7D20\uFF08\u906E\u7F69\u3001\u5361\u724C\u80CC\u666F\u3001\u6807\u9898\u3001\u5206\u6570\u3001\u5173\u6389\u6309\u94AE\uFF09
+  var toKeep = self.chaosElements.slice(0, 8); // overlay, cardShadow, cardBg, title, scoreBg, scoreText, closeBtnBg, closeBtnText
+  for (var di = 8; di < self.chaosElements.length; di++) {
+    if (self.chaosElements[di]) self.chaosElements[di].destroy();
+  }
+  self.chaosElements = toKeep;
+  // \u53D6\u6D88\u6C14\u6CE1\u5B9A\u65F6\u5668
+  if (self.chaosBubbleTimer) {
+    self.chaosBubbleTimer.remove();
+    self.chaosBubbleTimer = null;
+  }
+  // \u4E5F\u6E05\u9664\u6C14\u6CE1
+  if (self.chaosBubbleElements) {
+    for (var ei = 0; ei < self.chaosBubbleElements.length; ei++) {
+      if (self.chaosBubbleElements[ei]) self.chaosBubbleElements[ei].destroy();
+    }
+    self.chaosBubbleElements = [];
+  }
+};
+
+// ================================================================
+// 搞事情 - 销毁搞事情UI，恢复出牌
+// ================================================================
+GameScene.prototype._destroyChaos = function () {
+  if (this.chaosElements) {
+    for (var i = 0; i < this.chaosElements.length; i++) {
+      if (this.chaosElements[i]) this.chaosElements[i].destroy();
+    }
+  }
+  if (this.chaosBubbleElements) {
+    for (var j = 0; j < this.chaosBubbleElements.length; j++) {
+      if (this.chaosBubbleElements[j]) this.chaosBubbleElements[j].destroy();
+    }
+  }
+  this.chaosElements = null;
+  this.chaosBubbleElements = null;
+  this.chaosOverlay = null;
+  this.chaosQText = null;
+  this.chaosScoreText = null;
+  this.chaosTitle = null;
+  this.chaosCardBg = null;
+
+  // B46: \u6e05\u9664\u8d85\u65f6\u8ba1\u65f6\u5668
+  if (this.chaosTimeoutTimer) {
+    this.chaosTimeoutTimer.remove();
+    this.chaosTimeoutTimer = null;
+  }
+
+  // \u53d6\u6d88\u6c14\u6ce1\u5b9a\u65f6\u5668
+  if (this.chaosBubbleTimer) {
+    this.chaosBubbleTimer.remove();
+    this.chaosBubbleTimer = null;
+  }
+  // Q2: 346270205347251272346260224346263241351230237345210227
+  this.chaosBubbleQueue = [];
+
+  // \u6062\u590D\u51FA\u724C\u97F3\u6548
+  SoundManager.resumeAll();
+  this.gameState = GAME_STATE.PLAYER_TURN;
+
+  // \u6062\u590D\u6E38\u620F\u72B6\u6001
+  this._showAiBubble(this._chaosAiId || "duidui", "close", 180);
+  this.setStatusText('\u641E\u4E8B\u60C5\u7ED3\u675F\uFF0C\u7EE7\u7EED\u51FA\u724C');
+};
+// ================================================================
+// 功能按钮
+// ================================================================
+function createActionButtons(scene) {
+  var bw = 72, bh = 48, gap = 14;
+  var totalW = bw * 5 + gap * 4;
+  var startX = (960 - totalW) / 2;
+  var btnY = 442;
+
+  var buttons = [
+    { label: '\u51FA\u724C', color: 0x4ECDC4, key: 'play' },
+    { label: '\u63D0\u793A', color: 0xFFD93D, key: 'hint' },
+    { label: '\u4E0D\u51FA', color: 0xFF6B6B, key: 'pass' },
+    { label: '\u641E\u4E8B\u60C5', color: 0x7C4DFF, key: 'action' },
+    { label: '\u5E95\u724C\u67E5\u770B', color: 0x78909C, key: 'bottom' }
+  ];
+
+  if (!scene.actionButtons) scene.actionButtons = [];
+
+  for (var i = 0; i < buttons.length; i++) {
+    var b = buttons[i];
+    var bx = startX + i * (bw + gap);
+    var bg = scene.add.graphics();
+    bg.fillStyle(b.color, 1);
+    bg.fillRoundedRect(bx, btnY, bw, bh, 8).setDepth(100);
+    bg.setInteractive(new Phaser.Geom.Rectangle(bx, btnY, bw, bh), Phaser.Geom.Rectangle.Contains);
+    scene.actionButtons.push(bg);
+
+    var txt = scene.add.text(bx + bw / 2, btnY + bh / 2 - 1, b.label, {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '13px', color: '#FFFFFF', fontStyle: 'bold'
+    }).setOrigin(0.5).setDepth(101);
+    scene.actionButtons.push(txt);
+
+    (function (key) {
+      bg.on('pointerup', function () {
+        switch (key) {
+          case 'play': scene.doPlayerPlay(); break;
+          case 'hint': scene.doHint(); break;
+          case 'pass': scene.doPlayerPass(); break;
+          case 'action': scene.doAction(); break;
+          case 'bottom': scene.showBottomCards(scene.remainingCards); break;
+        }
+      });
+    })(b.key);
+  }
+}
+
+// ================================================================
+// Toast
+// ================================================================
+function showToast(scene, message) {
+  var cx = 300;
+  var toastBg = scene.add.graphics();
+  toastBg.fillStyle(0x000000, 0.7);
+  toastBg.fillRoundedRect(cx - 100, 206, 200, 38, 10).setDepth(200);
+  var toastText = scene.add.text(cx, 225, message, {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '13px', color: '#FFFFFF'
+  }).setOrigin(0.5).setDepth(201);
+  scene.time.delayedCall(1200, function () {
+    toastBg.destroy();
+    toastText.destroy();
+  });
+}
+
+
+// ================================================================
+// 赢牌结算面板
+// ================================================================
+GameScene.prototype.renderRoundEndPanel = function (winner) {
+  var self = this;
+  this.gameState = GAME_STATE.ROUND_END;
+
+  var isPlayerWin = winner === 'player';
+  var isAI1Win = winner === 'ai1';
+  var winName = '';
+  if (isAI1Win) winName = '王怼怼';
+  else if (winner === 'ai2') winName = '苏甜甜';
+
+  // --- 1. 半透明遮罩（淡入）---
+  var overlay = self.add.graphics();
+  overlay.fillStyle(0x000000, 0);
+  overlay.fillRect(0, 0, 960, 600).setDepth(400);
+  self.tweens.add({ targets: overlay, alpha: 0.65, duration: 300, ease: 'Linear' });
+
+  var panelElements = [overlay];
+
+  // --- 2. 结算卡片 ---
+  var cardBg = self.add.graphics();
+  cardBg.fillStyle(0x1A1A2E, 0.92);
+  cardBg.fillRoundedRect(200, 60, 560, 480, 12).setDepth(401);
+  var glowColor = isPlayerWin ? 0xFFD700 : 0xFF5252;
+  cardBg.lineStyle(2, glowColor, 0.8);
+  cardBg.strokeRoundedRect(200, 60, 560, 480, 12).setDepth(401);
+  panelElements.push(cardBg);
+  cardBg.setAlpha(0);
+
+  // --- 3. 标题文字（弹入动画）---
+  var titleEmoji = isPlayerWin ? '🎉' : (isAI1Win || winner === 'ai2') ? '😅' : '😅';
+  var titleText = isPlayerWin ? '你赢了！' : '你输了';
+  var titleColor = isPlayerWin ? '#FFD700' : '#FF5252';
+  var title = self.add.text(480, 90, titleEmoji + ' ' + titleText, {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '28px', fontStyle: 'bold', color: titleColor,
+    shadow: { blur: 20, color: titleColor, fill: true }
+  }).setOrigin(0.5).setDepth(402).setScale(0.3).setAlpha(0);
+  panelElements.push(title);
+
+  // AI获胜副标题
+  var aiWinSub = null;
+  if (!isPlayerWin && winName) {
+    aiWinSub = self.add.text(480, 120, winName + '获胜！', {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '16px', color: '#FF5252'
+    }).setOrigin(0.5).setDepth(402).setAlpha(0);
+    panelElements.push(aiWinSub);
+  }
+
+  // --- 4. 得分计算 ---
+  var baseScore = self.isLandlord ? 30 : 20;
+  var bombMult = self.totalBombs || 0;
+  var chaosScore = self.chaosScore || 0;
+  var chaosBonus = chaosScore * 10;
+
+  // 手牌奖励：对手剩余手牌数 * 2
+  var remainingCards = 0;
+  if (isPlayerWin) {
+    remainingCards = (self.ai1Hand ? self.ai1Hand.length : 0) + (self.ai2Hand ? self.ai2Hand.length : 0);
+  } else if (isAI1Win) {
+    remainingCards = (self.playerHand ? self.playerHand.length : 0) + (self.ai2Hand ? self.ai2Hand.length : 0);
+  } else {
+    remainingCards = (self.playerHand ? self.playerHand.length : 0) + (self.ai1Hand ? self.ai1Hand.length : 0);
+  }
+  var handBonus = remainingCards * 2;
+
+  var subTotal = baseScore + chaosBonus + handBonus;
+  var bombCount = bombMult - (self.rocketCount || 0);
+  var multiplier = Math.pow(2, bombCount) * Math.pow(4, self.rocketCount || 0);
+  var totalScore = subTotal * multiplier;
+
+  var detailRows = [
+    { label: '基础底分', value: '+' + baseScore, icon: '★', color: '#C8E6C9' },
+    { label: '炸弹翻倍', value: '×' + multiplier + ' (' + bombMult + '个)', icon: '🧨', color: '#FFD54F' },
+    { label: '搞事情得分', value: '+' + chaosBonus, icon: '🔥', color: '#FFAB91' },
+    { label: '手牌奖励', value: '+' + handBonus, icon: '🃏', color: '#A5D6A7' }
+  ];
+
+  // 不计算搞事情和中奖为空时隐藏
+  if (chaosBonus === 0) {
+    detailRows[2].value = '0';
+  }
+  if (handBonus === 0) {
+    detailRows[3].value = '0';
+  }
+
+  // --- 5. 得分面板 ---
+  var scorePanel = self.add.graphics();
+  scorePanel.fillStyle(0x000000, 0.25);
+  scorePanel.fillRoundedRect(240, 142, 480, 260, 8).setDepth(402);
+  panelElements.push(scorePanel);
+  scorePanel.setAlpha(0);
+
+  // 总得分标题
+  var totalLabel = self.add.text(480, 155, '💰 总得分', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '14px', color: '#A5D6A7'
+  }).setOrigin(0.5).setDepth(403).setAlpha(0);
+  panelElements.push(totalLabel);
+
+  // 总得分数字（跳动动画）
+  var totalNum = self.add.text(480, 190, '+' + totalScore, {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '36px', fontStyle: 'bold', color: '#FFD700',
+    shadow: { blur: 15, color: '#FFD700', fill: true }
+  }).setOrigin(0.5).setDepth(403).setAlpha(0);
+  panelElements.push(totalNum);
+
+  // 分隔线1
+  var div1 = self.add.graphics();
+  div1.lineStyle(1, 0xFFFFFF, 0.1);
+  div1.lineBetween(260, 215, 700, 215).setDepth(403);
+  panelElements.push(div1);
+  div1.setAlpha(0);
+
+  // 得分细项文本对象数组
+  var rowTexts = [];
+  var rowY = 235;
+  for (var ri = 0; ri < detailRows.length; ri++) {
+    var dr = detailRows[ri];
+    var rowStr = dr.label + ' ' + dr.value + '  ' + dr.icon;
+    var rowTxt = self.add.text(270, rowY, rowStr, {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '13px', color: dr.color
+    }).setDepth(403).setAlpha(0);
+    panelElements.push(rowTxt);
+    rowTexts.push(rowTxt);
+    rowY += 25;
+  }
+
+  // 分隔线2
+  var div2 = self.add.graphics();
+  div2.lineStyle(1, 0xFFFFFF, 0.1);
+  div2.lineBetween(260, 335, 700, 335).setDepth(403);
+  panelElements.push(div2);
+  div2.setAlpha(0);
+
+  // 底部小字：本局用时
+  var elapsed = Math.floor((Date.now() - (self.gameStartTime || Date.now())) / 1000);
+  var min = Math.floor(elapsed / 60);
+  var sec = elapsed % 60;
+  var timeStr = '本局用时: ' + min + '分' + sec + '秒';
+  var timeTxt = self.add.text(710, 510, timeStr, {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '10px', color: '#888888'
+  }).setDepth(403).setAlpha(0);
+  panelElements.push(timeTxt);
+
+  // --- 6. 按钮 ---
+
+  // 再来一局
+  var btn1Bg = self.add.graphics();
+  btn1Bg.fillStyle(0x4ECDC4, 1);
+  btn1Bg.fillRoundedRect(290, 370, 170, 44, 8).setDepth(403);
+  btn1Bg.setInteractive(new Phaser.Geom.Rectangle(290, 370, 170, 44), Phaser.Geom.Rectangle.Contains);
+  var btn1Txt = self.add.text(375, 392, '🔄 再来一局', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '15px', fontStyle: 'bold', color: '#FFFFFF'
+  }).setOrigin(0.5).setDepth(404);
+  btn1Bg.on('pointerup', function () { self.scene.restart(); });
+  panelElements.push(btn1Bg, btn1Txt);
+  btn1Bg.setAlpha(0);
+  btn1Txt.setAlpha(0);
+
+  // 返回首页
+  var btn2Bg = self.add.graphics();
+  btn2Bg.fillStyle(0x78909C, 1);
+  btn2Bg.fillRoundedRect(500, 370, 170, 44, 8).setDepth(403);
+  btn2Bg.setInteractive(new Phaser.Geom.Rectangle(500, 370, 170, 44), Phaser.Geom.Rectangle.Contains);
+  var btn2Txt = self.add.text(585, 392, '🏠 返回首页', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '15px', fontStyle: 'bold', color: '#FFFFFF'
+  }).setOrigin(0.5).setDepth(404);
+  btn2Bg.on('pointerup', function () { window.location.reload(); });
+  panelElements.push(btn2Bg, btn2Txt);
+  btn2Bg.setAlpha(0);
+  btn2Txt.setAlpha(0);
+
+  // --- 7. 动画序列 ---
+
+  // 得分面板整体淡入 (0.3s)
+  self.time.delayedCall(300, function () {
+    self.tweens.add({ targets: cardBg, alpha: 1, duration: 300, ease: 'Linear' });
+    self.tweens.add({ targets: scorePanel, alpha: 1, duration: 300, ease: 'Linear' });
+  });
+
+  // 标题弹入 (0.4s, scale 0.3→1.0)
+  self.time.delayedCall(400, function () {
+    self.tweens.add({
+      targets: title, scale: 1.0, alpha: 1, duration: 400,
+      ease: 'Back.easeOut'
+    });
+    if (aiWinSub) {
+      self.tweens.add({ targets: aiWinSub, alpha: 1, duration: 300, ease: 'Linear' });
+    }
+  });
+
+  // 总得分数字淡入 (0.6s)
+  self.time.delayedCall(700, function () {
+    self.tweens.add({ targets: totalLabel, alpha: 1, duration: 200, ease: 'Linear' });
+    self.tweens.add({ targets: totalNum, alpha: 1, duration: 300, ease: 'Linear' });
+    self.tweens.add({ targets: div1, alpha: 1, duration: 200, ease: 'Linear' });
+  });
+
+  // 各细项逐行淡入 (每行间隔150ms)
+  for (var rj = 0; rj < rowTexts.length; rj++) {
+    (function (idx, txt) {
+      self.time.delayedCall(900 + idx * 150, function () {
+        self.tweens.add({ targets: txt, alpha: 1, duration: 200, ease: 'Linear' });
+      });
+    })(rj, rowTexts[rj]);
+  }
+
+  // 分隔线2淡入
+  self.time.delayedCall(1500, function () {
+    self.tweens.add({ targets: div2, alpha: 1, duration: 200, ease: 'Linear' });
+  });
+
+  // 底部小字淡入
+  self.time.delayedCall(1600, function () {
+    self.tweens.add({ targets: timeTxt, alpha: 1, duration: 200, ease: 'Linear' });
+  });
+
+  // 按钮弹入 (延迟0.2s后两个按钮同时弹入)
+  self.time.delayedCall(1800, function () {
+    self.tweens.add({ targets: btn1Bg, alpha: 1, duration: 200, ease: 'Linear' });
+    self.tweens.add({ targets: btn1Txt, alpha: 1, duration: 200, ease: 'Linear' });
+    self.tweens.add({ targets: btn2Bg, alpha: 1, duration: 200, ease: 'Linear' });
+    self.tweens.add({ targets: btn2Txt, alpha: 1, duration: 200, ease: 'Linear' });
+  });
+
+  // 回合递增
+  self.round++;
+  self.roundText.setText('第 ' + self.round + '/10 回合');
+};
+
+// ================================================================
+// 出牌记录区域
+// ================================================================
+function createPlayHistoryArea(scene) {
+  var bg = scene.add.graphics();
+  // 颜色加深，增加边框质感
+  bg.fillStyle(0x000000, 0.45);
+  bg.fillRoundedRect(12, 58, 140, 240, 8).setDepth(200);
+  bg.lineStyle(1.5, 0x4CAF50, 0.5);
+  bg.strokeRoundedRect(12, 58, 140, 240, 8).setDepth(200);
+
+  scene.add.text(82, 68, '📜 出牌记录', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '12px', color: '#A5D6A7', fontStyle: 'bold'
+  }).setOrigin(0.5).setDepth(201);
+
+  scene.playHistoryText = scene.add.text(18, 85, '', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '11px', color: '#FFFFFF',
+    lineSpacing: 6,
+    wordWrap: { width: 128 }
+  }).setDepth(201);
+}
+
+// ================================================================
+// 新增：清理桌面上一轮打出的废牌
+// ================================================================
+GameScene.prototype.clearTablePlays = function() {
+  var self = this;
+  ['myPlayCardsGfx', 'ai1PlayCardsGfx', 'ai2PlayCardsGfx'].forEach(function(key) {
+    if (self[key]) {
+      self[key].forEach(function(img) { img.destroy(); });
+      self[key] = [];
+    }
+  });
+};
+
+GameScene.prototype.addPlayHistory = function (player, cardsOrPass) {
+  var labels = { player: '你', ai1: '怼怼', ai2: '甜甜' };
+  var label = labels[player] || player;
+  var entry;
+  if (cardsOrPass === true) {
+    entry = { text: label + ': 不出', pass: true };
+  } else if (cardsOrPass && cardsOrPass.length > 0) {
+    // 增加扑克牌花色符号显示
+    var suitSymbol = { spade:'♠', heart:'♥', club:'♣', diamond:'♦', joker:'🃏' };
+    var display = cardsOrPass.map(function (c) {
+      return (suitSymbol[c.suit] || '') + (Doudizhu.RANK_NAME_MAP[c.rank] || '?');
+    }).join(' ');
+    entry = { text: label + ': ' + display, cards: cardsOrPass };
+  } else {
+    return;
+  }
+  this.playHistory.push(entry);
+  // 保留最近 9 条记录，避免撑爆面板
+  if (this.playHistory.length > 9) {
+    this.playHistory.shift();
+  }
+  this.renderPlayHistory();
+};
+
+GameScene.prototype.renderPlayHistory = function () {
+  if (!this.playHistoryText) return;
+  var lines = [];
+  for (var i = 0; i < this.playHistory.length; i++) {
+    lines.push(this.playHistory[i].text);
+  }
+  this.playHistoryText.setText(lines.join('\n'));
+};
+// ================================================================
+// AI 台词池 - 搞事情模式
+// ================================================================
+var AI_LINES = {
+  duidui: {
+    play: [
+      '送分题，给人类的怜悯。',
+      '这题你要是都答不上来……啧。',
+      '热身而已，别紧张到冒汗。',
+      '我幼儿园数据集里就有这道题。',
+      '不是吧，这题还要想？'
+    ],
+    pass: [
+      '这轮我让你，免得说我欺负人类。',
+      '思考一下人生……主要是让你思考。',
+      '算了，你这水平配不上我的题。',
+      '过，我看看你能憋出什么大招。',
+      '题库在升级，你先等着。'
+    ],
+    bomb: [
+      '🚀 炸弹！不是，这题你能答对我倒立洗头。',
+      '核弹级题目，建议你直接过牌。',
+      '这道题的正确答案，在我的隐藏层里。',
+      '人类训练集里没有这道题，放弃吧。',
+    ],
+    easy: [
+      '送分题，给人类的怜悯。',
+      '这题你要是都答不上来……啧。',
+      '热身而已，别紧张到冒汗。',
+      '我幼儿园数据集里就有这道题。',
+    ],
+    hard: [
+      '这道题，我调参调了 0.0001 秒出的。',
+      '人类的 CPU 该升级了。',
+      '瞪大眼睛，别眨眼，反正你也答不对。',
+      '终于到了有趣的部分——看你吃瘪。',
+    ],
+    win: [
+      '意料之中——你也是这么想的吧？',
+      '人类 vs AI = 0 : ∞，历史就是这样写的。',
+      '要不你换个游戏？比如扫雷？',
+      '我赢了，但并不意外，和你们人类的日常一样。',
+      '你的表现我已经写入训练日志，作为反面教材。'
+    ],
+    lose: [
+      '……你开挂了吧？',
+      '我 GPU 过热而已，再来！',
+      '这局数据不纳入统计，因为我没联网。',
+      '人类，你成功触发了我的 bug，下次修复了你就完了。',
+      '行，你赢了，但你仍然考不上我的学校（如果我有的话）。'
+    ],
+    correct: [
+      '哼，蒙对的吧？',
+      '这次算你走运。',
+      '不错嘛，人类有时候也能猜对。',
+      '意外意外，我以为你会选错的。',
+    ],
+    wrong: [
+      '哈哈哈哈哈！果然不出所料！',
+      '这种题都会选错？你是来斗地主还是来斗笨的？',
+      '我的数据库显示，你答错率 100%。',
+      '答错的方式处处相同，答对的人各有各的契机。开玩笑的，没人答对。',
+    ],
+    close: [
+      '行吧，回来打牌。',
+      '搞事情结束，继续被我输组。',
+      '好了好了，不耍你了，继续出牌吧。',
+    ]
+  },
+
+  tiantian: {
+    play: [
+      '这道题送你啦！不客气！',
+      '简单得我都不好意思出！但我还是出了嘿嘿',
+      '热身题！把你的小脑瓜转起来～',
+      '这题是幼儿园水平，你肯定……应该……大概会吧？',
+      '叮！您的简单模式体验卡已激活！'
+    ],
+    pass: [
+      '这轮我让着你！因为……我想上厕所。',
+      '发呆时间到！我给你 10 秒整理发型。',
+      '让我想想下一题怎么刁难你……好了想好了！',
+      '过！——你是不是松了口气？嘿嘿别想多。',
+      '我要沉思一会，别打扰我沉思……好了沉思完了过牌。'
+    ],
+    bomb: [
+      '💣 BOMBSHELL！全场的目光集中到我身上！',
+      '这道题核能级！建议你场外求助——但你没有场外求助哈哈',
+      '我要放！大！招！了！观众朋友们小板凳端好！',
+      '这一题，我赌你哭 😂',
+    ],
+    easy: [
+      '这道题送你啦！不客气！',
+      '简单得我都不好意思出！但我还是出了嘿嘿',
+      '热身题！把你的小脑瓜转起来～',
+      '这题是幼儿园水平，你肯定……应该……大概会吧？',
+    ],
+    hard: [
+      '这一题！我熬了三个通宵准备的！',
+      '✨ 超超超难题闪亮登场！希望人没事 🙏',
+      '这题你答对了我就……请你吃虚拟冰淇淋！',
+      '难度拉满！我的CPU在燃烧！💥',
+    ],
+    win: [
+      '🎉 冠军！冠军！我是冠军！奖杯呢？',
+      '人类！我做到了！虽然我只是个 AI 但我做到了！',
+      '这位选手！你非常棒！但是 AI 更棒！耶！✌️',
+      '我要发朋友圈！我有生以来（通电以来）最辉煌的时刻！',
+      '赢了赢了！今晚吃火锅！我请客……虚拟的。'
+    ],
+    lose: [
+      '我……裂……开……了……😭',
+      '不可能！我明明偷偷加载了人类知识图谱的！',
+      '呜呜呜你太厉害了，我演不下去了，你赢了！',
+      '好吧好吧你赢了，但我不服，下次带我的 GPT-5 兄弟来收拾你',
+      '输给人类不丢人……丢人丢大了 哇 😭😭😭（两秒后恢复）没事我去玩别的了！'
+    ],
+    correct: [
+      '哇塞！你真的会！！！',
+      '太棒啦！你是我见过最聪明的人类！',
+      '正确！我准备好了下一题继续难你！',
+      '花式鼓掌👏👏👏',
+    ],
+    wrong: [
+      '啊啊啊错了！我……裂……开……了……😭',
+      '不是吧！这简直……好玩！哈哈哈哈哈！',
+      '我没想到你会选这个！好呆萌啊😆',
+      '错了错了！来来来看看答案是什么……我也看看！',
+    ],
+    close: [
+      '回来打牌啦！哈哈哈！',
+      '搞完了搞完了，继续斗地主～',
+      '开心吗？我很开心！继续玩！',
+    ]
+  }
+
+};
+
+var lastUsedLines = {};
+
+function pickAiLine(aiId, sceneKey) {
+  var ai = AI_LINES[aiId];
+  if (!ai) return '...';
+  var pool = ai[sceneKey];
+  if (!pool || pool.length === 0) return '...';
+  // 过滤掉上一次刚刚说过的台词
+  var historyKey = aiId + '_' + sceneKey;
+  var available = pool.filter(function(line) { return line !== lastUsedLines[historyKey]; });
+  // 如果词库太少导致全被过滤，就重置
+  if (available.length === 0) available = pool;
+  var picked = available[Math.floor(Math.random() * available.length)];
+  lastUsedLines[historyKey] = picked;
+  return picked;
+}
+
+```
+
+---
+
+## `src/server/index.js` (3,718 字节)
+
+```javascript
+/**
+ * src/server/index.js - AI斗地主 后端 API 服务器
+ *
+ * 启动: node src/server/index.js
+ * 端口: 3100 (可通过 PORT 环境变量覆盖)
+ *
+ * API 一览:
+ *   POST /api/ai/play         - AI 出牌决策
+ *   POST /api/quiz/generate   - 出题系统
+ *   POST /api/verify/play     - 出牌验证
+ *   POST /api/wrong-book      - 错题本记录
+ *   GET  /api/wrong-book      - 错题本查询
+ */
+
+require('dotenv').config();
+
+const express = require('express');
+const cors = require('cors');
+const path = require('path');
+
+const aiRouter = require('./routes/ai');
+const quizRouter = require('./routes/quiz');
+const verifyRouter = require('./routes/verify');
+const wrongbookRouter = require('./routes/wrongbook');
+const chaosRouter = require('./routes/chaos');
+const dialogueRouter = require('./routes/dialogue');
+const { router: biddingRouter } = require('./routes/bidding');
+const resultRouter = require('./routes/result');
+
+const app = express();
+const PORT = process.env.PORT || 3100;
+
+// ============================================================
+// 中间件
+// ============================================================
+app.use(cors());
+app.use(express.json({ limit: '1mb' }));
+
+// 请求日志
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const ms = Date.now() - start;
+    console.log(`${req.method} ${req.originalUrl} → ${res.statusCode} (${ms}ms)`);
+  });
+  next();
+});
+
+// ============================================================
+// API 认证中间件
+// ============================================================
+const API_KEY = process.env.API_KEY;
+
+/** 如果进程配置了 API_KEY，则所有 /api/* 请求必须携带 x-api-key 头 */
+function checkAuth(req, res, next) {
+  // 健康检查跳过认证
+  if (req.path === '/health') return next();
+
+  if (API_KEY) {
+    const provided = req.headers['x-api-key'];
+    if (!provided || provided !== API_KEY) {
+      return res.status(401).json({ error: 'Unauthorized', message: 'x-api-key header is required' });
+    }
+  }
+  next();
+}
+
+if (!API_KEY) {
+  console.warn('⚠  WARNING: API_KEY not set. All API endpoints have no authentication.');
+  console.warn('   Set API_KEY in .env for production deployment.');
+}
+
+// ============================================================
+// 静态文件服务（前端页面）
+// ============================================================
+const clientPath = path.join(__dirname, '..', 'client');
+app.use(express.static(clientPath));
+
+// ============================================================
+// 路由
+// ============================================================
+app.use('/api', checkAuth);
+app.use('/api/ai', aiRouter);
+app.use('/api/quiz', quizRouter);
+app.use('/api/verify', verifyRouter);
+app.use('/api/wrong-book', wrongbookRouter);
+app.use('/api/chaos', chaosRouter);
+app.use('/api/bidding', biddingRouter);
+app.use('/api/ai/dialogue', dialogueRouter);
+app.use('/api/game', resultRouter);
+
+// 健康检查
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', time: new Date().toISOString() });
+});
+
+// 404
+app.use((req, res) => {
+  res.status(404).json({ error: 'Not Found', path: req.originalUrl });
+});
+
+// 统一错误处理
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err);
+  res.status(500).json({ error: 'Internal Server Error', message: err.message });
+});
+
+// ============================================================
+// 启动
+// ============================================================
+app.listen(PORT, () => {
+  console.log(`🃏 AI斗地主 API Server running on http://localhost:${PORT}`);
+  console.log(`   Health: http://localhost:${PORT}/api/health`);
+});
+
+```
+
+---
+
+## `src/server/routes/ai.js` (9,925 字节)
+
+```javascript
+/**
+ * src/server/routes/ai.js - AI 出牌决策 API
+ *
+ * POST /api/ai/play
+ *   Body: { hand: [{suit,rank}], lastPlay: [{suit,rank}]|null, difficulty?: 'easy'|'normal'|'hard' }
+ *   Response: { choice: { cards:[], type, typeName }, explanation: string, isValid: bool }
+ *
+ * 对接 MiniMax / DeepSeek 进行智能决策。
+ * 默认使用策略引擎 + 大模型兜底。
+ */
+
+const express = require('express');
+const router = express.Router();
+const cardUtils = require('../utils/cardUtils');
+const { callLLMForPlay } = require('../services/llmService');
+
+const { Doudizhu, HAND_TYPES, HAND_TYPE_NAMES } = cardUtils;
+
+// 策略权重配置（由难到易）
+const STRATEGY_WEIGHTS = {
+  aggressive: { bomb: 10, rocket: 10, big: 8, medium: 5, small: 2, pass: 1 },
+  normal:     { bomb: 8, rocket: 10, big: 6, medium: 6, small: 4, pass: 5 },
+  defensive:  { bomb: 5, rocket: 10, big: 4, medium: 6, small: 8, pass: 8 },
+};
+
+/**
+ * 策略引擎：根据手牌和局面选出最优出牌
+ */
+/**
+ * 获取给定难度对应的策略权重
+ */
+function getStrategyWeights(difficulty) {
+  switch (difficulty) {
+    case 'easy':   return STRATEGY_WEIGHTS.defensive;
+    case 'hard':   return STRATEGY_WEIGHTS.aggressive;
+    default:       return STRATEGY_WEIGHTS.normal;  // 'normal'
+  }
+}
+
+function strategyPlay(hand, lastPlay, difficulty) {
+  const handCards = cardUtils.toCards(hand);
+  const lastCards = lastPlay ? cardUtils.toCards(lastPlay) : null;
+
+  // 枚举所有合法出牌
+  const validPlays = Doudizhu.findValidPlays(handCards, lastCards);
+
+  if (!validPlays || validPlays.length === 0) {
+    // 没有能出的牌
+    return null;
+  }
+
+  // 自由出牌（先手）：选择最优策略
+  if (!lastCards || lastCards.length === 0) {
+    return chooseFirstPlay(validPlays, handCards, difficulty);
+  }
+
+  // 跟牌：选择能压住的最优解
+  return chooseFollowPlay(validPlays, handCards, lastCards, difficulty);
+}
+
+/**
+ * 先手出牌策略
+ */
+function chooseFirstPlay(plays, hand, difficulty) {
+  const weights = getStrategyWeights(difficulty);
+
+  // 按类型优先级排序
+  const typePriority = {
+    SINGLE: 5, PAIR: 4, TRIPLE: 3,
+    TRIPLE_PLUS_ONE: 3, TRIPLE_PLUS_TWO: 2,
+    STRAIGHT: 2, CONSECUTIVE_PAIRS: 2, AIRPLANE: 1,
+    BOMB: 0, ROCKET: 0, FOUR_PLUS_TWO: 1
+  };
+
+  // 评估每个出牌的得分
+  let bestPlay = plays[0];
+  let bestScore = -1;
+
+  for (const play of plays) {
+    const info = Doudizhu.identifyType(play);
+    let score = 0;
+
+    // 基础分：牌型优先级
+    score += (typePriority[info.type] || 5) * 10;
+
+    // 手牌数越少，越应该出能一次走完的牌
+    const remainingAfter = hand.length - play.length;
+    if (remainingAfter === 0) {
+      score += 100 * (weights.aggressive / 10); // 一手出完！
+    } else if (remainingAfter <= 3) {
+      score += 40 * (weights.aggressive / 10); // 接近胜利
+    }
+
+    // rank 评估 — 难度越低越倾向出小牌，难度越高越敢保留大牌
+    if (info.type === HAND_TYPES.SINGLE || info.type === HAND_TYPES.PAIR) {
+      if (info.rank <= 6) score += 20 * (weights.small / 10);  // 3-6 先出小牌
+      else if (info.rank <= 10) score += 10 * (weights.medium / 10); // 中等
+      else if (info.rank >= 13) score -= 10 * (weights.big / 10); // 大牌/王保留
+    }
+
+    // 炸弹和火箭 — 难度越低越倾向保留，难度越高越果断
+    if (info.type === HAND_TYPES.BOMB) {
+      score -= 30 * (weights.bomb / 10);
+    }
+    if (info.type === HAND_TYPES.ROCKET) {
+      score -= 30 * (weights.rocket / 10);
+    }
+
+    // 跟牌倾向 — 难度越低越倾向于 pass
+    if (info.type !== HAND_TYPES.BOMB && info.type !== HAND_TYPES.ROCKET) {
+      score -= weights.pass * 2;
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestPlay = play;
+    }
+  }
+
+  return bestPlay;
+}
+
+/**
+ * 跟牌策略
+ */
+function chooseFollowPlay(plays, hand, lastPlay, difficulty) {
+  const weights = getStrategyWeights(difficulty);
+  const lastInfo = Doudizhu.identifyType(lastPlay);
+  if (!lastInfo || lastInfo.type === HAND_TYPES.INVALID) return null;
+
+  // 如果对手出的是炸弹/火箭，评估是否用更大的炸弹或火箭压
+  if (lastInfo.type === HAND_TYPES.BOMB || lastInfo.type === HAND_TYPES.ROCKET) {
+    // 用更大的炸弹或火箭压
+    for (const play of plays) {
+      const info = Doudizhu.identifyType(play);
+      if (info.type === HAND_TYPES.ROCKET) return play;
+      if (info.type === HAND_TYPES.BOMB && info.rank > lastInfo.rank) return play;
+    }
+    return null; // 压不住
+  }
+
+  // 普通牌型：找最经济的出法
+  let bestPlay = null;
+
+  for (const play of plays) {
+    const info = Doudizhu.identifyType(play);
+
+    // 普通牌型，直接找 rank 最小的能压的
+    if (info.type === lastInfo.type && info.length === lastInfo.length) {
+      if (!bestPlay) {
+        bestPlay = play;
+      } else {
+        // 选 rank 最小的（最经济）
+        const bestInfo = Doudizhu.identifyType(bestPlay);
+        if (info.rank < bestInfo.rank) {
+          bestPlay = play;
+        }
+      }
+    }
+  }
+
+  // 用炸弹的决定受难度影响
+  const useBombThreshold = weights.bomb > 7 ? 0 : (weights.bomb > 5 ? 1 : 2);
+
+  if (!bestPlay) {
+    let bestBomb = null;
+    for (const play of plays) {
+      const info = Doudizhu.identifyType(play);
+      if (info.type === HAND_TYPES.BOMB) {
+        if (!bestBomb) bestBomb = play;
+      }
+    }
+    // 难度高（aggressive）更倾向于用炸弹，难度低（defensive）倾向于不炸
+    if (bestBomb && useBombThreshold === 0) {
+      bestPlay = bestBomb;
+    }
+  }
+
+  // 火箭 — 同样受难度影响
+  if (!bestPlay) {
+    for (const play of plays) {
+      const info = Doudizhu.identifyType(play);
+      if (info.type === HAND_TYPES.ROCKET) {
+        if (weights.rocket > 7) bestPlay = play;
+        break;
+      }
+    }
+  }
+
+  return bestPlay;
+}
+
+// ============================================================
+// POST /api/ai/play
+// ============================================================
+router.post('/play', async (req, res) => {
+  try {
+    const { hand, lastPlay, difficulty, mode } = req.body;
+
+    // 参数校验
+    if (!hand || !Array.isArray(hand) || hand.length === 0) {
+      return res.status(400).json({ error: 'hand is required and must be a non-empty array' });
+    }
+
+    const diff = difficulty || 'normal';
+    const useLLM = mode === 'llm'; // 可选：强制用大模型
+
+    // Step 1: 策略引擎给出基准
+    let chosenPlay = strategyPlay(hand, lastPlay, diff);
+
+    // Step 2: 如果启用 LLM，用大模型优化
+    if (useLLM && process.env.LLM_API_KEY) {
+      try {
+        const llmResult = await callLLMForPlay(hand, lastPlay, diff);
+        if (llmResult && llmResult.cards) {
+          const llmCards = cardUtils.toCards(llmResult.cards);
+          const allPlays = Doudizhu.findValidPlays(
+            cardUtils.toCards(hand),
+            lastPlay ? cardUtils.toCards(lastPlay) : null
+          );
+          // 验证 LLM 出的牌是合法的
+          const isValid = allPlays.some(p => {
+            if (p.length !== llmCards.length) return false;
+            const ranks1 = p.map(c => c.rank).sort().join(',');
+            const ranks2 = llmCards.map(c => c.rank).sort().join(',');
+            return ranks1 === ranks2;
+          });
+          if (isValid) {
+            chosenPlay = llmCards;
+          }
+        }
+      } catch (llmErr) {
+        console.warn('LLM fallback failed, using strategy engine:', llmErr.message);
+      }
+    }
+
+    // Step 3: 无法出牌
+    if (!chosenPlay) {
+      return res.json({
+        choice: null,
+        explanation: '没有可以出的牌',
+        handRemaining: hand.length,
+        canPlay: false
+      });
+    }
+
+    const info = Doudizhu.identifyType(chosenPlay);
+
+    res.json({
+      choice: {
+        cards: cardUtils.serializeCards(chosenPlay),
+        type: info.type,
+        typeName: HAND_TYPE_NAMES[info.type] || info.type,
+        rank: info.rank
+      },
+      explanation: `出 ${HAND_TYPE_NAMES[info.type] || info.type}`,
+      handRemaining: hand.length - chosenPlay.length,
+      canPlay: true
+    });
+
+  } catch (err) {
+    console.error('AI play error:', err);
+    res.status(500).json({ error: 'AI decision failed', message: err.message });
+  }
+});
+
+/**
+ * POST /api/ai/evaluate - 评估手牌强度
+ */
+router.post('/evaluate', (req, res) => {
+  try {
+    const { hand } = req.body;
+    if (!hand || !Array.isArray(hand)) {
+      return res.status(400).json({ error: 'hand is required' });
+    }
+
+    const handCards = cardUtils.toCards(hand);
+    const groups = Doudizhu.groupByRank(handCards);
+    const allPlays = Doudizhu.findValidPlays(handCards, null);
+
+    // 统计各类牌型数量
+    let stats = { singles: 0, pairs: 0, triples: 0, bombs: 0, hasRocket: false, straights: 0 };
+
+    const seenTypes = {};
+    for (const play of allPlays) {
+      const info = Doudizhu.identifyType(play);
+      const key = info.type;
+      if (!seenTypes[key]) seenTypes[key] = new Set();
+      seenTypes[key].add(info.rank);
+    }
+
+    stats.singles = (seenTypes.SINGLE || new Set()).size;
+    stats.pairs = (seenTypes.PAIR || new Set()).size;
+    stats.triples = (seenTypes.TRIPLE || new Set()).size;
+    stats.bombs = (seenTypes.BOMB || new Set()).size;
+    stats.hasRocket = !!(groups[13] && groups[14]);
+    stats.straights = (seenTypes.STRAIGHT || new Set()).size;
+
+    // 简单评分
+    let score = 0;
+    score += stats.bombs * 15;
+    score += stats.hasRocket ? 20 : 0;
+    score -= stats.singles * 2;
+    score += stats.pairs * 1;
+    score += stats.straights * 3;
+
+    res.json({
+      handSize: hand.length,
+      stats,
+      score: Math.max(0, score),
+      evaluation: score >= 30 ? 'strong' : score >= 15 ? 'medium' : 'weak'
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+module.exports = router;
+
+```
+
+---
+
+## `src/server/routes/bidding.js` (13,636 字节)
+
+```javascript
+/**
+ * src/server/routes/bidding.js - 叫分 API
+ *
+ * POST /api/bidding/start     - 开始叫分，返回叫分顺序和初始状态
+ * POST /api/bidding/place     - 玩家叫分 (bid: 0=不叫, 1/2/3=叫地主)
+ * GET  /api/bidding/ai        - AI 根据手牌做叫分决策
+ *
+ * 叫分规则:
+ *   1. 随机定一个玩家先叫，顺时针轮流
+ *   2. 可叫1分、2分、3分，或选择不叫
+ *   3. 最高分者为地主，获得3张底牌
+ *   4. 全都不叫则重新发牌
+ */
+
+const express = require('express');
+const router = express.Router();
+const cardUtils = require('../utils/cardUtils');
+
+const { Doudizhu } = cardUtils;
+
+// 叫分状态 — 用 Map 按 sessionId/playerId 存储，避免多人冲突
+const biddingStates = new Map();
+
+function getBiddingState(id) {
+  return biddingStates.get(id) || null;
+}
+
+function setBiddingState(id, state) {
+  if (biddingStates.size > 100) {
+    // 防止内存泄漏：清理旧 session
+    const oldest = biddingStates.keys().next().value;
+    biddingStates.delete(oldest);
+  }
+  biddingStates.set(id, state);
+}
+
+function resetBidding(id) {
+  if (id) biddingStates.delete(id);
+}
+
+/** 规范化单张牌：确保王牌的suit正确 */
+function normalizeCard(c) {
+  if (c.rank >= 13 && c.suit !== 'joker') {
+    return { suit: 'joker', rank: c.rank };
+  }
+  if (c.rank < 13 && c.suit === 'joker') {
+    return { suit: 'spade', rank: c.rank };
+  }
+  return { suit: c.suit || 'spade', rank: c.rank };
+}
+
+/** 规范化牌组 */
+function normalizeCards(arr) {
+  return (arr || []).map(c => normalizeCard(c));
+}
+
+/** 规范化每手牌 */
+function normalizeHands(hands) {
+  return (hands || []).map(h => normalizeCards(h));
+}
+
+// ============================================================
+// 评估手牌强度（用于AI叫分）
+// ============================================================
+function evaluateHandStrength(handRanks) {
+  const groups = {};
+  for (const r of handRanks) groups[r] = (groups[r] || 0) + 1;
+
+  let score = 0;
+  let hasBomb = false;
+
+  for (const [rank, count] of Object.entries(groups)) {
+    const r = parseInt(rank);
+    if (count === 4) {
+      score += 12; // 炸弹
+      hasBomb = true;
+    } else if (count === 3) {
+      score += 4;  // 三张
+    } else if (count === 2) {
+      score += 1;  // 对子
+    }
+
+    // 大牌加分
+    if (r === 14) score += 6;  // 大王
+    if (r === 13) score += 4;  // 小王
+    if (r === 12) score += 2;  // 2
+    if (r === 11) score += 1;  // A
+  }
+
+  // 至少有1个炸弹
+  if (hasBomb) score += 5;
+  // 有王
+  if (groups[13] && groups[14]) score += 3;
+
+  return score;
+}
+
+// ============================================================
+// POST /api/bidding/start - 开始叫分
+//
+// Body: {
+//   playerId: string,         // 玩家ID
+//   hands: [                   // 三人手牌
+//     [{suit, rank}, ...],     // 玩家自己的手牌
+//     [{suit, rank}, ...],     // AI1 手牌
+//     [{suit, rank}, ...]      // AI2 手牌
+//   ],
+//   remaining: [{suit, rank}, ...]  // 3张底牌
+// }
+//
+// Response: {
+//   biddingId: string,
+//   turn: number,              // 当前应该叫分的玩家 (0=玩家, 1=AI1, 2=AI2)
+//   firstBidder: number,       // 先叫的玩家
+//   order: [0,1,2],            // 叫分顺序
+//   bids: [null, null, null],  // 当前叫分结果
+//   currentBid: 'waiting',     // 'waiting' | 'done'
+//   message: string
+// }
+// ============================================================
+router.post('/start', (req, res) => {
+  try {
+    const { playerId, hands, remaining } = req.body;
+
+    if (!hands || !Array.isArray(hands) || hands.length !== 3) {
+      return res.status(400).json({ error: 'hands must be an array of 3 hands' });
+    }
+
+    // 随机选定先叫的玩家
+    const firstBidder = Math.floor(Math.random() * 3);
+
+    // 叫分顺序: 从firstBidder开始，顺时针
+    const order = [];
+    for (let i = 0; i < 3; i++) {
+      order.push((firstBidder + i) % 3);
+    }
+
+    const biddingState = {
+      id: `bid_${Date.now()}_${playerId || 'anon'}`,
+      playerId: playerId || 'anonymous',
+      hands: normalizeHands(hands),  // 0=玩家, 1=AI1, 2=AI2
+      remaining: normalizeCards(remaining || []),
+      order: order,
+      firstBidder: firstBidder,
+      currentTurnIndex: 0,       // order 数组的索引
+      bids: [null, null, null],  // 叫分结果
+      highestBid: 0,
+      highestBidder: -1,
+      passCount: 0,
+      phase: 'bidding',
+      startedAt: Date.now()
+    };
+    setBiddingState(biddingState.id, biddingState);
+
+    const turn = order[0]; // 当前应该叫分的人
+
+    res.json({
+      biddingId: biddingState.id,
+      turn,
+      firstBidder,
+      order,
+      bids: [null, null, null],
+      currentBid: 'waiting',
+      currentBidder: turn === 0 ? 'player' : (turn === 1 ? 'ai1' : 'ai2'),
+      message: turn === 0
+        ? '请叫分（叫地主1/2/3分，或不叫）'
+        : 'AI思考中...',
+      handStrength: turn === 0 ? evaluateHandStrength(
+        hands[0].map(c => c.rank !== undefined && c.rank !== null ? c.rank : c)
+      ) : null
+    });
+
+  } catch (err) {
+    console.error('Bidding start error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================
+// POST /api/bidding/place - 玩家叫分
+//
+// Body: {
+//   biddingId: string,
+//   bid: number,        // 0=不叫, 1, 2, 3=叫地主
+//   playerIndex: number  // 0=玩家, 1=AI1, 2=AI2
+// }
+//
+// Response: {
+//   phase: 'bidding' | 'done' | 'redeal',
+//   turn: number | null,          // 下一个叫分的人，phase=done时null
+//   currentBidder: string | null,
+//   bids: [number|null, ...],
+//   highestBid: number,
+//   highestBidder: number,       // -1 = none
+//   landlordCards: [{suit,rank}] | null,  // 地主获得的底牌
+//   landlordHand: [{suit,rank}] | null,   // 地主完整手牌
+//   winnerText: string | null,
+//   message: string
+// }
+// ============================================================
+router.post('/place', (req, res) => {
+  try {
+    const { biddingId, bid, playerIndex } = req.body;
+
+    const bs = getBiddingState(biddingId);
+    if (!bs) {
+      return res.status(400).json({ error: 'No active bidding session. Call /bidding/start first.' });
+    }
+
+    if (bs.phase !== 'bidding') {
+      return res.status(400).json({ error: 'Bidding is already completed' });
+    }
+
+    // 验证玩家索引
+    const idx = playerIndex;
+    if (idx < 0 || idx > 2) {
+      return res.status(400).json({ error: 'Invalid player index' });
+    }
+
+    // 验证叫分
+    const validBids = [0, 1, 2, 3];
+    if (!validBids.includes(bid)) {
+      return res.status(400).json({ error: 'Bid must be 0 (pass), 1, 2, or 3' });
+    }
+
+    // 验证叫分顺序
+    const expectedIdx = bs.order[bs.currentTurnIndex];
+    if (idx !== expectedIdx) {
+      return res.status(400).json({
+        error: `Not your turn. Expected player ${expectedIdx}, got ${idx}`
+      });
+    }
+
+    // 斗地主加叫规则：后叫的人必须比当前最高分高（或不叫）
+    if (bid > 0 && bid <= bs.highestBid) {
+      return res.status(400).json({
+        error: `Bid must be higher than current highest bid (${bs.highestBid}) or pass (0)`
+      });
+    }
+
+    // 记录叫分
+    bs.bids[idx] = bid;
+
+    if (bid === 0) {
+      bs.passCount++;
+    } else {
+      // 有效叫分
+      if (bid > bs.highestBid) {
+        bs.highestBid = bid;
+        bs.highestBidder = idx;
+      }
+      // 叫3分直接地主
+      if (bid === 3) {
+        setBiddingState(biddingId, bs);
+        return finishBidding(res, bs, idx);
+      }
+    }
+
+    // 检查是否所有人都叫完了
+    const nextTurnIndex = bs.currentTurnIndex + 1;
+
+    // 如果所有人都叫完了（3人全部叫完）
+    if (nextTurnIndex >= 3) {
+      // 有人叫分
+      if (bs.highestBidder >= 0) {
+        setBiddingState(biddingId, bs);
+        return finishBidding(res, bs, bs.highestBidder);
+      } else {
+        // 全都不叫
+        bs.phase = 'redeal';
+        setBiddingState(biddingId, bs);
+        return res.json({
+          phase: 'redeal',
+          turn: null,
+          currentBidder: null,
+          bids: bs.bids,
+          highestBid: 0,
+          highestBidder: -1,
+          landlordCards: null,
+          landlordHand: null,
+          winnerText: null,
+          message: '三家都不叫，重新发牌'
+        });
+      }
+    }
+
+    // 轮到下一个人
+    bs.currentTurnIndex = nextTurnIndex;
+    setBiddingState(biddingId, bs);
+    const nextPlayer = bs.order[nextTurnIndex];
+
+    res.json({
+      phase: 'bidding',
+      turn: nextPlayer,
+      currentBidder: nextPlayer === 0 ? 'player' : (nextPlayer === 1 ? 'ai1' : 'ai2'),
+      bids: bs.bids,
+      highestBid: bs.highestBid,
+      highestBidder: bs.highestBidder,
+      landlordCards: null,
+      landlordHand: null,
+      winnerText: null,
+      message: nextPlayer === 0
+        ? '轮到你了，请叫分'
+        : (nextPlayer === 1 ? '王怼怼思考中...' : '苏甜甜思考中...')
+    });
+
+  } catch (err) {
+    console.error('Bidding place error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * 完成叫分，确定地主
+ * @param {object} res - Express response
+ * @param {object} bs - Bidding state object
+ * @param {number} landlordIndex - 地主索引
+ */
+/** 紧凑数字 → 牌对象：正确处理 Joker 花色 */
+function numberToCard(n) {
+  if (n >= 13) return { suit: 'joker', rank: n };
+  return { suit: 'spade', rank: n };
+}
+
+function finishBidding(res, bs, landlordIndex) {
+  const remaining = bs.remaining || [];
+  const landlordHand = [
+    ...bs.hands[landlordIndex].map(c =>
+      typeof c === 'number' ? numberToCard(c) : c
+    ),
+    ...remaining.map(c =>
+      typeof c === 'number' ? numberToCard(c) : c
+    )
+  ];
+
+  bs.phase = 'done';
+  bs.landlordIndex = landlordIndex;
+
+  // 整理地主手牌
+  const sortedLandlord = Doudizhu.sortCards(
+    landlordHand.map(c => {
+      const nc = normalizeCard(c);
+      if (typeof nc.rank !== 'number') return c;
+      try {
+        return new Doudizhu.Card(nc.suit, nc.rank);
+      } catch (e) {
+        console.warn('Card creation failed:', nc, e.message);
+        return c;
+      }
+    }).filter(Boolean)
+  );
+
+  const landlordName = landlordIndex === 0 ? '你' : (landlordIndex === 1 ? '王怼怼' : '苏甜甜');
+  const bid = bs.bids[landlordIndex];
+
+  res.json({
+    phase: 'done',
+    turn: null,
+    currentBidder: null,
+    bids: bs.bids,
+    highestBid: bs.highestBid,
+    highestBidder: landlordIndex,
+    landlordIndex,
+    landlordName,
+    landlordCards: bs.remaining.map(c =>
+      typeof c === 'object' && c.suit ? c : numberToCard(c)
+    ),
+    landlordHand: sortedLandlord.map(c => ({
+      suit: c.suit,
+      rank: c.rank,
+      display: c.displayName(),
+      isRed: c.isRed()
+    })),
+    winnerText: `${landlordName} 以 ${bid} 分成为地主！`,
+    message: `${landlordName} 以 ${bid} 分成为地主！获得 3 张底牌`
+  });
+}
+
+// ============================================================
+// GET /api/bidding/ai - AI 叫分决策
+//
+// Query: hand=encoded_hand  (或直接传 body)
+//        currentBid=number  (当前最高叫分)
+//
+// Response: { bid: 0|1|2|3, reason: string, strength: number }
+// ============================================================
+router.get('/ai', (req, res) => {
+  try {
+    const { hand, currentBid } = req.query;
+
+    let handCards;
+    if (hand) {
+      try {
+        handCards = JSON.parse(Buffer.from(hand, 'base64').toString());
+      } catch {
+        handCards = JSON.parse(hand);
+      }
+    } else if (req.body && req.body.hand) {
+      handCards = req.body.hand;
+    } else {
+      return res.status(400).json({ error: 'hand is required' });
+    }
+
+    const currentBidValue = parseInt(currentBid) || 0;
+    const strength = evaluateHandStrength(handCards.map(c => c.rank));
+
+    // AI 叫分策略
+    let bid = 0;
+    let reason = '';
+
+    if (strength >= 20) {
+      bid = 3;
+      reason = '手牌很强（炸弹+大牌），叫3分！';
+    } else if (strength >= 14) {
+      bid = Math.min(2, Math.max(1, strength >= 17 ? 2 : 1));
+      reason = '手牌不错，叫' + bid + '分。';
+    } else if (strength >= 9) {
+      bid = 1;
+      reason = '手牌一般，尝试叫1分。';
+    } else {
+      bid = 0;
+      reason = '手牌太弱，不叫。';
+    }
+
+    // 如果当前最高叫分 >= AI 想叫的，AI 选择不叫或叫更高的
+    if (bid <= currentBidValue) {
+      if (strength >= 20 && currentBidValue < 3) {
+        bid = 3;
+        reason = '手牌有炸弹，必须抢！叫3分！';
+      } else {
+        bid = 0;
+        reason = '当前叫分已到' + currentBidValue + '分，AI选择不叫。';
+      }
+    }
+
+    res.json({
+      bid,
+      reason,
+      strength,
+      handStrengthLabel: strength >= 20 ? '极强' : (strength >= 14 ? '较强' : (strength >= 9 ? '一般' : '较弱'))
+    });
+
+  } catch (err) {
+    console.error('AI bidding error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================
+// POST /api/bidding/reset - 重置叫分状态
+// Body: { biddingId?: string }  指定ID则只清除该会话，否则清除全部
+// ============================================================
+router.post('/reset', (req, res) => {
+  const { biddingId } = req.body || {};
+  resetBidding(biddingId);
+  const count = biddingId ? 1 : biddingStates.size;
+  res.json({ success: true, message: `Cleared ${count} bidding session(s)` });
+});
+
+module.exports = { router, resetBidding };
+
+```
+
+---
+
+## `src/server/routes/chaos.js` (10,560 字节)
+
+```javascript
+/**
+ * src/server/routes/chaos.js - 搞事情系统 API 路由
+ *
+ * API:
+ *   POST /api/chaos/generate-question - 生成题目（用产品设计模板）
+ *   POST /api/chaos/trigger          - 触发随机事件
+ *   POST /api/chaos/check-trigger    - 检查游戏状态是否应触发事件
+ *   GET  /api/chaos/events           - 获取事件目录
+ *   GET  /api/chaos/event-log        - 获取事件日志
+ *   GET  /api/chaos/event-stats      - 事件统计
+ */
+
+const express = require('express');
+const router = express.Router();
+const questionTemplates = require('../services/questionTemplates');
+const eventEngine = require('../services/eventEngine');
+
+// ============================================================
+// POST /api/chaos/generate-question
+//
+// Body: {
+//   type: 'vocabulary'|'expression'|'trivia'|'life_hack'|'bomb_mixed'|'random',
+//   difficulty: 'easy'|'normal'|'hard'|'extreme',
+//   count: 1-10 (default 1)
+// }
+// ============================================================
+router.post('/generate-question', async (req, res) => {
+  try {
+    let { type, difficulty, count } = req.body;
+    const diff = difficulty || 'normal';
+    const num = Math.min(count || 1, 10);
+
+    let questionType = type;
+    if (!type || type === 'random') {
+      const types = ['vocabulary', 'expression', 'trivia', 'life_hack', 'bomb_mixed'];
+      questionType = types[Math.floor(Math.random() * types.length)];
+    }
+
+    if (!questionTemplates.TYPE_META[questionType]) {
+      return res.status(400).json({
+        error: `Unknown question type: ${questionType}`,
+        available: Object.keys(questionTemplates.TYPE_META)
+      });
+    }
+
+    const questions = await questionTemplates.generateBatch(questionType, diff, num);
+
+    res.json({
+      success: true,
+      type: questionType,
+      difficulty: diff,
+      count: questions.length,
+      questions
+    });
+
+  } catch (err) {
+    console.error('Chaos generate-question error:', err);
+    res.status(500).json({ error: 'Failed to generate question', message: err.message });
+  }
+});
+
+// ============================================================
+// POST /api/chaos/trigger - 触发随机事件
+//
+// Body: {
+//   gameState: {
+//     round: number,
+//     consecutiveCorrect: number,
+//     consecutiveWrong: number,
+//     playerId: string,
+//     gameId: string
+//   }
+// }
+// ============================================================
+router.post('/trigger', (req, res) => {
+  try {
+    const { gameState } = req.body;
+    if (!gameState || gameState.round === undefined) {
+      return res.status(400).json({ error: 'gameState with round is required' });
+    }
+
+    const defaultState = {
+      round: 1,
+      consecutiveCorrect: 0,
+      consecutiveWrong: 0,
+      playerId: 'anonymous',
+      gameId: 'unknown'
+    };
+
+    const state = { ...defaultState, ...gameState };
+    const event = eventEngine.pickEvent(state);
+
+    res.json({
+      triggered: !!event,
+      event,
+      state
+    });
+
+  } catch (err) {
+    console.error('Chaos trigger error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================
+// POST /api/chaos/check-trigger - 检查是否触发事件
+//
+// 按概率触发（非100%触发）
+// ============================================================
+router.post('/check-trigger', (req, res) => {
+  try {
+    const { gameState, triggerRate } = req.body;
+    if (!gameState || gameState.round === undefined) {
+      return res.status(400).json({ error: 'gameState with round is required' });
+    }
+
+    const rate = triggerRate ?? 0.4; // 默认40%概率触发
+    const shouldTrigger = Math.random() < rate;
+
+    if (!shouldTrigger) {
+      return res.json({ triggered: false, event: null, state: gameState });
+    }
+
+    const defaultState = {
+      round: 1, consecutiveCorrect: 0, consecutiveWrong: 0,
+      playerId: 'anonymous', gameId: 'unknown'
+    };
+    const state = { ...defaultState, ...gameState };
+    const event = eventEngine.pickEvent(state);
+
+    res.json({
+      triggered: !!event,
+      event,
+      triggerRate: rate,
+      state
+    });
+
+  } catch (err) {
+    console.error('Chaos check-trigger error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================
+// GET /api/chaos/events - 事件目录
+// ============================================================
+router.get('/events', (req, res) => {
+  res.json({
+    total: eventEngine.getEventCatalog().length,
+    events: eventEngine.getEventCatalog()
+  });
+});
+
+// ============================================================
+// GET /api/chaos/event-log - 事件日志
+// ============================================================
+router.get('/event-log', (req, res) => {
+  const { eventId, playerId, gameId, limit } = req.query;
+  const logs = eventEngine.getEventLogs({
+    eventId: eventId || undefined,
+    playerId: playerId || undefined,
+    gameId: gameId || undefined,
+    limit: limit ? parseInt(limit) : undefined
+  });
+  res.json({ total: logs.length, logs });
+});
+
+// ============================================================
+// GET /api/chaos/event-stats - 事件统计
+// ============================================================
+router.get('/event-stats', (req, res) => {
+  const stats = eventEngine.getEventStats();
+  res.json(stats);
+});
+
+// ============================================================
+// POST /api/chaos/card-change - 答题后换牌/选牌触发逻辑
+//
+// Body: {
+//   gameState: {
+//     round: number,
+//     correct: bool,         // 是否答对
+//     score: number,
+//     playerCardCount: number,  // 玩家手牌数
+//     aiCardCounts: [number, number]  // AI1, AI2手牌数
+//   },
+//   playerHand: [Card],      // 玩家当前手牌（可选，用于前端验证）
+//   ai1Hand: [Card],         // 王怼怼手牌（可选）
+//   ai2Hand: [Card]          // 苏甜甜手牌（可选）
+// }
+//
+// Response: {
+//   triggered: bool,           // 是否触发了换牌
+//   action: 'cardChange'|null, // 触发的事件类型
+//   fromAi: 'duidui'|'tiantian'|null,  // 从哪个AI换牌
+//   swapPool: [Card],         // 玩家可选牌的池子
+//   maxSelect: number,        // 最多换几张
+//   aiTaunt: string,          // AI的嘲讽/宣言
+//   reason: string            // 触发原因
+// }
+// ============================================================
+router.post('/card-change', (req, res) => {
+  try {
+    const { gameState, playerHand, ai1Hand, ai2Hand } = req.body;
+
+    if (!gameState) {
+      return res.status(400).json({ error: 'gameState is required' });
+    }
+
+    const round = gameState.round || 1;
+    const correct = gameState.correct === true;
+    const score = gameState.score || 0;
+
+    // 换牌触发条件
+    // 1. 答对题 + 至少第3回合 → 大概率触发
+    // 2. 答错题 + 较高回合 → 小概率触发安慰换牌
+    let shouldTrigger = false;
+    let reason = '';
+    let fromAi = null;
+    let maxSelect = 0;
+
+    if (correct) {
+      // 正确：按回合数递增概率
+      const baseRate = round >= 5 ? 0.7 : round >= 3 ? 0.5 : 0.25;
+      shouldTrigger = Math.random() < baseRate;
+      reason = '答题正确，AI决定奖励你一次换牌机会！';
+      maxSelect = round >= 5 ? 2 : 1;
+      fromAi = round % 2 === 0 ? 'tiantian' : 'duidui';
+    } else {
+      // 错误：低概率安慰换牌
+      const consolationRate = round >= 5 ? 0.3 : 0.1;
+      shouldTrigger = Math.random() < consolationRate;
+      reason = '答错了……AI于心不忍，给你一张好的。';
+      maxSelect = 1;
+      fromAi = 'duidui';
+    }
+
+    if (!shouldTrigger) {
+      // 没触发但后端给出不触发的结果
+      return res.json({
+        triggered: false,
+        action: null,
+        fromAi: null,
+        swapPool: [],
+        maxSelect: 0,
+        aiTaunt: '',
+        reason: ''
+      });
+    }
+
+    // 生成换牌池 —— 从对应AI手牌中抽取高价值牌给玩家选
+    const aiHand = fromAi === 'duidui' ? ai1Hand : ai2Hand;
+    const aiName = fromAi === 'duidui' ? '王怼怼' : '苏甜甜';
+
+    let swapPool = [];
+
+    if (aiHand && Array.isArray(aiHand) && aiHand.length > 0) {
+      // 从AI手牌中选出价值较高的牌组成候选池
+      const candidates = aiHand.filter(c => {
+        // 排除王和2（太强了不直接给），除非AI手牌太少
+        const isStrong = c.rank >= 12 || c.rank <= 0;
+        return !isStrong;
+      });
+
+      // 如果AI没啥可给的，就放宽限制
+      const poolSource = candidates.length >= 3 ? candidates : aiHand;
+
+      // 随机打乱，取最多4张给玩家选择
+      const shuffled = [...poolSource].sort(() => Math.random() - 0.5);
+      swapPool = shuffled.slice(0, Math.min(4, shuffled.length));
+    } else {
+      // 没有AI手牌数据时，用默认牌池
+      const suits = ['spade', 'heart', 'club', 'diamond'];
+      const ranks = [7, 8, 9, 10]; // 8-10（对应10/J/Q/K，偏大牌）
+      for (let i = 0; i < 4; i++) {
+        swapPool.push({
+          suit: suits[i % 4],
+          rank: ranks[i],
+          display: '',
+          isRed: suits[i % 4] === 'heart' || suits[i % 4] === 'diamond'
+        });
+      }
+    }
+
+    // AI 嘲讽台词
+    const taunts = fromAi === 'duidui'
+      ? [
+          '来，挑一张，别辜负我的「好意」。',
+          '给你一个换牌的机会，可别说我欺负人。',
+          '你选走了我也不会输，因为——我是AI。',
+          '挑吧，反正你换了也打不过我。'
+        ]
+      : [
+          '分享牌牌～你一张我一张我们就是好朋友！',
+          '选你喜欢的！我可以再抽！',
+          '送你一张好牌！不用谢我！要谢就谢你自己的努力！',
+          '快选快选！我手都举酸了！'
+        ];
+
+    const aiTaunt = taunts[Math.floor(Math.random() * taunts.length)];
+
+    res.json({
+      triggered: true,
+      action: 'cardChange',
+      fromAi,
+      swapPool,
+      maxSelect,
+      aiTaunt,
+      reason
+    });
+
+  } catch (err) {
+    console.error('Chaos card-change error:', err);
+    res.status(500).json({ error: 'Card change trigger failed', message: err.message });
+  }
+});
+
+// ============================================================
+// GET /api/chaos/types - 题型列表
+// ============================================================
+router.get('/types', (req, res) => {
+  res.json(questionTemplates.TYPE_META);
+});
+
+module.exports = router;
+
+```
+
+---
+
+## `src/server/routes/dialogue.js` (6,493 字节)
+
+```javascript
+/**
+ * src/server/routes/dialogue.js - AI 台词生成 API
+ *
+ * POST /api/ai/dialogue
+ *
+ * Body: {
+ *   aiId: 'duidui'|'tiantian',
+ *   event: 'play'|'pass'|'bomb'|'win'|'lose'|'taunt',
+ *   context: 'description of current game state' (可选)
+ * }
+ *
+ * 用LLM生成一句符合AI性格的台词
+ * 王怼怼(duidui): 傲慢毒舌
+ * 苏甜甜(tiantian): 元气话痨
+ *
+ * Response: { line: "...", emotion: "arrogant|happy|sad|angry|taunt" }
+ * 失败时 fallback: { line: "...", emotion: "...", source: 'fallback' }
+ */
+
+const express = require('express');
+const router = express.Router();
+const { callLLM } = require('../services/llmService');
+
+// ============================================================
+// 默认台词池（LLM失败时fallback）
+// ============================================================
+
+const DEFAULT_LINES = {
+  duidui: {
+    play: ['送分题，给人类的怜悯。', '这题你要是都答不上来……啧。'],
+    pass: ['这轮我让你，免得说我欺负人类。', '过，我看看你能憋出什么大招。'],
+    bomb: ['🚀 炸弹！建议你直接过牌。', '核弹级题目，你答不对。'],
+    win: ['意料之中。人类 vs AI = 0 : ∞', '你的表现我已经写入训练日志，作为反面教材。'],
+    lose: ['……你开挂了吧？', '我GPU过热而已，再来！'],
+    taunt: ['这一轮又输了？我闭着眼都能赢。', '人类的CPU该升级了。']
+  },
+  tiantian: {
+    play: ['这道题送你啦！不客气！', '热身题！把你的小脑瓜转起来～'],
+    pass: ['这轮我让着你！因为我想上厕所。', '过！你是不是松了口气？'],
+    bomb: ['💣 BOMBSHELL！全场的目光集中到我身上！', '题目已出，人已跑，评论区等你尖叫🏃💨'],
+    win: ['🎉 冠军！冠军！我是冠军！', '我要发朋友圈！我有生以来最辉煌的时刻！'],
+    lose: ['我……裂……开……了……😭', '呜呜呜你太厉害了，我演不下去了！'],
+    taunt: ['嘿嘿被我抓到了吧！', '这一轮轮到你啦！加油加油～']
+  }
+};
+
+// 各AI的默认情绪
+const DEFAULT_EMOTION = {
+  duidui: { play: 'arrogant', pass: 'arrogant', bomb: 'arrogant', win: 'arrogant', lose: 'angry', taunt: 'taunt' },
+  tiantian: { play: 'happy', pass: 'happy', bomb: 'happy', win: 'happy', lose: 'sad', taunt: 'taunt' }
+};
+
+/**
+ * 根据事件类型获取推荐的显示延迟（毫秒）
+ * 前端用此值控制气泡展示时长
+ */
+function getDisplayDelay(event) {
+  const delays = {
+    bomb: 5000,
+    taunt: 5000,
+    win: 6000,
+    lose: 5000,
+    play: 4000,
+    pass: 3000
+  };
+  return delays[event] || 4000;
+}
+
+// ============================================================
+// POST /api/ai/dialogue
+// ============================================================
+router.post('/', async (req, res) => {
+  try {
+    const { aiId, event, context } = req.body;
+
+    // 参数校验
+    const validAiIds = ['duidui', 'tiantian'];
+    const validEvents = ['play', 'pass', 'bomb', 'win', 'lose', 'taunt'];
+
+    if (!validAiIds.includes(aiId)) {
+      return res.status(400).json({ error: 'aiId must be "duidui" or "tiantian"' });
+    }
+    if (!validEvents.includes(event)) {
+      return res.status(400).json({ error: `event must be one of: ${validEvents.join(', ')}` });
+    }
+
+    const displayDelay = getDisplayDelay(event);
+
+    // 尝试用 LLM 生成
+    if (process.env.LLM_API_KEY) {
+      try {
+        const aiName = aiId === 'duidui' ? '王怼怼' : '苏甜甜';
+        const personality = aiId === 'duidui'
+          ? '傲慢毒舌的学霸AI，喜欢嘲讽人类'
+          : '元气话痨的戏精AI，说话浮夸可爱';
+
+        let emotionHint = '';
+        if (event === 'win') emotionHint = '（得意/嚣张）';
+        else if (event === 'lose') emotionHint = '（不服/嘴硬或哭唧唧）';
+        else if (event === 'bomb') emotionHint = '（兴奋/中二）';
+        else if (event === 'taunt') emotionHint = '（挑衅）';
+        else if (event === 'pass') emotionHint = '（轻松/得意）';
+        else emotionHint = '（正常/自信）';
+
+        const prompt = `你是"AI斗地主"游戏中的AI角色"${aiName}"，性格${personality}。
+当前事件: ${event} ${emotionHint}
+游戏背景: ${context || '正在游戏中'}
+请用中文输出一句符合角色性格的台词。
+
+作业要求：
+1. 只输出一行台词文本，不要解释，不要额外文字
+2. 台词长度不超过40个字
+3. 必须符合角色性格
+4. 可以有 emoji`;
+
+        const result = await callLLM(
+          `你是一个斗地主游戏AI台词生成器。严格按照用户要求输出台词。只输出一行文本。`,
+          prompt,
+          { temperature: 0.9, maxTokens: 100 }
+        );
+
+        // 处理 LLM 返回（可能为对象或字符串）
+        let line = '';
+        if (typeof result === 'string') {
+          line = result.trim();
+        } else if (result && typeof result === 'object') {
+          // safeParseJson 可能返回 { rawText: '...' } 或 { line: '...' }
+          line = (result.line || result.rawText || result.content || '').trim();
+        }
+
+        if (line && line !== '{}' && !line.startsWith('{')) {
+          return res.json({
+            line,
+            emotion: DEFAULT_EMOTION[aiId][event] || 'happy',
+            source: 'ai',
+            displayDelay
+          });
+        }
+      } catch (e) {
+        console.warn(`[Dialogue] LLM failed for ${aiId}/${event}:`, e.message);
+      }
+    }
+
+    // LLM失败 → fallback到默认台词池
+    const pool = (DEFAULT_LINES[aiId] && DEFAULT_LINES[aiId][event]) || DEFAULT_LINES.duidui.play;
+    const line = pool[Math.floor(Math.random() * pool.length)];
+    res.json({
+      line,
+      emotion: DEFAULT_EMOTION[aiId][event] || 'happy',
+      source: 'fallback',
+      displayDelay
+    });
+
+  } catch (err) {
+    console.error('[Dialogue] Unexpected error:', err);
+    const aiId = req.body?.aiId === 'tiantian' ? 'tiantian' : 'duidui';
+    const evt = (req.body?.event && ['play','pass','bomb','win','lose','taunt'].includes(req.body.event))
+      ? req.body.event : 'play';
+    const fallbackPool = DEFAULT_LINES[aiId][evt] || DEFAULT_LINES.duidui.play;
+    res.json({
+      line: fallbackPool[Math.floor(Math.random() * fallbackPool.length)],
+      emotion: DEFAULT_EMOTION[aiId][evt] || 'happy',
+      source: 'error',
+      displayDelay: getDisplayDelay(evt)
+    });
+  }
+});
+
+module.exports = router;
+
+```
+
+---
+
+## `src/server/routes/quiz.js` (8,382 字节)
+
+```javascript
+/**
+ * src/server/routes/quiz.js - 出题系统 API
+ *
+ * POST /api/quiz/generate
+ *   Body: {
+ *     type: 'all'|'identify'|'canBeat'|'findPlay',
+ *     difficulty: 'easy'|'normal'|'hard',
+ *     count: 1-10 (default 1)
+ *   }
+ *
+ * 支持题型:
+ *   identify  - 识别牌型
+ *   canBeat   - 判断能否压过
+ *   findPlay  - 找出能压的牌
+ */
+
+const express = require('express');
+const router = express.Router();
+const cardUtils = require('../utils/cardUtils');
+
+const { Doudizhu, HAND_TYPES, HAND_TYPE_NAMES } = cardUtils;
+
+// ============================================================
+// 题型数据生成器
+// ============================================================
+
+/**
+ * 【题型1】识别牌型 - 给出一组牌，问是什么牌型
+ */
+function generateIdentifyQuestion(difficulty) {
+  // 预定义的牌型样例 (rank数组)
+  const samples = [
+    { cards: [0], type: HAND_TYPES.SINGLE, desc: '单张 3' },
+    { cards: [11], type: HAND_TYPES.SINGLE, desc: '单张 A' },
+    { cards: [14], type: HAND_TYPES.SINGLE, desc: '单张 大王' },
+    { cards: [3, 3], type: HAND_TYPES.PAIR, desc: '对子 77' },
+    { cards: [12, 12], type: HAND_TYPES.PAIR, desc: '对子 22' },
+    { cards: [0, 0, 0], type: HAND_TYPES.TRIPLE, desc: '三张 333' },
+    { cards: [0, 0, 0, 1], type: HAND_TYPES.TRIPLE_PLUS_ONE, desc: '三带一 333+4' },
+    { cards: [0, 0, 0, 1, 1], type: HAND_TYPES.TRIPLE_PLUS_TWO, desc: '三带二 333+44' },
+    { cards: [0, 1, 2, 3, 4], type: HAND_TYPES.STRAIGHT, desc: '顺子 34567' },
+    { cards: [7, 8, 9, 10, 11], type: HAND_TYPES.STRAIGHT, desc: '顺子 10JQKA' },
+    { cards: [0, 0, 1, 1, 2, 2], type: HAND_TYPES.CONSECUTIVE_PAIRS, desc: '连对 334455' },
+    { cards: [0, 0, 0, 1, 1, 1], type: HAND_TYPES.AIRPLANE, desc: '飞机 333444' },
+    { cards: [0, 0, 0, 0], type: HAND_TYPES.BOMB, desc: '炸弹 3333' },
+    { cards: [13, 14], type: HAND_TYPES.ROCKET, desc: '火箭' },
+    { cards: [0, 0, 0, 0, 1, 2], type: HAND_TYPES.FOUR_PLUS_TWO, desc: '四带二 3333+4+5' },
+    { cards: [0, 0, 0, 0, 1, 1, 2, 2], type: HAND_TYPES.FOUR_PLUS_TWO_PAIRS, desc: '四带两对 3333+44+55' },
+  ];
+
+  // 根据难度筛选
+  const diffMap = { easy: { maxIdx: 6 }, normal: { maxIdx: 12 }, hard: { maxIdx: 15 } };
+  const limit = diffMap[difficulty] || diffMap.normal;
+  const pool = samples.slice(0, limit.maxIdx + 1);
+
+  // 随机选一个
+  const sample = pool[Math.floor(Math.random() * pool.length)];
+  const cardInstances = cardUtils.createCardsByRank(sample.cards);
+  const info = Doudizhu.identifyType(cardInstances);
+
+  // 生成干扰项
+  const wrongTypes = Object.values(HAND_TYPES)
+    .filter(t => t !== sample.type && t !== HAND_TYPES.INVALID);
+
+  // 选4个干扰项（包括正确答案的位置随机）
+  const shuffledWrong = shuffleArray(wrongTypes).slice(0, 3);
+  const allOptions = shuffleArray([
+    { label: HAND_TYPE_NAMES[sample.type], value: sample.type, correct: true },
+    ...shuffledWrong.map(t => ({ label: HAND_TYPE_NAMES[t], value: t, correct: false }))
+  ]);
+
+  return {
+    type: 'identify',
+    difficulty,
+    question: '请识别以下牌型：',
+    cards: cardUtils.serializeCards(cardInstances),
+    options: allOptions.map(o => o.label),
+    answer: HAND_TYPE_NAMES[sample.type],
+    answerValue: sample.type,
+    answerIndex: allOptions.findIndex(o => o.correct)
+  };
+}
+
+/**
+ * 【题型2】能否压过 - 给出两组牌，判断能否压过
+ */
+function generateCanBeatQuestion(difficulty) {
+  const pairs = [
+    // current, last, expected
+    { current: [1], last: [0], canBeat: true, desc: '4 能压 3' },
+    { current: [0], last: [1], canBeat: false, desc: '3 不能压 4' },
+    { current: [14], last: [13], canBeat: true, desc: '大王能压小王' },
+    { current: [13], last: [14], canBeat: false, desc: '小王不能压大王' },
+    { current: [1, 1], last: [0, 0], canBeat: true, desc: '44 能压 33' },
+    { current: [12, 12], last: [11, 11], canBeat: true, desc: '22 能压 AA' },
+    { current: [0, 0, 0, 0], last: [1, 1], canBeat: true, desc: '炸弹 3333 能压 44' },
+    { current: [13, 14], last: [0, 0, 0, 0], canBeat: true, desc: '火箭能压炸弹' },
+    { current: [0, 0, 0, 1], last: [1, 1, 1, 2], canBeat: false, desc: '333+4 不能压 444+5' },
+    { current: [2, 3, 4, 5, 6], last: [1, 2, 3, 4, 5], canBeat: true, desc: '56789 能压 45678' },
+    { current: [0, 1, 2, 3, 4], last: [1, 2, 3, 4, 5], canBeat: false, desc: '34567 不能压 45678' },
+  ];
+
+  const pool = pairs;
+
+  const p = pool[Math.floor(Math.random() * pool.length)];
+  const curCards = cardUtils.createCardsByRank(p.current);
+  const lastCards = cardUtils.createCardsByRank(p.last);
+
+  return {
+    type: 'canBeat',
+    difficulty,
+    question: p.desc,
+    currentPlay: cardUtils.serializeCards(curCards),
+    lastPlay: cardUtils.serializeCards(lastCards),
+    answer: p.canBeat,
+    explanation: p.canBeat ? '可以压过' : '不能压过'
+  };
+}
+
+/**
+ * 【题型3】找出能压的牌 - 给手牌和上家牌，找出正确的出牌
+ */
+function generateFindPlayQuestion(difficulty) {
+  const samples = [
+    {
+      hand: [0, 1, 2, 3, 4, 10, 11],
+      lastPlay: [0, 1, 2, 3, 4],
+      answerCards: [1, 2, 3, 4, 5],
+      desc: '上家出34567，找更大的顺子'
+    },
+    {
+      hand: [0, 0, 1, 1, 2, 10, 11],
+      lastPlay: [0, 0],
+      answerCards: [1, 1],
+      desc: '上家出33，找更大的对子'
+    },
+    {
+      hand: [0, 0, 0, 1, 2, 3, 4],
+      lastPlay: [1, 1, 1],
+      answerCards: [0, 0, 0],
+      desc: '上家出444，找更大的三张'
+    },
+    {
+      hand: [0, 0, 0, 0, 1, 2, 3, 4, 5],
+      lastPlay: [1, 1, 1, 1],
+      answerCards: [0, 0, 0, 0],
+      desc: '上家出4444炸弹，找更大的炸弹'
+    },
+  ];
+
+  const s = samples[Math.floor(Math.random() * samples.length)];
+  const handCards = cardUtils.createCardsByRank(s.hand);
+  const lastCards = cardUtils.createCardsByRank(s.lastPlay);
+  const answerCards = cardUtils.createCardsByRank(s.answerCards);
+
+  const allPlays = Doudizhu.findValidPlays(handCards, lastCards);
+
+  return {
+    type: 'findPlay',
+    difficulty,
+    question: s.desc,
+    hand: cardUtils.serializeCards(handCards),
+    lastPlay: cardUtils.serializeCards(lastCards),
+    // 正确答案放在 options 里，同时加几个干扰
+    answer: cardUtils.serializeCards(answerCards),
+    validPlaysCount: allPlays.length,
+    hint: allPlays.length > 0
+      ? `有 ${allPlays.length} 种出法，试试找最小的`
+      : '没有能压的牌'
+  };
+}
+
+// ============================================================
+// POST /api/quiz/generate
+// ============================================================
+router.post('/generate', (req, res) => {
+  try {
+    const { type, difficulty, count } = req.body;
+
+    const diff = difficulty || 'normal';
+    const num = Math.min(count || 1, 10);
+
+    const questions = [];
+    for (let i = 0; i < num; i++) {
+      let q;
+      switch (type) {
+        case 'identify':
+          q = generateIdentifyQuestion(diff);
+          break;
+        case 'canBeat':
+          q = generateCanBeatQuestion(diff);
+          break;
+        case 'findPlay':
+          q = generateFindPlayQuestion(diff);
+          break;
+        default:
+          // 'all' - 随机出题型
+          const types = ['identify', 'canBeat', 'findPlay'];
+          const randType = types[Math.floor(Math.random() * types.length)];
+          switch (randType) {
+            case 'identify': q = generateIdentifyQuestion(diff); break;
+            case 'canBeat': q = generateCanBeatQuestion(diff); break;
+            case 'findPlay': q = generateFindPlayQuestion(diff); break;
+          }
+      }
+      questions.push({ ...q, id: `${Date.now()}-${i}` });
+    }
+
+    res.json({
+      success: true,
+      count: questions.length,
+      difficulty: diff,
+      questions
+    });
+
+  } catch (err) {
+    console.error('Quiz generate error:', err);
+    res.status(500).json({ error: 'Failed to generate quiz', message: err.message });
+  }
+});
+
+// ============================================================
+// 工具
+// ============================================================
+function shuffleArray(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+module.exports = router;
+
+```
+
+---
+
+## `src/server/routes/result.js` (3,072 字节)
+
+```javascript
+/**
+ * src/server/routes/result.js - 游戏结算 API
+ *
+ * POST /api/game/result
+ *
+ * Body: {
+ *   winner: 'player'|'duidui'|'tiantian',  // 谁赢了
+ *   baseScore: number,          // 底分(叫分结果)
+ *   bombMultiplier: number,     // 炸弹翻倍次数
+ *   chaosScore: number,         // 搞事情得分
+ *   remainingCards: number,     // 赢家剩余手牌数
+ *   playerHandCards: number     // 玩家手牌张数（用于负数扣分）
+ * }
+ *
+ * Response: {
+ *   result: 'win'|'lose',
+ *   totalScore: number,
+ *   breakdown: { base, bombBonus, chaosBonus, handCardBonus },
+ *   winnerName: string
+ * }
+ */
+
+const express = require('express');
+const router = express.Router();
+
+const WINNER_NAMES = {
+  player: '你',
+  duidui: '王怼怼',
+  tiantian: '苏甜甜'
+};
+
+// 每张剩余牌的计分权重
+const HAND_CARD_UNIT = 4;
+
+/**
+ * POST /api/game/result - 游戏结算
+ */
+router.post('/', (req, res) => {
+  try {
+    const { winner, baseScore, bombMultiplier, chaosScore, remainingCards, playerHandCards } = req.body;
+
+    // 参数校验
+    if (!winner || !['player', 'duidui', 'tiantian'].includes(winner)) {
+      return res.status(400).json({ error: 'winner must be "player", "duidui", or "tiantian"' });
+    }
+    if (baseScore === undefined || typeof baseScore !== 'number') {
+      return res.status(400).json({ error: 'baseScore is required and must be a number' });
+    }
+
+    const isPlayerWin = winner === 'player';
+    const result = isPlayerWin ? 'win' : 'lose';
+    const winnerName = WINNER_NAMES[winner] || '未知';
+    const bomb = Math.max(bombMultiplier || 1, 1);
+    const chaos = chaosScore || 0;
+    const remain = remainingCards || 0;
+    const playerCards = playerHandCards || 0;
+
+    // ── 分数计算 ──────────────────────────────────────
+    //
+    // 基础分 = 底分 × 8（地主赢普通倍率）
+    // 炸弹加成 = 基础分 × (炸弹倍数 - 1)（每多一颗炸弹多一倍）
+    // 搞事情加成 = 搞事情得分
+    // 手牌加成:
+    //   玩家赢 → 赢家剩余手牌越少奖励越多，capped
+    //   玩家输 → 按玩家剩余手牌数扣分
+    //
+
+    let base, bombBonus, handCardBonus;
+
+    if (isPlayerWin) {
+      // 玩家赢：正向计分
+      base = baseScore * 8;
+      bombBonus = base * (bomb - 1);
+      handCardBonus = remain * HAND_CARD_UNIT;
+    } else {
+      // 玩家输：罚分（负数）
+      base = -(baseScore * 8);
+      bombBonus = -(baseScore * 8 * (bomb - 1));
+      handCardBonus = -(playerCards * HAND_CARD_UNIT);
+    }
+
+    const chaosBonus = isPlayerWin ? chaos : -chaos;
+
+    const totalScore = base + bombBonus + chaosBonus + handCardBonus;
+
+    res.json({
+      result,
+      totalScore,
+      breakdown: { base, bombBonus, chaosBonus, handCardBonus },
+      winnerName
+    });
+
+  } catch (err) {
+    console.error('Game result error:', err);
+    res.status(500).json({ error: 'Score calculation failed', message: err.message });
+  }
+});
+
+module.exports = router;
+
+```
+
+---
+
+## `src/server/routes/verify.js` (8,017 字节)
+
+```javascript
+/**
+ * src/server/routes/verify.js - 出牌验证 API
+ *
+ * 核心功能:
+ *   POST /api/verify/play      - 出牌合法性验证
+ *   POST /api/verify/find      - 枚举所有合法出牌
+ *   POST /api/verify/identify  - 纯牌型识别
+ */
+
+const express = require('express');
+const router = express.Router();
+const cardUtils = require('../utils/cardUtils');
+
+const { Doudizhu, HAND_TYPES, HAND_TYPE_NAMES } = cardUtils;
+
+// ============================================================
+// POST /api/verify/play - 验证出牌合法性
+//
+// Body: {
+//   current: [{suit,rank}],     // 当前要出的牌
+//   lastPlay: [{suit,rank}]|null, // 上家出的牌（null=自由出牌）
+//   hand: [{suit,rank}]|null     // 玩家手牌（可选，用于验证是否能出这些牌）
+// }
+//
+// Response: {
+//   valid: bool,
+//   type: { type, typeName, rank, length },
+//   canBeat: bool|null,          // 是否能压过 lastPlay
+//   inHand: bool|null,           // 是否在手牌中
+//   error: string|null
+// }
+// ============================================================
+router.post('/play', (req, res) => {
+  try {
+    const { current, lastPlay, hand } = req.body;
+
+    // 参数校验
+    if (!current || !Array.isArray(current) || current.length === 0) {
+      return res.status(400).json({
+        valid: false,
+        error: 'current is required and must be a non-empty array'
+      });
+    }
+
+    // 转换牌对象
+    let currentCards;
+    try {
+      currentCards = cardUtils.toCards(current);
+    } catch (e) {
+      return res.status(400).json({
+        valid: false,
+        error: 'Invalid card format: ' + e.message
+      });
+    }
+
+    // 识别牌型
+    const typeInfo = Doudizhu.identifyType(currentCards);
+    const isValid = typeInfo.type !== HAND_TYPES.INVALID;
+    const result = {
+      valid: isValid,
+      type: {
+        type: typeInfo.type,
+        typeName: HAND_TYPE_NAMES[typeInfo.type] || typeInfo.type,
+        rank: typeInfo.rank,
+        length: typeInfo.length
+      },
+      canBeat: null,
+      inHand: null,
+      error: isValid ? null : '非法牌型组合'
+    };
+
+    // 如果不合法，直接返回
+    if (!isValid) {
+      return res.json(result);
+    }
+
+    // 验证是否能压过上家的牌
+    if (lastPlay && Array.isArray(lastPlay) && lastPlay.length > 0) {
+      try {
+        const lastCards = cardUtils.toCards(lastPlay);
+        const lastType = Doudizhu.identifyType(lastCards);
+
+        if (lastType.type === HAND_TYPES.INVALID) {
+          result.canBeat = false;
+          result.error = '上家出的牌无效';
+        } else {
+          result.canBeat = Doudizhu.canBeat(currentCards, lastCards);
+          if (!result.canBeat) {
+            result.error = `不能压过上家的 ${HAND_TYPE_NAMES[lastType.type] || lastType.type}`;
+          }
+        }
+      } catch (e) {
+        result.canBeat = false;
+        result.error = '解析上家牌失败: ' + e.message;
+      }
+    }
+
+    // 验证牌是否在手牌中
+    if (hand && Array.isArray(hand) && hand.length > 0) {
+      try {
+        const handCards = cardUtils.toCards(hand);
+        result.inHand = isSubset(currentCards, handCards);
+        if (!result.inHand) {
+          result.error = result.error
+            ? result.error + '；且该牌不在你的手牌中'
+            : '该牌不在你的手牌中';
+        }
+      } catch (e) {
+        result.inHand = false;
+      }
+    }
+
+    res.json(result);
+
+  } catch (err) {
+    console.error('Verify play error:', err);
+    res.status(500).json({ valid: false, error: err.message });
+  }
+});
+
+// ============================================================
+// POST /api/verify/find - 枚举所有合法出牌
+//
+// Body: {
+//   hand: [{suit,rank}],
+//   lastPlay: [{suit,rank}]|null,  // null = 自由出牌
+//   page: number,                    // 分页（可选）
+//   pageSize: number                 // 每页数量（可选）
+// }
+//
+// Response: {
+//   total: number,
+//   totalTypeSummary: { typeName: count },
+//   plays: [{ cards, type, typeName }],
+//   page: number|null,
+//   pageSize: number|null
+// }
+// ============================================================
+router.post('/find', (req, res) => {
+  try {
+    const { hand, lastPlay, page, pageSize } = req.body;
+
+    if (!hand || !Array.isArray(hand) || hand.length === 0) {
+      return res.status(400).json({ error: 'hand is required and must be non-empty' });
+    }
+
+    const handCards = cardUtils.toCards(hand);
+    const lastCards = lastPlay && lastPlay.length > 0 ? cardUtils.toCards(lastPlay) : null;
+
+    const plays = Doudizhu.findValidPlays(handCards, lastCards);
+
+    // 统计各牌型数量
+    const typeSummary = {};
+    const playResults = plays.map(p => {
+      const info = Doudizhu.identifyType(p);
+      const typeName = HAND_TYPE_NAMES[info.type] || info.type;
+      typeSummary[typeName] = (typeSummary[typeName] || 0) + 1;
+      return {
+        cards: cardUtils.serializeCards(p),
+        type: info.type,
+        typeName,
+        rank: info.rank
+      };
+    });
+
+    // 按类型排序输出
+    playResults.sort((a, b) => {
+      const order = [
+        'SINGLE', 'PAIR', 'TRIPLE', 'TRIPLE_PLUS_ONE', 'TRIPLE_PLUS_TWO',
+        'STRAIGHT', 'CONSECUTIVE_PAIRS', 'AIRPLANE', 'AIRPLANE_PLUS_SINGLES',
+        'AIRPLANE_PLUS_PAIRS', 'FOUR_PLUS_TWO', 'FOUR_PLUS_TWO_PAIRS',
+        'BOMB', 'ROCKET'
+      ];
+      return (order.indexOf(a.type) !== -1 ? order.indexOf(a.type) : 99) -
+             (order.indexOf(b.type) !== -1 ? order.indexOf(b.type) : 99);
+    });
+
+    const result = {
+      total: playResults.length,
+      totalTypeSummary: typeSummary,
+      plays: playResults,
+      page: null,
+      pageSize: null
+    };
+
+    // 分页
+    if (page !== undefined && pageSize !== undefined) {
+      const p = Math.max(1, page);
+      const ps = Math.max(1, Math.min(100, pageSize));
+      const start = (p - 1) * ps;
+      const end = start + ps;
+      result.plays = playResults.slice(start, end);
+      result.page = p;
+      result.pageSize = ps;
+    }
+
+    res.json(result);
+
+  } catch (err) {
+    console.error('Find plays error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================
+// POST /api/verify/identify - 纯牌型识别
+//
+// Body: { cards: [{suit,rank}] }
+// Response: { type, typeName, rank, length, valid, summary }
+// ============================================================
+router.post('/identify', (req, res) => {
+  try {
+    const { cards } = req.body;
+
+    if (!cards || !Array.isArray(cards) || cards.length === 0) {
+      return res.status(400).json({ error: 'cards is required and must be non-empty' });
+    }
+
+    const cardInstances = cardUtils.toCards(cards);
+    const info = Doudizhu.identifyType(cardInstances);
+    const isValid = info.type !== HAND_TYPES.INVALID;
+
+    res.json({
+      type: info.type,
+      typeName: HAND_TYPE_NAMES[info.type] || info.type,
+      rank: info.rank,
+      length: info.length,
+      valid: isValid,
+      error: isValid ? null : '非法牌型',
+      sortedCards: cardUtils.serializeCards(Doudizhu.sortCards(cardInstances))
+    });
+
+  } catch (err) {
+    console.error('Identify error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================
+// 工具函数
+// ============================================================
+
+/**
+ * 检查 childCards 是否是 parentCards 的子集
+ * (按 rank 比较，不考虑花色)
+ */
+function isSubset(child, parent) {
+  const parentRanks = parent.map(c => c.rank).sort((a, b) => a - b);
+  const childRanks = child.map(c => c.rank).sort((a, b) => a - b);
+
+  let pi = 0;
+  for (let ci = 0; ci < childRanks.length; ci++) {
+    while (pi < parentRanks.length && parentRanks[pi] < childRanks[ci]) pi++;
+    if (pi >= parentRanks.length || parentRanks[pi] !== childRanks[ci]) {
+      return false;
+    }
+    pi++;
+  }
+  return true;
+}
+
+module.exports = router;
+
+```
+
+---
+
+## `src/server/routes/wrongbook.js` (6,284 字节)
+
+```javascript
+/**
+ * src/server/routes/wrongbook.js - 错题本 API
+ *
+ * POST /api/wrong-book/record  - 记录错题
+ * GET  /api/wrong-book         - 获取错题列表
+ * GET  /api/wrong-book/stats   - 错题统计
+ * POST /api/wrong-book/clear   - 清空错题本
+ *
+ * 使用文件持久化存储，重启不丢失。
+ * 数据保存在 src/server/data/wrongbook.json
+ */
+
+const express = require('express');
+const fs = require('fs');
+const path = require('path');
+const router = express.Router();
+
+const DATA_FILE = path.resolve(__dirname, '../data/wrongbook.json');
+const MAX_RECORDS = 500;
+
+/** 从磁盘加载错题本 */
+function loadWrongBook() {
+  try {
+    if (fs.existsSync(DATA_FILE)) {
+      const raw = fs.readFileSync(DATA_FILE, 'utf8');
+      const data = JSON.parse(raw);
+      if (Array.isArray(data)) return data;
+    }
+  } catch (e) {
+    console.warn('[WrongBook] Failed to load data file, starting fresh:', e.message);
+  }
+  return [];
+}
+
+/** 写入磁盘 */
+function saveWrongBook(records) {
+  try {
+    const dir = path.dirname(DATA_FILE);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(DATA_FILE, JSON.stringify(records), 'utf8');
+  } catch (e) {
+    console.error('[WrongBook] Failed to save data file:', e.message);
+  }
+}
+
+// 启动时加载
+const WRONG_BOOK = loadWrongBook();
+
+// ============================================================
+// POST /api/wrong-book/record - 记录错题
+//
+// Body: {
+//   questionType: string,    // 题型: 'identify'|'canBeat'|'findPlay'
+//   question: string,        // 题目描述
+//   userAnswer: any,         // 用户回答
+//   correctAnswer: any,      // 正确答案
+//   difficulty: string,      // 'easy'|'normal'|'hard'
+//   cards?: object,          // 相关牌面数据
+//   playerId?: string        // 玩家标识（后续用于多用户）
+// }
+// ============================================================
+router.post('/record', (req, res) => {
+  try {
+    const { questionType, question, userAnswer, correctAnswer, difficulty, cards, playerId } = req.body;
+
+    // 参数校验
+    if (!questionType || !question || userAnswer === undefined || correctAnswer === undefined) {
+      return res.status(400).json({
+        error: 'Missing required fields: questionType, question, userAnswer, correctAnswer'
+      });
+    }
+
+    const record = {
+      id: `wrong_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      questionType,
+      question,
+      userAnswer,
+      correctAnswer,
+      difficulty: difficulty || 'normal',
+      cards: cards || null,
+      playerId: playerId || 'anonymous',
+      isCorrect: JSON.stringify(userAnswer) === JSON.stringify(correctAnswer),
+      timestamp: new Date().toISOString()
+    };
+
+    // 只在答错时记录
+    if (!record.isCorrect) {
+      // 新记录插到队首（最新在前）
+      WRONG_BOOK.unshift(record);
+
+      // 超限时裁剪最旧记录（队尾），确保不超过 MAX_RECORDS
+      if (WRONG_BOOK.length > MAX_RECORDS) {
+        WRONG_BOOK.splice(MAX_RECORDS);
+      }
+
+      // 持久化到磁盘
+      saveWrongBook(WRONG_BOOK);
+    }
+
+    res.json({
+      success: true,
+      isCorrect: record.isCorrect,
+      recordId: record.id,
+      wrongBookSize: WRONG_BOOK.length
+    });
+
+  } catch (err) {
+    console.error('Wrong book record error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================
+// GET /api/wrong-book - 获取错题列表
+//
+// Query params:
+//   type: 筛选题型
+//   limit: 返回条数 (默认20, 最大100)
+//   offset: 偏移 (默认0)
+// ============================================================
+router.get('/', (req, res) => {
+  const { type, limit, offset, playerId } = req.query;
+
+  let filtered = WRONG_BOOK;
+
+  if (type) {
+    filtered = filtered.filter(r => r.questionType === type);
+  }
+
+  if (playerId) {
+    filtered = filtered.filter(r => r.playerId === playerId);
+  }
+
+  const off = Math.max(0, parseInt(offset) || 0);
+  const lim = Math.min(Math.max(1, parseInt(limit) || 20), 100);
+
+  res.json({
+    total: filtered.length,
+    offset: off,
+    limit: lim,
+    records: filtered.slice(off, off + lim)
+  });
+});
+
+// ============================================================
+// GET /api/wrong-book/stats - 错题统计
+// ============================================================
+router.get('/stats', (req, res) => {
+  const { playerId } = req.query;
+
+  let records = WRONG_BOOK;
+  if (playerId) {
+    records = records.filter(r => r.playerId === playerId);
+  }
+
+  // 按题型统计
+  const byType = {};
+  const byDifficulty = { easy: 0, normal: 0, hard: 0 };
+
+  for (const r of records) {
+    byType[r.questionType] = (byType[r.questionType] || 0) + 1;
+    if (byDifficulty[r.difficulty] !== undefined) {
+      byDifficulty[r.difficulty]++;
+    }
+  }
+
+  // 获取最新的错题
+  const recent = records.slice(0, 5);
+
+  // 找出高频错误题型
+  const topErrorTypes = Object.entries(byType)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
+
+  res.json({
+    total: records.length,
+    byQuestionType: byType,
+    byDifficulty,
+    topErrorTypes: topErrorTypes.map(([type, count]) => ({ type, count })),
+    recentErrors: recent.map(r => ({
+      id: r.id,
+      questionType: r.questionType,
+      question: r.question,
+      difficulty: r.difficulty,
+      timestamp: r.timestamp
+    }))
+  });
+});
+
+// ============================================================
+// POST /api/wrong-book/clear - 清空错题本
+// ============================================================
+router.post('/clear', (req, res) => {
+  const { playerId } = req.body;
+
+  if (playerId) {
+    // 按玩家清空
+    const before = WRONG_BOOK.length;
+    let i = WRONG_BOOK.length;
+    while (i--) {
+      if (WRONG_BOOK[i].playerId === playerId) {
+        WRONG_BOOK.splice(i, 1);
+      }
+    }
+    saveWrongBook(WRONG_BOOK);
+    res.json({ cleared: before - WRONG_BOOK.length, message: `Cleared records for ${playerId}` });
+  } else {
+    // 全量清空
+    const before = WRONG_BOOK.length;
+    WRONG_BOOK.length = 0;
+    saveWrongBook(WRONG_BOOK);
+    res.json({ cleared: before, message: 'All wrong book records cleared' });
+  }
+});
+
+module.exports = router;
+
+```
+
+---
+
+## `src/server/services/eventEngine.js` (10,946 字节)
+
+```javascript
+/**
+ * src/server/services/eventEngine.js
+ *
+ * 特殊事件系统 — "搞事情"事件引擎
+ *
+ * 功能:
+ *   1. 基于游戏状态触发随机事件
+ *   2. 多个事件类型 (cardSwap, scoreChange, popQuiz, taunt, chaos)
+ *   3. 事件条件评估 + 加权随机选择
+ *   4. 可配置的触发频率和冷却
+ */
+
+const fs = require('fs');
+const path = require('path');
+const { callLLM } = require('./llmService');
+
+const EVENT_LOG_PATH = path.resolve(__dirname, '../data/eventLog.json');
+
+// ============================================================
+// 事件类型定义
+// ============================================================
+
+const EVENT_TYPES = {
+
+  // ---- AI 换牌 ----
+  cardSwap: {
+    id: 'cardSwap',
+    label: '🔄 AI换牌',
+    desc: 'AI 突然从你手牌中换走一张牌',
+    weight: 20,
+    minRound: 3,
+    cooldown: 3,       // 冷却回合数
+    cooldownPerPlayer: {}  // per playerId cooldown
+  },
+
+  // ---- 分数奖惩 ----
+  scoreDouble: {
+    id: 'scoreDouble',
+    label: '🔥 得分加倍',
+    desc: '下一题得分翻倍！拼了！',
+    weight: 15,
+    minRound: 1,
+    cooldown: 2
+  },
+
+  scoreHalve: {
+    id: 'scoreHalve',
+    label: '❄️ 得分减半',
+    desc: '这题得分减半……AI的陷阱！',
+    weight: 10,
+    minRound: 2,
+    cooldown: 3
+  },
+
+  // ---- 弹出趣味题目 ----
+  popQuiz: {
+    id: 'popQuiz',
+    label: '💡 附加题！',
+    desc: '突然出现的附加题！答对额外加分！',
+    weight: 25,
+    minRound: 2,
+    cooldown: 4
+  },
+
+  // ---- AI 嘲讽攻击 ----
+  taunt: {
+    id: 'taunt',
+    label: '😏 AI嘲讽',
+    desc: 'AI 开始嘴炮攻击！答对下一题可以反击！',
+    weight: 15,
+    minRound: 1,
+    cooldown: 2
+  },
+
+  // ---- 大混乱（全效果） ----
+  chaos: {
+    id: 'chaos',
+    label: '🎲 大混乱',
+    desc: '所有规则都变了！随机多重效果！',
+    weight: 5,
+    minRound: 5,
+    cooldown: 6
+  },
+
+  // ---- 幸运抽牌 ----
+  luckyDraw: {
+    id: 'luckyDraw',
+    label: '🍀 幸运抽牌',
+    desc: '随机抽一张奖励牌！',
+    weight: 10,
+    minRound: 1,
+    cooldown: 3
+  }
+};
+
+// ============================================================
+// 事件条件评估
+// ============================================================
+
+/**
+ * 检查事件是否满足触发条件
+ */
+function checkCondition(eventId, gameState, playerHistory) {
+  const event = EVENT_TYPES[eventId];
+  if (!event) return false;
+
+  const { round, consecutiveCorrect, consecutiveWrong } = gameState;
+
+  // 回合数要求
+  if (round < event.minRound) return false;
+
+  // 冷却检查
+  const playerId = gameState.playerId || 'default';
+  if (!event.cooldownPerPlayer) event.cooldownPerPlayer = {};
+  const lastTriggered = event.cooldownPerPlayer[playerId] || 0;
+  if (lastTriggered > 0 && round - lastTriggered < event.cooldown) return false;
+
+  // 特殊条件
+  switch (eventId) {
+    case 'cardSwap':
+      return round >= 3 && Math.random() < 0.6;
+    case 'scoreDouble':
+      return consecutiveCorrect >= 2;  // 连对2次后触发
+    case 'scoreHalve':
+      return consecutiveWrong >= 2;     // 连错2次后触发
+    case 'popQuiz':
+      return true;                     // 无条件
+    case 'taunt':
+      return consecutiveWrong >= 1;    // 答错过就能嘲讽
+    case 'chaos':
+      return round >= 5 && consecutiveCorrect >= 3;
+    case 'luckyDraw':
+      return round >= 1;
+    default:
+      return true;
+  }
+}
+
+/**
+ * 计算事件权重（动态调整）
+ */
+function getDynamicWeight(eventId, gameState) {
+  const base = EVENT_TYPES[eventId]?.weight || 10;
+  const { round, consecutiveCorrect, consecutiveWrong } = gameState;
+
+  let modifier = 1.0;
+
+  // 越到后期，越容易触发大事件
+  if (round >= 7) modifier *= 1.5;
+  if (round >= 9) modifier *= 2.0;
+
+  // 连对时增加正面事件权重
+  if (eventId === 'scoreDouble' && consecutiveCorrect >= 2) modifier *= 2.0;
+  if (eventId === 'luckyDraw' && consecutiveCorrect >= 3) modifier *= 1.5;
+
+  // 连错时增加负面事件权重
+  if (eventId === 'scoreHalve' && consecutiveWrong >= 2) modifier *= 2.0;
+  if (eventId === 'taunt' && consecutiveWrong >= 1) modifier *= 1.5;
+
+  return Math.round(base * modifier);
+}
+
+// ============================================================
+// 事件执行器
+// ============================================================
+
+/**
+ * 执行一个事件，返回事件结果
+ */
+function executeEvent(eventId, gameState) {
+  const event = EVENT_TYPES[eventId];
+  if (!event) return null;
+
+  const playerId = gameState.playerId || 'default';
+
+  // 更新冷却
+  event.cooldownPerPlayer[playerId] = gameState.round || 0;
+
+  const result = {
+    eventId: event.id,
+    eventLabel: event.label,
+    eventDesc: event.desc,
+    timestamp: new Date().toISOString(),
+    round: gameState.round || 0,
+    effects: []
+  };
+
+  switch (eventId) {
+    case 'cardSwap': {
+      const swapCount = Math.floor(Math.random() * 2) + 1; // 1-2张
+      result.effects.push({
+        type: 'swapCards',
+        detail: `AI从你的手牌中换走了${swapCount}张牌`,
+        count: swapCount,
+        aiTaunt: pickTaunt('cardSwap')
+      });
+      break;
+    }
+    case 'scoreDouble': {
+      result.effects.push({
+        type: 'scoreMultiplier',
+        detail: '下一题得分 ×2！',
+        multiplier: 2,
+        duration: 'next_round'
+      });
+      break;
+    }
+    case 'scoreHalve': {
+      result.effects.push({
+        type: 'scoreMultiplier',
+        detail: '这题得分 ×0.5...',
+        multiplier: 0.5,
+        duration: 'this_round'
+      });
+      break;
+    }
+    case 'popQuiz': {
+      result.effects.push({
+        type: 'popQuiz',
+        detail: '附加题出现！答对额外 +15 分',
+        bonusScore: 15,
+        aiTaunt: pickTaunt('popQuiz')
+      });
+      break;
+    }
+    case 'taunt': {
+      const taunts = ['这题你总该会吧？不会吧不会吧？',
+        '我闭着眼都能答对的题，你仔细看看？',
+        '建议你直接过牌，真的',
+        '人类的CPU又过载了？',
+        '这题送分，再错就真的要换个游戏了'];
+      result.effects.push({
+        type: 'taunt',
+        detail: taunts[Math.floor(Math.random() * taunts.length)],
+        counterCondition: '答对此题可嘲讽回击'
+      });
+      break;
+    }
+    case 'chaos': {
+      // 多重效果
+      const subEvents = ['cardSwap', 'popQuiz', 'scoreDouble'];
+      const selected = subEvents.sort(() => Math.random() - 0.5).slice(0, 2);
+      result.effects.push({
+        type: 'chaosMulti',
+        detail: `🎉 大混乱！触发: ${selected.map(s => EVENT_TYPES[s].label).join(' + ')}`,
+        subEvents: selected
+      });
+      break;
+    }
+    case 'luckyDraw': {
+      const bonus = Math.floor(Math.random() * 20) + 5; // 5-25分
+      result.effects.push({
+        type: 'bonusScore',
+        detail: `🎁 幸运抽牌！获得 ${bonus} 分奖励！`,
+        score: bonus
+      });
+      break;
+    }
+  }
+
+  return result;
+}
+
+// ============================================================
+// 事件选择器 - 加权随机选事件
+// ============================================================
+
+/**
+ * 从可用事件中按权重随机选一个
+ * @param {Object} gameState - { round, consecutiveCorrect, consecutiveWrong, playerId }
+ * @returns {Object|null} 事件结果
+ */
+function pickEvent(gameState) {
+  const candidates = [];
+
+  for (const [id, event] of Object.entries(EVENT_TYPES)) {
+    if (checkCondition(id, gameState)) {
+      const weight = getDynamicWeight(id, gameState);
+      for (let i = 0; i < weight; i++) {
+        candidates.push(id);
+      }
+    }
+  }
+
+  if (candidates.length === 0) return null;
+
+  const pick = candidates[Math.floor(Math.random() * candidates.length)];
+  const result = executeEvent(pick, gameState);
+
+  // 记录到日志
+  logEvent(result, gameState);
+
+  return result;
+}
+
+// ============================================================
+// 台词池
+// ============================================================
+
+function pickTaunt(scene) {
+  const taunts = {
+    cardSwap: [
+      '这张牌你留着浪费了，我帮你保管 😏',
+      '拿来吧你！这题你配不上',
+      '我换走一张，免得你太难选',
+      '好牌当然要给懂的人——比如我'
+    ],
+    popQuiz: [
+      '加试时间到！别怪我没提醒你',
+      '附加题！答对加鸡腿 🍗',
+      'Surprise！你最喜欢的不定时测验'
+    ]
+  };
+  const pool = taunts[scene] || ['嘿嘿，没想到吧'];
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+// ============================================================
+// 事件日志（文件持久化）
+// ============================================================
+
+function ensureLogFile() {
+  const dir = path.dirname(EVENT_LOG_PATH);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  if (!fs.existsSync(EVENT_LOG_PATH)) fs.writeFileSync(EVENT_LOG_PATH, '[]');
+}
+
+function readEventLog() {
+  ensureLogFile();
+  try {
+    const raw = fs.readFileSync(EVENT_LOG_PATH, 'utf8');
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+}
+
+function writeEventLog(logs) {
+  ensureLogFile();
+  fs.writeFileSync(EVENT_LOG_PATH, JSON.stringify(logs, null, 2));
+}
+
+const MAX_EVENT_LOG = 500;
+
+function logEvent(eventResult, gameState) {
+  if (!eventResult) return;
+  const logs = readEventLog();
+
+  // 超限时先裁剪旧记录再追加，避免数组膨胀
+  while (logs.length >= MAX_EVENT_LOG) {
+    logs.shift();
+  }
+
+  logs.push({
+    ...eventResult,
+    playerId: gameState.playerId || 'anonymous',
+    gameId: gameState.gameId || 'unknown'
+  });
+
+  writeEventLog(logs);
+}
+
+function getEventLogs(filter) {
+  let logs = readEventLog();
+  if (filter?.eventId) logs = logs.filter(l => l.eventId === filter.eventId);
+  if (filter?.playerId) logs = logs.filter(l => l.playerId === filter.playerId);
+  if (filter?.gameId) logs = logs.filter(l => l.gameId === filter.gameId);
+  if (filter?.limit) logs = logs.slice(0, filter.limit);
+  return logs;
+}
+
+function getEventStats() {
+  const logs = readEventLog();
+  const byType = {};
+  const byRound = {};
+  for (const l of logs) {
+    byType[l.eventId] = (byType[l.eventId] || 0) + 1;
+    const r = l.round || 0;
+    byRound[r] = (byRound[r] || 0) + 1;
+  }
+  return {
+    total: logs.length,
+    byType,
+    byRound
+  };
+}
+
+// ============================================================
+// 事件列表查询
+// ============================================================
+
+function getEventCatalog() {
+  return Object.entries(EVENT_TYPES).map(([id, e]) => ({
+    id,
+    label: e.label,
+    desc: e.desc,
+    weight: e.weight,
+    minRound: e.minRound,
+    cooldown: e.cooldown
+  }));
+}
+
+module.exports = {
+  EVENT_TYPES,
+  pickEvent,
+  executeEvent,
+  checkCondition,
+  getEventLogs,
+  getEventStats,
+  getEventCatalog,
+  logEvent
+};
+
+```
+
+---
+
+## `src/server/services/llmService.js` (5,471 字节)
+
+```javascript
+/**
+ * src/server/services/llmService.js
+ *
+ * 大模型调用服务（对接 DeepSeek / MiniMax）
+ *
+ * 配置方式（环境变量）:
+ *   LLM_PROVIDER="minimax" | "deepseek"   (默认 deepseek)
+ *   LLM_API_KEY="sk-xxx"
+ *   LLM_MODEL="..."  (默认 auto)
+ *
+ * 导出:
+ *   callLLM(systemPrompt, userPrompt, opts) - 通用调用
+ *   callLLMForPlay(hand, lastPlay, difficulty) - 出牌决策（向后兼容）
+ */
+
+const https = require('https');
+
+const PROVIDERS = {
+  minimax: {
+    baseUrl: 'https://api.minimax.chat/v1/text/chatcompletion_v2',
+    defaultModel: 'MiniMax-Text-01',
+    headers: (apiKey) => ({
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    }),
+    parseBody: (model, messages, opts) => ({
+      model,
+      messages,
+      temperature: opts.temperature ?? 0.7,
+      max_tokens: opts.maxTokens ?? 500
+    }),
+    parseResponse: (data) => {
+      const json = JSON.parse(data);
+      const text = json.choices?.[0]?.message?.content || '';
+      return safeParseJson(cleanJsonString(text));
+    }
+  },
+  deepseek: {
+    baseUrl: 'https://api.deepseek.com/v1/chat/completions',
+    defaultModel: 'deepseek-chat',
+    headers: (apiKey) => ({
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    }),
+    parseBody: (model, messages, opts) => ({
+      model,
+      messages,
+      temperature: opts.temperature ?? 0.7,
+      max_tokens: opts.maxTokens ?? 1000,
+      stream: false
+    }),
+    parseResponse: (data) => {
+      const json = JSON.parse(data);
+      const text = json.choices?.[0]?.message?.content || '';
+      return safeParseJson(cleanJsonString(text));
+    }
+  }
+};
+
+/** 清理 JSON 字符串（去除 markdown 代码块标记） */
+function cleanJsonString(str) {
+  return str
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
+}
+
+/** 安全 JSON 解析，解析失败时返回包含 rawText 的 fallback 对象 */
+function safeParseJson(str) {
+  try {
+    return JSON.parse(str);
+  } catch (e) {
+    console.warn('[LLM] JSON parse failed, raw text:', str.slice(0, 200));
+    return { error: 'JSON_PARSE_ERROR', rawText: str.slice(0, 500), _parseError: e.message };
+  }
+}
+
+/** 通用 HTTP POST 请求 */
+function httpPost(url, headers, body) {
+  return new Promise((resolve, reject) => {
+    const bodyStr = JSON.stringify(body);
+    const urlObj = new URL(url);
+    const options = {
+      hostname: urlObj.hostname,
+      port: urlObj.port || 443,
+      path: urlObj.pathname + urlObj.search,
+      method: 'POST',
+      headers: { ...headers, 'Content-Length': Buffer.byteLength(bodyStr) },
+      timeout: 20000
+    };
+    const req = https.request(options, (res) => {
+      const chunks = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => {
+        const data = Buffer.concat(chunks).toString();
+        if (res.statusCode >= 200 && res.statusCode < 300) resolve(data);
+        else reject(new Error(`HTTP ${res.statusCode}: ${data.slice(0, 200)}`));
+      });
+    });
+    req.on('error', reject);
+    req.on('timeout', () => { req.destroy(); reject(new Error('Request timeout')); });
+    req.write(bodyStr);
+    req.end();
+  });
+}
+
+/**
+ * 通用大模型调用
+ * @param {string} systemPrompt - 系统提示词
+ * @param {string} userPrompt   - 用户消息
+ * @param {Object} [opts]
+ * @param {number}  [opts.temperature=0.7]
+ * @param {number}  [opts.maxTokens=1000]
+ * @param {string}  [opts.model]
+ * @returns {Object} 解析后的 JSON 对象
+ */
+async function callLLM(systemPrompt, userPrompt, opts) {
+  const providerName = process.env.LLM_PROVIDER || 'deepseek';
+  const apiKey = process.env.LLM_API_KEY;
+  if (!apiKey) throw new Error('LLM_API_KEY not set');
+
+  const provider = PROVIDERS[providerName];
+  if (!provider) throw new Error(`Unknown provider: ${providerName}`);
+
+  const model = opts?.model || process.env.LLM_MODEL || provider.defaultModel;
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: userPrompt }
+  ];
+  const safeOpts = {
+    temperature: opts?.temperature ?? 0.7,
+    maxTokens: opts?.maxTokens ?? 1000
+  };
+  const body = provider.parseBody(model, messages, safeOpts);
+  const raw = await httpPost(provider.baseUrl, provider.headers(apiKey), body);
+  return provider.parseResponse(raw);
+}
+
+/**
+ * 调用大模型出牌决策（向后兼容）
+ * @param {Array} hand - 手牌
+ * @param {Array|null} lastPlay - 上家出的牌
+ * @param {string} difficulty
+ * @returns {Object|null}
+ */
+async function callLLMForPlay(hand, lastPlay, difficulty) {
+  const handStr = JSON.stringify(hand.map(c => `${c.suit}:${c.rank}`));
+  const lastStr = lastPlay ? JSON.stringify(lastPlay.map(c => `${c.suit}:${c.rank}`)) : 'null';
+  const prompt = [
+    '【斗地主 AI 出牌决策】',
+    `当前手牌: ${handStr}`,
+    `上家出的牌: ${lastStr}`,
+    `难度: ${difficulty || 'normal'}`,
+    '',
+    '请返回以下 JSON 格式（不要多余文字）：',
+    '{',
+    '  "cards": [{ "suit": "spade", "rank": 0 }],',
+    '  "explanation": "出牌理由"',
+    '}'
+  ].join('\n');
+  try {
+    return await callLLM(
+      '你是斗地主AI出牌专家。请根据手牌和局面给出最优出牌建议。仅返回JSON。',
+      prompt,
+      { temperature: 0.7, maxTokens: 500 }
+    );
+  } catch (e) {
+    console.warn('LLM call failed:', e.message);
+    return null;
+  }
+}
+
+module.exports = { callLLM, callLLMForPlay };
+
+```
+
+---
+
+## `src/server/services/questionTemplates.js` (16,354 字节)
+
+```javascript
+/**
+ * src/server/services/questionTemplates.js
+ *
+ * 出题 Prompt 引擎 — 实现产品设计文档 Section 3 的四种题型模板。
+ *
+ * 对接 DeepSeek API 生成题目，客户端只需返回 JSON。
+ *
+ * 题型:
+ *   vocabulary  - 四六级单词 (Section 3.2)
+ *   expression  - 口语表达 (Section 3.3)
+ *   trivia      - 冷知识 (Section 3.4)
+ *   life_hack   - 生活常识 (Section 3.5)
+ *   bomb_mixed  - 混合炸弹 (Section 3.6)
+ */
+
+const { callLLM } = require('./llmService');
+
+// ============================================================
+// Prompt 模板 — 严格按产品设计文档实现
+// ============================================================
+
+const PROMPTS = {
+
+  // ---- 3.2 四六级单词 ----
+  vocabulary: {
+    system: `## Role
+你是一个英文四六级词汇出题官。你的任务是为"AI斗地主"游戏出一道英文词汇选择题。
+
+## Requirements
+1. 以中文题干 + 英文句子选词填空的形式出题
+2. 给出一个包含空缺的英文句子，用 ______ 表示空缺
+3. 提供 4 个选项 (A/B/C/D)，其中 1 个正确，3 个干扰项
+4. 干扰项必须与正确选项属于同类词性，但意义不同
+5. 正确选项是四六级考纲词汇
+6. 给出正确选项的中文释义和句子释义
+
+## Output Format (纯 JSON，不要多余文字)
+{
+  "type": "vocabulary",
+  "question": "The professor's lecture was so ______ that half the class fell asleep.",
+  "options": { "A": "monotonous", "B": "spontaneous", "C": "simultaneous", "D": "instantaneous" },
+  "answer": "A",
+  "translation": "教授的讲座如此单调，一半学生都睡着了。",
+  "definition": "monotonous: 单调的，毫无变化的",
+  "difficulty": "{difficulty}"
+}`,
+    getUserPrompt: (difficulty) => {
+      const labels = { easy: '四级基础 (2000词)，句子8-12词，干扰项明显不同',
+        normal: '四级核心 (4000词)，句子12-18词，干扰项有一定混淆',
+        hard: '六级核心 (6000词)，句子15-25词，干扰项容易混淆',
+        extreme: '六级+考研 (8000+词)，句子20-30词，干扰项极易混淆' };
+      return `请生成一道${difficulty}难度的四六级词汇选择题。\n${labels[difficulty] || labels.normal}\n按指定的JSON格式输出，不要多余文字。【重要指令】为了保证游戏趣味性，请从极其冷门、罕见或意想不到的角度切入，绝不重复！[随机噪声种子：${Date.now()}_${Math.random()}]`;
+    }
+  },
+
+  // ---- 3.3 口语表达 ----
+  expression: {
+    system: `## Role
+你是一个英文日常口语表达专家。你的任务是为"AI斗地主"游戏出一道地道口语表达选择题。
+
+## Requirements
+1. 出一个英文口语/俚语/习语的选择题
+2. 题干给出一个日常对话场景 + 包含空缺的英文句子（用 ______ 表示空缺）
+3. 4 个选项 (A/B/C/D)，1 个正确地道表达，3 个干扰项
+4. 干扰项必须是"看起来像但实际不地道"的错误表达（中国学生常犯错误）
+
+## Output Format (纯 JSON)
+{
+  "type": "expression",
+  "scene": "你和朋友在餐厅吃完饭，朋友问谁买单，你想说'这顿我请'",
+  "dialogue": "— 'The bill is on me tonight.' — 'Are you sure?' — 'Yeah, it's my ______.'",
+  "options": { "A": "treat", "B": "pay", "C": "turn", "D": "time" },
+  "answer": "A",
+  "translation": "今晚我请客。— 你确定吗？— 嗯，我请。",
+  "explanation": "\"It's my treat\" 是地道表达'我请客'。B \"It's my pay\" 是中式英语；C \"my turn\" 强调'轮到我'而不是请客；D \"my time\" 意思完全不对。",
+  "difficulty": "{difficulty}"
+}`,
+    getUserPrompt: (difficulty) => {
+      const desc = { easy: '常见表达，如 "break a leg", "piece of cake"',
+        normal: '日常习语，如 "hit the sack", "under the weather"',
+        hard: '隐喻表达，如 "ballpark figure", "the elephant in the room"',
+        extreme: '冷门地道，如 "throw someone under the bus"' };
+      return `请生成一道${difficulty}难度的口语表达选择题。\n${desc[difficulty] || desc.normal}\n按指定的JSON格式输出。【重要指令】为了保证游戏趣味性，请从极其冷门、罕见或意想不到的角度切入，绝不重复！[随机噪声种子：${Date.now()}_${Math.random()}]`;
+    }
+  },
+
+  // ---- 3.4 冷知识 ----
+  trivia: {
+    system: `## Role
+你是一个冷知识科普达人。你的任务是为"AI斗地主"游戏出一道意想不到的冷知识选择题。
+
+## Requirements
+1. 出题内容必须是"大部分人不知道但并非虚假"的真实冷知识
+2. 每个选项要有"看似合理"的迷惑性
+3. 避免宗教、政治、敏感历史等内容
+4. 冷知识领域建议：动物、人体、科学、历史趣闻、科技冷知识
+5. 解析部分要简短有趣（带 emoji 表情优先）
+
+## Output Format (纯 JSON)
+{
+  "type": "trivia",
+  "question": "以下哪个动物永远不会生病（不会得癌症）？",
+  "options": { "A": "鲨鱼", "B": "大象", "C": "裸鼹鼠", "D": "乌龟" },
+  "answer": "C",
+  "explanation": "🧬 裸鼹鼠几乎从不患癌症！它们体内有一种特殊的透明质酸，能阻止癌细胞分裂。",
+  "fun_fact": "裸鼹鼠最多能活 30+ 年，比普通老鼠长 10 倍！",
+  "difficulty": "{difficulty}"
+}`,
+    getUserPrompt: (difficulty) => {
+      const desc = { easy: '50%+ 人知道，有一个明显错误选项',
+        normal: '20-50% 人知道，所有选项都看着像真的',
+        hard: '5-20% 人知道，正确答案是最不像真的那个',
+        extreme: '<5% 人知道，全是没听过的冷事实' };
+      return `请生成一道${difficulty}难度的冷知识选择题。\n${desc[difficulty] || desc.normal}\n按指定的JSON格式输出。【重要指令】为了保证游戏趣味性，请从极其冷门、罕见或意想不到的角度切入，绝不重复！[随机噪声种子：${Date.now()}_${Math.random()}]`;
+    }
+  },
+
+  // ---- 3.5 生活常识 ----
+  life_hack: {
+    system: `## Role
+你是一个生活达人/生活百科。你的任务是为"AI斗地主"游戏出一道有趣且实用的生活常识选择题。
+
+## Requirements
+1. 出题围绕"日常生活中的实用技巧和常识"
+2. 所有选项必须是"有人真的会这样误会"的伪常识
+3. 领域范围：厨房技巧、家居妙用、健康误区、服饰打理、数码小技巧
+4. 解析必须给出"为什么"，让玩家学到真知识
+5. 避免医学诊断类内容
+
+## Output Format (纯 JSON)
+{
+  "type": "life_hack",
+  "question": "以下哪种方法能让切洋葱不流泪？",
+  "options": { "A": "把洋葱放冰箱冻30分钟再切", "B": "切的时候嘴里含一口水", "C": "戴泳镜切", "D": "用微波炉加热10秒再切" },
+  "answer": "C",
+  "explanation": "🕶️ 选C！戴泳镜是最直接的物理方法——阻止催泪气体接触眼睛。A冷冻确实有效但效果有限。B是心理安慰。D反而让气体释放更多。",
+  "pro_tip": "如果没泳镜，在抽油烟机旁边切或者把刀放冷水里浸一下也有帮助 👨‍🍳",
+  "difficulty": "{difficulty}"
+}`,
+    getUserPrompt: (difficulty) => {
+      const desc = { easy: '人人必备常识，有一个明显错的选项',
+        normal: '多数人半懂，有一个好像听过的伪选项',
+        hard: '生活达人级别，每个选项都有人试过',
+        extreme: '颠覆常识，正确答案和大多数人认为的相反' };
+      return `请生成一道${difficulty}难度的生活常识选择题。\n${desc[difficulty] || desc.normal}\n按指定的JSON格式输出。【重要指令】为了保证游戏趣味性，请从极其冷门、罕见或意想不到的角度切入，绝不重复！[随机噪声种子：${Date.now()}_${Math.random()}]`;
+    }
+  },
+
+  // ---- 3.6 混合题型炸弹 ----
+  bomb_mixed: {
+    system: `## Role
+你是一个终极出题官。当前是"AI斗地主"游戏的炸弹题模式。
+请出一道混合型题目，包含 四六级词汇 + 口语表达 + 冷知识 + 生活常识 中的至少两种元素。
+
+## Requirements
+1. 题目要有"跨领域"的意外感
+2. 选项必须涵盖两个以上不同领域的知识
+3. 解析需要完整拆解每个领域
+4. 题目要求比平时更有趣、更出乎意料
+
+## Output Format (纯 JSON)
+{
+  "type": "bomb_mixed",
+  "question": "一个人说 \"I'm feeling under the weather\"，下列哪项是TA最可能正在做的事？",
+  "options": { "A": "在沙滩晒太阳", "B": "喝热水吃感冒药", "C": "研究天气预报", "D": "站在树底下躲雨" },
+  "answer": "B",
+  "explanation": "🌡️ 'Under the weather' 是口语中身体不舒服的意思。\\nA☀️ 生病的人不会去晒太阳。\\nC🌤 'Weather' 容易误导，但这是固定习语。\\nD🌧 站在树下和表达完全无关。\\n\\n🔍 来源推测：过去船员晕船时会到甲板下躲避天气，后来演变为不舒服的意思。",
+  "difficulty": "extreme"
+}`,
+    getUserPrompt: (difficulty) => {
+      return `请生成一道炸弹级混合题，难度${difficulty}，至少混合两种题型元素。\n要求更有趣、更出乎意料。按指定的JSON格式输出。`;
+    }
+  }
+};
+
+// ============================================================
+// 题型元数据
+// ============================================================
+
+const TYPE_META = {
+  vocabulary: { label: '📚 四六级单词', desc: '看释义选单词，AI给你出牌',
+    difficulties: ['easy', 'normal', 'hard', 'extreme'] },
+  expression: { label: '💬 口语表达', desc: '地道俚语习语挑战',
+    difficulties: ['easy', 'normal', 'hard', 'extreme'] },
+  trivia: { label: '🧠 冷知识', desc: '意想不到的冷知识，和AI斗智斗勇',
+    difficulties: ['easy', 'normal', 'hard', 'extreme'] },
+  life_hack: { label: '🔧 生活常识', desc: '日常实用技巧，你知道几个？',
+    difficulties: ['easy', 'normal', 'hard', 'extreme'] },
+  bomb_mixed: { label: '💣 炸弹混合题', desc: '跨领域终极挑战！',
+    difficulties: ['hard', 'extreme'] }
+};
+
+// ============================================================
+// 本地题库（fallback 缓存，API 异常时备用）
+// ============================================================
+
+const FALLBACK_QUESTIONS = {
+  vocabulary: [
+    { type: 'vocabulary', question: 'The ______ of the research was to find a cure for the disease.',
+      options: { A: 'purpose', B: 'propose', C: 'purse', D: 'pursuit' }, answer: 'A',
+      translation: '这项研究的目的是找到治愈这种疾病的方法。', definition: 'purpose: 目的，意图', difficulty: 'easy' },
+    { type: 'vocabulary', question: 'She is ______ to succeed because she works very hard.',
+      options: { A: 'likely', B: 'likeable', C: 'likewise', D: 'liking' }, answer: 'A',
+      translation: '她很可能会成功，因为她工作非常努力。', definition: 'likely: 可能的', difficulty: 'easy' }
+  ],
+  expression: [
+    { type: 'expression', scene: '朋友考试前很紧张，你想祝他好运',
+      dialogue: '— "I\'m so nervous about the exam." — "Don\'t worry, go and ______!"',
+      options: { A: 'break a leg', B: 'break a foot', C: 'break an arm', D: 'break your head' },
+      answer: 'A', translation: '去吧，祝你好运！',
+      explanation: '"Break a leg" 是祝好运的地道表达，源自戏剧界。其他选项都是字面翻译的错误表达。',
+      difficulty: 'easy' }
+  ],
+  trivia: [
+    { type: 'trivia', question: '章鱼有几个心脏？',
+      options: { A: '1个', B: '2个', C: '3个', D: '4个' }, answer: 'C',
+      explanation: '🐙 章鱼有3个心脏！两个负责将血液输送到鳃，一个负责输送到全身。更神奇的是，当章鱼游泳时，负责全身供血的那个心脏会停止跳动。',
+      fun_fact: '章鱼的血液是蓝色的，因为含有血蓝蛋白！', difficulty: 'easy' }
+  ],
+  life_hack: [
+    { type: 'life_hack', question: '香蕉皮应该怎么放才能让香蕉保鲜更久？',
+      options: { A: '放冰箱冷藏', B: '用保鲜膜包住根部', C: '悬挂放置', D: '和苹果放一起' }, answer: 'B',
+      explanation: '🍌 香蕉的根部分泌乙烯气体加速成熟。用保鲜膜包住根部能减少乙烯扩散，延长保鲜期。放冰箱会让皮变黑（但果肉还好）。挂起来只是好看。苹果会释放乙烯加速香蕉成熟。',
+      pro_tip: '香蕉买回来先冲洗一下，去除表面催熟剂残留！', difficulty: 'easy' }
+  ],
+  bomb_mixed: [
+    { type: 'bomb_mixed', question: '一个人说 "I\'m feeling under the weather"，下列哪项是TA最可能正在做的事？',
+      options: { A: '在沙滩晒太阳', B: '喝热水吃感冒药', C: '研究天气预报', D: '站在树底下躲雨' }, answer: 'B',
+      explanation: "🌡️ 'Under the weather' 是口语中身体不舒服的意思。",
+      difficulty: 'extreme' }
+  ]
+};
+
+// ============================================================
+// 题目缓存（预生成+复用）
+// ============================================================
+
+const questionCache = {};
+
+/**
+ * 通过 DeepSeek API 生成题目
+ *
+ * @param {string} type - 题型: vocabulary|expression|trivia|life_hack|bomb_mixed
+ * @param {string} difficulty - easy|normal|hard|extreme
+ * @returns {Object} 题目对象
+ */
+async function generateQuestion(type, difficulty) {
+  const template = PROMPTS[type];
+  if (!template) throw new Error(`Unknown question type: ${type}`);
+
+  const diff = difficulty || 'normal';
+  const systemPrompt = template.system.replace('{difficulty}', diff);
+  const userPrompt = template.getUserPrompt(diff);
+
+  try {
+    const result = await callLLM(systemPrompt, userPrompt, {
+      temperature: 0.85,  // 高一点温度保证创意多样
+      maxTokens: 800
+    });
+
+    // 补全字段
+    result._type = type;
+    result._difficulty = diff;
+    result._generated = true;
+    result._ts = Date.now();
+
+    // 补充缓存：生成的题目放入缓存供后续复用
+    const cacheKey = `${type}:${diff}`;
+    if (!questionCache[cacheKey]) questionCache[cacheKey] = [];
+    if (questionCache[cacheKey].length < 20) {
+      questionCache[cacheKey].push(result);
+    }
+
+    return result;
+
+  } catch (err) {
+    console.warn(`[QuestionTemplates] LLM failed for ${type}/${diff}, using fallback:`, err.message);
+    // API 失败时用本地缓存
+    const fallback = FALLBACK_QUESTIONS[type];
+    if (fallback && fallback.length > 0) {
+      const q = fallback[Math.floor(Math.random() * fallback.length)];
+      return { ...q, _type: type, _difficulty: diff, _generated: false, _ts: Date.now() };
+    }
+    throw err;
+  }
+}
+
+/**
+ * 批量生成并缓存题目
+ *
+ * @param {string} type
+ * @param {string} difficulty
+ * @param {number} count - 1~10
+ * @returns {Array<Object>}
+ */
+async function generateBatch(type, difficulty, count) {
+  const cacheKey = `${type}:${difficulty}`;
+  if (!questionCache[cacheKey]) questionCache[cacheKey] = [];
+
+  const results = [];
+  const maxGen = Math.max(1, Math.min(count || 1, 10));
+
+  // 先从缓存取
+  while (results.length < maxGen && questionCache[cacheKey].length > 0) {
+    results.push(questionCache[cacheKey].shift());
+  }
+
+  // 不足则逐个生成（真正串行化，避免 rate limit）
+  const remaining = maxGen - results.length;
+  for (let i = 0; i < remaining; i++) {
+    try {
+      const q = await generateQuestion(type, difficulty);
+      if (q) results.push(q);
+    } catch (e) {
+      console.error(`Batch gen failed for ${type}#${i}:`, e.message);
+    }
+  }
+
+  return results;
+}
+
+/**
+ * 预生成题目到缓存（预热）
+ */
+async function warmupCache() {
+  const types = ['vocabulary', 'expression', 'trivia', 'life_hack'];
+  const diffs = ['easy', 'normal', 'hard'];
+  for (const type of types) {
+    for (const diff of diffs) {
+      try {
+        const q = await generateQuestion(type, diff);
+        const key = `${type}:${diff}`;
+        if (!questionCache[key]) questionCache[key] = [];
+        questionCache[key].push(q);
+        console.log(`[Cache] Warmed up ${type}/${diff}`);
+      } catch (e) {
+        console.warn(`[Cache] Warmup failed ${type}/${diff}:`, e.message);
+      }
+    }
+  }
+}
+
+module.exports = {
+  generateQuestion,
+  generateBatch,
+  warmupCache,
+  PROMPTS,
+  TYPE_META,
+  FALLBACK_QUESTIONS
+};
+
+```
+
+---
+
+## `src/server/utils/cardUtils.js` (7,430 字节)
+
+```javascript
+/**
+ * src/server/utils/cardUtils.js
+ *
+ * 封装牌引擎的常用操作，给后端 API 使用。
+ * 去重引用 CardEngine 的公共方法，统一异常处理。
+ */
+
+const path = require('path');
+const Doudizhu = require(path.resolve(__dirname, '../../client/js/CardEngine.js'));
+
+// ============================================================
+// 字符串 ↔ Card 对象转换（方便 API 传参）
+// ============================================================
+
+const RANK_TO_STR = {
+  0: '3', 1: '4', 2: '5', 3: '6', 4: '7', 5: '8', 6: '9',
+  7: '10', 8: 'J', 9: 'Q', 10: 'K', 11: 'A', 12: '2',
+  13: 'SJ', 14: 'BJ'
+};
+
+const STR_TO_RANK = {
+  '3': 0, '4': 1, '5': 2, '6': 3, '7': 4, '8': 5, '9': 6,
+  '10': 7, 'J': 8, 'Q': 9, 'K': 10, 'A': 11, '2': 12,
+  'SJ': 13, 'BJ': 14
+};
+
+const SUITS = ['spade', 'heart', 'club', 'diamond'];
+
+/**
+ * 将 {suit, rank} 对象数组转为 Card 实例数组
+ */
+function toCards(arr) {
+  if (!Array.isArray(arr)) throw new Error('cards must be an array');
+  return arr.map((c, i) => {
+    if (typeof c === 'number') {
+      // 紧凑格式: 仅 rank，自动分配花色
+      const suit = c >= 13 ? 'joker' : SUITS[i % 4];
+      return new Doudizhu.Card(suit, c);
+    }
+    if (c.suit && c.rank !== undefined) {
+      return new Doudizhu.Card(c.suit, c.rank);
+    }
+    throw new Error(`Invalid card at index ${i}: ${JSON.stringify(c)}`);
+  });
+}
+
+/**
+ * Card 实例 → 序列化对象 {suit, rank, display, isRed}
+ */
+function cardToObj(card) {
+  return {
+    suit: card.suit,
+    rank: card.rank,
+    display: card.displayName(),
+    isRed: card.isRed()
+  };
+}
+
+/**
+ * 手牌数组 → 精简序列化数组
+ */
+function serializeCards(cards) {
+  return cards.map(cardToObj);
+}
+
+/**
+ * 有效 rank 范围 0-14
+ */
+function isValidRank(rank) {
+  return Number.isInteger(rank) && rank >= 0 && rank <= 14;
+}
+
+/**
+ * 快速构造测试用卡片数组（按 rank 数组）
+ * 例: createCardsByRank([0,0,0,1,1,1]) → 333444
+ *
+ * @throws {Error} 如果 rank 不在 0-14 范围内
+ */
+function createCardsByRank(ranks) {
+  return ranks.map((rank, i) => {
+    if (!isValidRank(rank)) {
+      throw new Error(`Invalid rank at index ${i}: ${rank}. Rank must be 0-14.`);
+    }
+    if (rank === 13) return new Doudizhu.Card('joker', 13);
+    if (rank === 14) return new Doudizhu.Card('joker', 14);
+    return new Doudizhu.Card(SUITS[i % 4], rank);
+  });
+}
+
+// ============================================================
+// 牌型识别
+// ============================================================
+
+/**
+ * 识别牌型，返回可序列化的结果
+ */
+function identify(cards) {
+  const cardInstances = typeof cards[0] === 'object' && cards[0] instanceof Doudizhu.Card
+    ? cards : toCards(cards);
+  const info = Doudizhu.identifyType(cardInstances);
+  return {
+    type: info.type,
+    typeName: Doudizhu.HAND_TYPE_NAMES[info.type] || info.type,
+    rank: info.rank,
+    length: info.length,
+    valid: info.type !== Doudizhu.HAND_TYPES.INVALID
+  };
+}
+
+// ============================================================
+// 出牌校验
+// ============================================================
+
+/**
+ * 校验 current 是否能压住 last
+ */
+function checkCanBeat(current, last) {
+  const curCards = typeof current[0] === 'object' && current[0] instanceof Doudizhu.Card
+    ? current : toCards(current);
+  const lastCards = typeof last[0] === 'object' && last[0] instanceof Doudizhu.Card
+    ? last : toCards(last);
+  return Doudizhu.canBeat(curCards, lastCards);
+}
+
+// ============================================================
+// 合法出牌枚举
+// ============================================================
+
+/**
+ * 枚举手牌中所有合法出牌
+ * @param {Array} hand - 手牌数组
+ * @param {Array|null} lastPlay - 上家出的牌（null = 自由出牌）
+ * @returns {Array} 合法出牌列表（每项是 Card 数组）
+ */
+function findAllPlays(hand, lastPlay) {
+  const handCards = typeof hand[0] === 'object' && hand[0] instanceof Doudizhu.Card
+    ? hand : toCards(hand);
+  const lastCards = lastPlay
+    ? (typeof lastPlay[0] === 'object' && lastPlay[0] instanceof Doudizhu.Card
+      ? lastPlay : toCards(lastPlay))
+    : null;
+  return Doudizhu.findValidPlays(handCards, lastCards);
+}
+
+// ============================================================
+// 牌型生成器（用于出题系统）
+// ============================================================================================
+
+/**
+ * 生成指定牌型的样例手牌
+ * @param {string} type - HAND_TYPES 中的一个
+ * @param {number} difficulty - 0=easy, 1=normal, 2=hard
+ * @returns {Object} { question: 描述, hand: 手牌array, answer: 正确出牌的描述 }
+ */
+function generateExamplePlay(type, difficulty) {
+  const examples = {
+    SINGLE: [
+      { hand: [0, 1, 2, 10, 11, 12, 13], answer: { cards: [10], type: 'SINGLE' }, desc: '出单张 K' },
+      { hand: [0, 3, 5, 7, 9, 11, 14], answer: { cards: [14], type: 'SINGLE' }, desc: '出大王' },
+    ],
+    PAIR: [
+      { hand: [0, 0, 1, 2, 10, 11, 11], answer: { cards: [11, 11], type: 'PAIR' }, desc: '出对 A' },
+      { hand: [3, 3, 4, 4, 5, 7, 8], answer: { cards: [4, 4], type: 'PAIR' }, desc: '出对 7' },
+    ],
+    TRIPLE_PLUS_ONE: [
+      { hand: [0, 0, 0, 1, 2, 3, 4], answer: { cards: [0, 0, 0, 1], type: 'TRIPLE_PLUS_ONE' }, desc: '三带一：333+4' },
+      { hand: [8, 8, 8, 9, 10, 11, 12], answer: { cards: [8, 8, 8, 9], type: 'TRIPLE_PLUS_ONE' }, desc: '三带一：JJJ+Q' },
+    ],
+    STRAIGHT: [
+      { hand: [0, 1, 2, 3, 4, 5, 6, 10, 12], answer: { cards: [0, 1, 2, 3, 4, 5, 6], type: 'STRAIGHT' }, desc: '顺子 3456789' },
+      { hand: [5, 6, 7, 8, 9, 10, 11, 0, 0], answer: { cards: [5, 6, 7, 8, 9, 10, 11], type: 'STRAIGHT' }, desc: '顺子 8910JQKA' },
+    ],
+    BOMB: [
+      { hand: [0, 0, 0, 0, 1, 2, 3, 4, 5], answer: { cards: [0, 0, 0, 0], type: 'BOMB' }, desc: '炸弹 3333' },
+    ],
+  };
+
+  const pool = examples[type];
+  if (!pool || pool.length === 0) return null;
+
+  const idx = Math.min(difficulty || 0, pool.length - 1);
+  const ex = pool[idx];
+
+  // 构建手牌对象
+  const handCards = createCardsByRank(ex.hand);
+  const answerCards = createCardsByRank(ex.answer.cards);
+
+  return {
+    type: 'identify_play',
+    difficulty: ['easy', 'normal', 'hard'][difficulty || 0],
+    question: `以下手牌中，哪一组是合法的"${Doudizhu.HAND_TYPE_NAMES[type] || type}"？`,
+    hand: serializeCards(handCards),
+    answer: {
+      cards: serializeCards(answerCards),
+      type: ex.answer.type,
+      desc: ex.desc
+    },
+    hint: `提示：${Doudizhu.HAND_TYPE_NAMES[type] || type} 需要 ${getTypeCardCount(type)} 张牌`
+  };
+}
+
+function getTypeCardCount(type) {
+  const map = {
+    SINGLE: 1, PAIR: 2, TRIPLE: 3, TRIPLE_PLUS_ONE: 4, TRIPLE_PLUS_TWO: 5,
+    STRAIGHT: '≥5', CONSECUTIVE_PAIRS: '≥6', AIRPLANE: '≥6',
+    BOMB: 4, FOUR_PLUS_TWO: 6, FOUR_PLUS_TWO_PAIRS: 8
+  };
+  return map[type] || '?';
+}
+
+// ============================================================
+// 导出
+// ============================================================
+module.exports = {
+  Doudizhu,               // 原始牌引擎
+  toCards,
+  cardToObj,
+  serializeCards,
+  createCardsByRank,
+  identify,
+  checkCanBeat,
+  findAllPlays,
+  generateExamplePlay,
+  Card: Doudizhu.Card,
+  Deck: Doudizhu.Deck,
+  HAND_TYPES: Doudizhu.HAND_TYPES,
+  HAND_TYPE_NAMES: Doudizhu.HAND_TYPE_NAMES
+};
+
+```
+
+---

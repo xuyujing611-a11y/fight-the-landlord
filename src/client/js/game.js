@@ -145,9 +145,18 @@ var SoundManager = {
   win: function () { if(this._ensureReady()) this.scene.sound.play('cardPlace3', { volume: 0.9 }); },
   lose: function () { if(this._ensureReady()) this.scene.sound.play('cardSlide1', { volume: 0.6 }); },
   aiThink: function () {},
-  bomb: function () { if(this._ensureReady()) this.scene.sound.play(this._random('cardPlace', 3), { volume: 1.0, detune: -400 }); },
+  bomb: function () {
+    if(this._ensureReady()) this.scene.sound.play(this._random('cardPlace', 3), { volume: 1.0, detune: -400 });
+    try { this.scene.sound.play('voice_duidui_bomb', { volume: 0.8 }); } catch(e) {}
+  },
   pauseAll: function () { if (this.scene) this.scene.sound.pauseAll(); },
-  resumeAll: function () { if (this.scene) this.scene.sound.resumeAll(); }
+  resumeAll: function () { if (this.scene) this.scene.sound.resumeAll(); },
+  playVoice: function(key) {
+    if (!this.scene || !this._ensureReady()) return;
+    try {
+      this.scene.sound.play(key, { volume: 0.8 });
+    } catch(e) { /* 语音文件没加载到就静默跳过 */ }
+  }
 };
 
 // ================================================================
@@ -265,6 +274,23 @@ GameScene.prototype.preload = function () {
   this.load.audio('chipLay1', 'assets/sounds/chipLay1.mp3');
   this.load.audio('chipsStack1', 'assets/sounds/chipsStack1.mp3');
   this.load.audio('chipsHandle1', 'assets/sounds/chipsHandle1.mp3');
+
+  // 角色语音（怼怼8句 + 甜甜7句）
+  this.load.audio('voice_duidui_taunt', 'assets/sounds/voice_duidui_taunt.mp3');
+  this.load.audio('voice_duidui_correct', 'assets/sounds/voice_duidui_correct.mp3');
+  this.load.audio('voice_duidui_wrong', 'assets/sounds/voice_duidui_wrong.mp3');
+  this.load.audio('voice_duidui_swap', 'assets/sounds/voice_duidui_swap.mp3');
+  this.load.audio('voice_duidui_bomb', 'assets/sounds/voice_duidui_bomb.mp3');
+  this.load.audio('voice_duidui_rocket', 'assets/sounds/voice_duidui_rocket.mp3');
+  this.load.audio('voice_duidui_hurry', 'assets/sounds/voice_duidui_hurry.mp3');
+  this.load.audio('voice_duidui_pass', 'assets/sounds/voice_duidui_pass.mp3');
+  this.load.audio('voice_tiantian_start', 'assets/sounds/voice_tiantian_start.mp3');
+  this.load.audio('voice_tiantian_correct', 'assets/sounds/voice_tiantian_correct.mp3');
+  this.load.audio('voice_tiantian_wrong', 'assets/sounds/voice_tiantian_wrong.mp3');
+  this.load.audio('voice_tiantian_timeout', 'assets/sounds/voice_tiantian_timeout.mp3');
+  this.load.audio('voice_tiantian_swap', 'assets/sounds/voice_tiantian_swap.mp3');
+  this.load.audio('voice_tiantian_turn', 'assets/sounds/voice_tiantian_turn.mp3');
+  this.load.audio('voice_tiantian_chaos', 'assets/sounds/voice_tiantian_chaos.mp3');
 };
 
 GameScene.prototype.create = function () {
@@ -929,6 +955,7 @@ GameScene.prototype.localAssignLandlord = function () {
   this.time.delayedCall(1200, function () {
     self.gameState = GAME_STATE.PLAYER_TURN;
     self.setStatusText('轮到你出牌（自由出牌）');
+    SoundManager.playVoice('voice_tiantian_turn');
     self.showActionButtons();
   });
 };
@@ -1074,6 +1101,7 @@ GameScene.prototype.doPlayerPass = function () {
   }
   this.passCount++;
   showToast(this, '\u4E0D\u51FA');
+  SoundManager.playVoice('voice_duidui_pass');
   this.setStatusText('\u4F60\u9009\u62E9\u4E0D\u51FA');
   this.selectedCards = [];
   this.addPlayHistory('player', true);
@@ -1569,6 +1597,10 @@ GameScene.prototype._showChaosQuestion = function (aiId, aiName, type) {
   self.chaosElements.push(loadingBg, loadingTxt);
   self._chaosLoadingElements = [loadingBg, loadingTxt]; // 暂存，稍后销毁
 
+  // 随机播放搞事情开场语音
+  var chaosVoice = Math.random() > 0.5 ? 'voice_duidui_taunt' : 'voice_tiantian_chaos';
+  SoundManager.playVoice(chaosVoice);
+
   if (this.isAPIMode && typeof ApiClient !== 'undefined') {
     ApiClient.generateChaosQuestion(type || 'random', 'normal', 1)
       .then(function (res) {
@@ -1744,8 +1776,10 @@ GameScene.prototype._handleOptionClick = function (self, optBg, optKey, aiId, q)
     self.chaosScore = (self.chaosScore || 0) + 1;
     if (self.chaosScoreText) self.chaosScoreText.setText('得分: ' + self.chaosScore);
     SoundManager.win();
+    SoundManager.playVoice(Math.random() > 0.5 ? 'voice_duidui_correct' : 'voice_tiantian_correct');
   } else {
     SoundManager.lose();
+    SoundManager.playVoice(Math.random() > 0.5 ? 'voice_duidui_wrong' : 'voice_tiantian_wrong');
   }
   self._clearQuestionArea();
 
@@ -1797,6 +1831,7 @@ GameScene.prototype._handleChaosTimeout = function (aiId) {
     fontSize: '20px', color: '#FF5252', fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(305);
   self.chaosElements.push(fbIcon);
+  SoundManager.playVoice('voice_tiantian_timeout');
   if (!self.playerHand || self.playerHand.length === 0) {
     self._showSwapButtons(aiId, 160);
     return;
@@ -1894,6 +1929,7 @@ GameScene.prototype._showSwapResult = function (aiId, isCorrect, fbY) {
   }).setOrigin(0.5).setDepth(311);
   self.chaosElements.push(btnBg, btnTxt);
   btnBg.on('pointerup', function() {
+    SoundManager.playVoice(aiId === 'duidui' ? 'voice_duidui_swap' : 'voice_tiantian_swap');
     btnBg.destroy();
     btnTxt.destroy();
     hintTxt.destroy();
