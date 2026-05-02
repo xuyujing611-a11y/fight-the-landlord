@@ -469,16 +469,10 @@ GameScene.prototype.renderPlayerHand = function () {
   this.cardDomElements = [];
   this.handCards = [];
 
-  // A2: 均匀展开不重叠，选中缩放突出
   var n = hand.length, cw = 56, ch = 80;
-  var gap = 4;
-  var totalW = cw * n + gap * (n - 1);
-  var available = 900;
-  if (totalW > available) {
-    cw = (available - gap * (n - 1)) / n;
-    ch = cw * 80 / 56;
-    totalW = available;
-  }
+  // 手牌轻微重叠10%（约5px），保持牌面可读且不挤到边缘
+  var overlap = -5;
+  var totalW = cw * n + overlap * (n - 1);
   var startX = (960 - totalW) / 2;
   var baseY = 345;
 
@@ -1198,29 +1192,31 @@ GameScene.prototype.handleAIPlay = function (aiIndex, aiName, res) {
   this.lastPlayInfo = info;
   this.lastPlayPlayer = aiIndex === 0 ? 'ai1' : 'ai2';
   this.passCount = 0;
-  this.displayPlay(playCards, aiIndex === 0 ? 'ai1' : 'ai2');
-  this.setStatusText(aiName + ' \u51FA\u4E86 ' + (Doudizhu.HAND_TYPE_NAMES[info.type] || info.type));
-  this.updateAICount(aiIndex);
-  // \u51FA\u724C\u8BB0\u5F55+\u97F3\u6548
-  this.addPlayHistory(aiIndex === 0 ? 'ai1' : 'ai2', playCards);
+  // 先出气泡，模拟AI思考感
   var bubbleKey = info.type === 'BOMB' || info.type === 'ROCKET' ? 'bomb' : 'play';
   this._showPlayBubble(aiIndex === 0 ? 'duidui' : 'tiantian', bubbleKey, info.type);
   if (info.type === 'BOMB' || info.type === 'ROCKET') { this.totalBombs++; SoundManager.bomb(); }
   if (info.type === 'ROCKET') this.rocketCount++;
-  if (hand.length === 0) {
-    this.renderRoundEndPanel(aiIndex === 0 ? 'ai1' : 'ai2');
-    return;
-  }
-  if (aiIndex === 0) {
-    // AI1 played, now AI2's turn
-    var self = this;
-    this.setStatusText(aiName + ' \u51FA\u4E86 ' + (Doudizhu.HAND_TYPE_NAMES[info.type] || info.type) + '\uFF0C\u8F6E\u5230\u82CF\u751C\u751C');
-    this.time.delayedCall(1200, function () { self.doAITurn(1); });
-  } else {
-    this.gameState = GAME_STATE.PLAYER_TURN;
-    SoundManager.playerTurn();
-    this.setStatusText('\u8F6E\u5230\u4F60\u51FA\u724C');
-  }
+  this.addPlayHistory(aiIndex === 0 ? 'ai1' : 'ai2', playCards);
+  var self = this;
+  // 800ms后摆牌+更新UI
+  this.time.delayedCall(800, function () {
+    self.displayPlay(playCards, aiIndex === 0 ? 'ai1' : 'ai2');
+    self.setStatusText(aiName + ' \u51FA\u4E86 ' + (Doudizhu.HAND_TYPE_NAMES[info.type] || info.type));
+    self.updateAICount(aiIndex);
+    if (hand.length === 0) {
+      self.renderRoundEndPanel(aiIndex === 0 ? 'ai1' : 'ai2');
+      return;
+    }
+    if (aiIndex === 0) {
+      self.setStatusText(aiName + ' \u51FA\u4E86 ' + (Doudizhu.HAND_TYPE_NAMES[info.type] || info.type) + '\uFF0C\u8F6E\u5230\u82CF\u751C\u751C');
+      self.time.delayedCall(1200, function () { self.doAITurn(1); });
+    } else {
+      self.gameState = GAME_STATE.PLAYER_TURN;
+      SoundManager.playerTurn();
+      self.setStatusText('\u8F6E\u5230\u4F60\u51FA\u724C');
+    }
+  });
 };
 
 GameScene.prototype.handleAIPass = function (aiIndex, aiName) {
@@ -2257,6 +2253,10 @@ GameScene.prototype._showPlayBubble = function (aiId, event, context) {
       }
     }
     self.playBubbleElements = [];
+    if (self._playBubbleText) {
+      self._playBubbleText.destroy();
+      self._playBubbleText = null;
+    }
 
     var isDuidui = (aiId === 'duidui');
     var isEmergency = (event === 'bomb');
@@ -2313,7 +2313,9 @@ GameScene.prototype._showPlayBubble = function (aiId, event, context) {
     var textBounds = bubbleTxt.getBounds();
     bubbleH = Math.max(bubbleH, textBounds.height + 20);
     bubbleTxt.setPosition(textX, bubbleY + bubbleH / 2).setOrigin(0, 0.5);
-    self.playBubbleElements.push(bubbleTxt);
+    // 文字单独置于Container之上(depth 21)，不被气泡背景遮住
+    if (self._playBubbleText) self._playBubbleText.destroy();
+    self._playBubbleText = bubbleTxt;
 
     // 台词气泡背景（填充+边框分开，炸弹时边框可独立闪烁）
     var bubbleBg = self.add.graphics();
