@@ -950,6 +950,7 @@ function apiGetSimple(path) {
 
 GameScene.prototype.doPlayerPlay = function () {
   var self = this;
+  // 1. \u72B6\u6001\u62E6\u622A
   if (self.gameState !== GAME_STATE.PLAYER_TURN) {
     showToast(self, '\u73B0\u5728\u4E0D\u662F\u4F60\u7684\u51FA\u724C\u9636\u6BB5');
     return;
@@ -958,38 +959,22 @@ GameScene.prototype.doPlayerPlay = function () {
     showToast(this, '\u8BF7\u5148\u9009\u62E9\u624B\u724C');
     return;
   }
+  // 2. \u83B7\u53D6\u9009\u4E2D\u7684\u724C\u5E76\u672C\u5730\u8BC6\u522B\u724C\u578B
   var playCards = this.selectedCards.map(function (idx) { return self.playerHand[idx]; });
   var info = Doudizhu.identifyType(playCards);
   if (info.type === Doudizhu.HAND_TYPES.INVALID) {
     showToast(this, '\u975E\u6CD5\u724C\u578B\u7EC4\u5408');
     return;
   }
+  // 3. \u672C\u5730\u9A8C\u8BC1\u80FD\u5426\u538B\u8FC7\u4E0A\u5BB6
   if (this.lastPlay && this.lastPlay.length > 0) {
     if (!Doudizhu.canBeat(playCards, this.lastPlay)) {
       showToast(this, '\u4E0D\u80FD\u538B\u8FC7\u4E0A\u5BB6\u7684\u724C');
       return;
     }
   }
-
-  this.gameState = GAME_STATE.VALIDATING;
-  this.setStatusText('\u9A8C\u8BC1\u4E2D...');
-
-  if (this.isAPIMode && typeof ApiClient !== 'undefined') {
-    ApiClient.verifyPlay(playCards, this.lastPlay, this.playerHand)
-      .then(function (res) {
-        if (res.valid) {
-          self.confirmPlay(playCards, info);
-        } else {
-          showToast(self, res.error || '\u975E\u6CD5\u51FA\u724C');
-          self.gameState = GAME_STATE.PLAYER_TURN;
-        }
-      })
-      .catch(function () {
-        self.confirmPlay(playCards, info);
-      });
-  } else {
-    this.confirmPlay(playCards, info);
-  }
+  // 4. [\u6838\u5FC3\u4FEE\u590D] \u5E9F\u5F03 API \u7F51\u7EDC\u8BF7\u6C42\uFF0C\u76F4\u63A5\u5224\u5B9A\u6210\u529F\u5E76\u51FA\u724C
+  this.confirmPlay(playCards, info);
 };
 
 GameScene.prototype.confirmPlay = function (playCards, info) {
@@ -2273,10 +2258,21 @@ GameScene.prototype._showPlayBubble = function (aiId, event, context) {
     // 方块形气泡
     // C2: 增大气泡尺寸防止长文字溢出
     var baseSize = 64;
-    var bubbleW = Math.min(200, 60 + line.length * 8);
-    var bubbleH = Math.max(70, 40 + Math.ceil(line.length / 4) * 16);
-    bubbleW = Math.max(bubbleW, bubbleH * 0.7);
-    bubbleH = Math.max(bubbleH, bubbleW * 0.7);
+    // 先创建临时文本获取精确尺寸
+    var tempStyle = isEmergency ? {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '16px', color: '#FFCDD2', fontStyle: 'bold',
+      wordWrap: { width: 200, useAdvancedWrap: true }
+    } : {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '14px', color: '#FFFFFF',
+      wordWrap: { width: 200, useAdvancedWrap: true }
+    };
+    var tempTxt = self.add.text(0, 0, line, tempStyle);
+    var tempBounds = tempTxt.getBounds();
+    tempTxt.destroy();
+    var bubbleW = Math.min(200, Math.max(80, tempBounds.width + 30));
+    var bubbleH = Math.max(50, tempBounds.height + 24);
     var bubbleX = avatarX - bubbleW / 2;
     var bubbleY = y + 36;
     var cornerRadius = isDuidui ? 12 : 4;
@@ -2306,11 +2302,12 @@ GameScene.prototype._showPlayBubble = function (aiId, event, context) {
     var textStyle = isEmergency ? {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
       fontSize: '16px', color: '#FFCDD2', fontStyle: 'bold',
-      wordWrap: { width: bubbleW - 28 }
+      wordWrap: { width: bubbleW - 28, useAdvancedWrap: true }
     } : {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
       fontSize: '14px', color: '#FFFFFF',
-      wordWrap: { width: bubbleW - 28 }
+      wordWrap: { width: bubbleW - 28, useAdvancedWrap: true },
+      lineSpacing: 4
     };
     var textX = isDuidui ? (bubbleX + 14) : (bubbleX + 10);
     var bubbleTxt = self.add.text(bubbleX + 14, 0, line, textStyle);
