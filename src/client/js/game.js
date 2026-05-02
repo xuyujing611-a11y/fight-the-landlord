@@ -1805,6 +1805,7 @@ GameScene.prototype._showSwapResult = function (aiId, isCorrect, fbY) {
         });
 
         // 显示底部按钮
+        animCard.destroy();
         self._showSwapButtons(aiId, Math.max(fbY + 60, 251));
       }
     });
@@ -2025,6 +2026,7 @@ GameScene.prototype._showSwapUI = function (aiId, fbY) {
       }).setOrigin(0.5).setDepth(310);
       self.chaosElements.push(missMsg);
 
+      if (typeof aiRevealCard !== 'undefined') aiRevealCard.destroy();
       self.renderPlayerHand();
       self.updateAICount(aiId === 'duidui' ? 0 : 1);
       self._showSwapButtons(aiId, Math.max(fbY + 60, 280));
@@ -2052,6 +2054,12 @@ GameScene.prototype._showSwapUI = function (aiId, fbY) {
 
 GameScene.prototype._showSwapButtons = function (aiId, btnY) {
   var self = this;
+  // 安全清理: 销毁所有 depth >= 400 的临时元素
+  self.children.each(function(child) {
+    if (child && child.type === 'Image' && child.depth >= 400) {
+      child.destroy();
+    }
+  });
   var againBg = self.add.graphics();
   againBg.fillStyle(0x4ECDC4, 1);
   againBg.fillRoundedRect(220, btnY, 220, 40, 10).setDepth(305);
