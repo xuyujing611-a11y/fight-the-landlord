@@ -190,6 +190,7 @@ GameScene.prototype.init = function () {
   this.chaosScore = 0;
   this.chaosTimeoutTimer = null;
   // 重置气泡队列全局变量
+  this.chaosBubbleTimer = null;
   bubbleQueue = [];
   bubbleShowing = false;
 };
@@ -1804,7 +1805,12 @@ GameScene.prototype._showSwapResult = function (aiId, isCorrect, fbY) {
           stroke: '#000000', strokeThickness: 2
         }).setOrigin(0.5).setDepth(310);
         self.chaosElements.push(swapText);
-        self.time.delayedCall(3500, function () {
+        if (self.chaosBubbleTimer) {
+    self.chaosBubbleTimer.remove();
+    self.chaosBubbleTimer = null;
+  }
+  self.chaosBubbleTimer = self.time.delayedCall(3500, function () {
+    self.chaosBubbleTimer = null;
           if (swapText) swapText.destroy();
         });
 
@@ -2422,6 +2428,11 @@ GameScene.prototype._clearQuestionArea = function () {
     if (self.chaosElements[di]) self.chaosElements[di].destroy();
   }
   self.chaosElements = toKeep;
+  // \u53D6\u6D88\u6C14\u6CE1\u5B9A\u65F6\u5668
+  if (self.chaosBubbleTimer) {
+    self.chaosBubbleTimer.remove();
+    self.chaosBubbleTimer = null;
+  }
   // \u4E5F\u6E05\u9664\u6C14\u6CE1
   if (self.chaosBubbleElements) {
     for (var ei = 0; ei < self.chaosBubbleElements.length; ei++) {
@@ -2457,6 +2468,12 @@ GameScene.prototype._destroyChaos = function () {
   if (this.chaosTimeoutTimer) {
     this.chaosTimeoutTimer.remove();
     this.chaosTimeoutTimer = null;
+  }
+
+  // \u53d6\u6d88\u6c14\u6ce1\u5b9a\u65f6\u5668
+  if (this.chaosBubbleTimer) {
+    this.chaosBubbleTimer.remove();
+    this.chaosBubbleTimer = null;
   }
 
   // \u6062\u590D\u51FA\u724C\u97F3\u6548
