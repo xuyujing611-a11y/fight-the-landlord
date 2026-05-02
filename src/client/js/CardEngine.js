@@ -328,7 +328,7 @@
 
   function identifyType(cards) {
     if (!cards || !Array.isArray(cards) || cards.length === 0) {
-      return { type: HAND_TYPES.INVALID, rank: -1, length: 0 };
+      return { type: HAND_TYPES.INVALID, rank: -1, length: 0, totalCards: 0, isBomb: false, isRocket: false, valid: false };
     }
 
     var n = cards.length;
@@ -339,27 +339,27 @@
 
     // ---- 火箭 ----
     if (n === 2 && ranks.length === 2 && ranks[0] === 13 && ranks[1] === 14) {
-      return { type: HAND_TYPES.ROCKET, rank: 14, length: 2 };
+      return { type: HAND_TYPES.ROCKET, rank: 14, length: 2, totalCards: 2, name: HAND_TYPE_NAMES[HAND_TYPES.ROCKET], isBomb: false, isRocket: true, valid: true };
     }
 
     // ---- 炸弹 ----
     if (n === 4 && ranks.length === 1 && counts[0] === 4) {
-      return { type: HAND_TYPES.BOMB, rank: ranks[0], length: 4 };
+      return { type: HAND_TYPES.BOMB, rank: ranks[0], length: 4, totalCards: 4, name: HAND_TYPE_NAMES[HAND_TYPES.BOMB], isBomb: true, isRocket: false, valid: true };
     }
 
     // ---- 单张 ----
     if (n === 1) {
-      return { type: HAND_TYPES.SINGLE, rank: sorted[0].rank, length: 1 };
+      return { type: HAND_TYPES.SINGLE, rank: sorted[0].rank, length: 1, totalCards: 1, name: HAND_TYPE_NAMES[HAND_TYPES.SINGLE], isBomb: false, isRocket: false, valid: true };
     }
 
     // ---- 对子 ----
     if (n === 2 && ranks.length === 1 && counts[0] === 2) {
-      return { type: HAND_TYPES.PAIR, rank: ranks[0], length: 2 };
+      return { type: HAND_TYPES.PAIR, rank: ranks[0], length: 2, totalCards: 2, name: HAND_TYPE_NAMES[HAND_TYPES.PAIR], isBomb: false, isRocket: false, valid: true };
     }
 
     // ---- 三张 ----
     if (n === 3 && ranks.length === 1 && counts[0] === 3) {
-      return { type: HAND_TYPES.TRIPLE, rank: ranks[0], length: 3 };
+      return { type: HAND_TYPES.TRIPLE, rank: ranks[0], length: 3, totalCards: 3, name: HAND_TYPE_NAMES[HAND_TYPES.TRIPLE], isBomb: false, isRocket: false, valid: true };
     }
 
     // ---- 三带一 ----
@@ -370,7 +370,7 @@
         else if (counts[i] === 1) singleRank = ranks[i];
       }
       if (tripleRank >= 0 && singleRank >= 0) {
-        return { type: HAND_TYPES.TRIPLE_PLUS_ONE, rank: tripleRank, length: 4, kickRank: singleRank };
+        return { type: HAND_TYPES.TRIPLE_PLUS_ONE, rank: tripleRank, length: 4, kickRank: singleRank, totalCards: 4, name: HAND_TYPE_NAMES[HAND_TYPES.TRIPLE_PLUS_ONE], isBomb: false, isRocket: false, valid: true };
       }
     }
 
@@ -382,7 +382,7 @@
         else if (counts[i2] === 2) pairRank = ranks[i2];
       }
       if (tripleRank2 >= 0 && pairRank >= 0) {
-        return { type: HAND_TYPES.TRIPLE_PLUS_TWO, rank: tripleRank2, length: 5, kickRank: pairRank };
+        return { type: HAND_TYPES.TRIPLE_PLUS_TWO, rank: tripleRank2, length: 5, kickRank: pairRank, totalCards: 5, name: HAND_TYPE_NAMES[HAND_TYPES.TRIPLE_PLUS_TWO], isBomb: false, isRocket: false, valid: true };
       }
     }
 
@@ -390,7 +390,7 @@
     if (n >= 5 && isConsecutiveSequence(ranks, STRAIGHT_MAX_RANK) && allCountsOne(counts)) {
       // 检查所有rank <= A
       if (ranks[ranks.length - 1] <= STRAIGHT_MAX_RANK) {
-        return { type: HAND_TYPES.STRAIGHT, rank: ranks[ranks.length - 1], length: n };
+        return { type: HAND_TYPES.STRAIGHT, rank: ranks[ranks.length - 1], length: n, totalCards: n, name: HAND_TYPE_NAMES[HAND_TYPES.STRAIGHT], isBomb: false, isRocket: false, valid: true };
       }
     }
 
@@ -399,7 +399,7 @@
       var pairCount = n / 2;
       if (pairCount >= 3 && isConsecutiveSequence(ranks, STRAIGHT_MAX_RANK) && allCountsAtLeast(counts, 2)) {
         if (ranks[ranks.length - 1] <= STRAIGHT_MAX_RANK) {
-          return { type: HAND_TYPES.CONSECUTIVE_PAIRS, rank: ranks[ranks.length - 1], length: pairCount };
+          return { type: HAND_TYPES.CONSECUTIVE_PAIRS, rank: ranks[ranks.length - 1], length: pairCount, totalCards: n, name: HAND_TYPE_NAMES[HAND_TYPES.CONSECUTIVE_PAIRS], isBomb: false, isRocket: false, valid: true };
         }
       }
     }
@@ -424,21 +424,21 @@
           // 纯飞机
           if (tripleCards === n) {
             if (run[runLen - 1] <= STRAIGHT_MAX_RANK) {
-              return { type: HAND_TYPES.AIRPLANE, rank: run[runLen - 1], length: runLen };
+              return { type: HAND_TYPES.AIRPLANE, rank: run[runLen - 1], length: runLen, totalCards: tripleCards, name: HAND_TYPE_NAMES[HAND_TYPES.AIRPLANE], isBomb: false, isRocket: false, valid: true };
             }
           }
 
           // 飞机带单: n = tripleCards + runLen
           if (n === tripleCards + runLen) {
             if (run[runLen - 1] <= STRAIGHT_MAX_RANK) {
-              return { type: HAND_TYPES.AIRPLANE_PLUS_SINGLES, rank: run[runLen - 1], length: runLen };
+              return { type: HAND_TYPES.AIRPLANE_PLUS_SINGLES, rank: run[runLen - 1], length: runLen, totalCards: n, name: HAND_TYPE_NAMES[HAND_TYPES.AIRPLANE_PLUS_SINGLES], isBomb: false, isRocket: false, valid: true };
             }
           }
 
           // 飞机带对: n = tripleCards + runLen * 2
           if (n === tripleCards + runLen * 2) {
             if (run[runLen - 1] <= STRAIGHT_MAX_RANK) {
-              return { type: HAND_TYPES.AIRPLANE_PLUS_PAIRS, rank: run[runLen - 1], length: runLen };
+              return { type: HAND_TYPES.AIRPLANE_PLUS_PAIRS, rank: run[runLen - 1], length: runLen, totalCards: n, name: HAND_TYPE_NAMES[HAND_TYPES.AIRPLANE_PLUS_PAIRS], isBomb: false, isRocket: false, valid: true };
             }
           }
         }
@@ -457,7 +457,7 @@
             }
           }
           if (others.length === 2) {
-            return { type: HAND_TYPES.FOUR_PLUS_TWO, rank: ranks[i4], length: 6 };
+            return { type: HAND_TYPES.FOUR_PLUS_TWO, rank: ranks[i4], length: 6, totalCards: 6, name: HAND_TYPE_NAMES[HAND_TYPES.FOUR_PLUS_TWO], isBomb: false, isRocket: false, valid: true };
           }
         }
       }
@@ -476,13 +476,13 @@
             }
           }
           if (valid2 && pairCount2 === 2) {
-            return { type: HAND_TYPES.FOUR_PLUS_TWO_PAIRS, rank: ranks[i8], length: 8 };
+            return { type: HAND_TYPES.FOUR_PLUS_TWO_PAIRS, rank: ranks[i8], length: 8, totalCards: 8, name: HAND_TYPE_NAMES[HAND_TYPES.FOUR_PLUS_TWO_PAIRS], isBomb: false, isRocket: false, valid: true };
           }
         }
       }
     }
 
-    return { type: HAND_TYPES.INVALID, rank: -1, length: 0 };
+    return { type: HAND_TYPES.INVALID, rank: -1, length: 0, totalCards: n, isBomb: false, isRocket: false, valid: false };
   }
 
   function isConsecutiveSequence(ranks, maxRank) {
