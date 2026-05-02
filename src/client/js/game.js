@@ -357,7 +357,6 @@ function createTopBar(scene) {
 
   // AI1 (left)
   var wAvatar = makeAvatarImage(scene, 'avatar_wang', 176, 20, 0x4FC3F7, '\u738B\u603C\u603C');
-  wAvatar.setDisplaySize(36, 36).setDepth(11);
   scene.add.text(200, 9, '\u738B\u603C\u603C', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '10px', color: '#E8F5E9', fontStyle: 'bold'
@@ -369,7 +368,6 @@ function createTopBar(scene) {
 
   // AI2 (right)
   var sAvatar = makeAvatarImage(scene, 'avatar_su', 788, 20, 0xFFB74D, '\u82CF\u751C\u751C');
-  sAvatar.setDisplaySize(36, 36).setDepth(11);
   scene.add.text(720, 9, '\u82CF\u751C\u751C', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '10px', color: '#E8F5E9', fontStyle: 'bold'
