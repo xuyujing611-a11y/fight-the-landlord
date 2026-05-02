@@ -748,9 +748,36 @@ GameScene.prototype.doAIBidding = function (aiIndex) {
   }
 };
 
+// ================================================================
+// 地主/农民身份标识
+// ================================================================
+GameScene.prototype.updateLandlordUI = function() {
+  if (this.landlordBadgePlayer) this.landlordBadgePlayer.destroy();
+  if (this.landlordBadgeAi1) this.landlordBadgeAi1.destroy();
+  if (this.landlordBadgeAi2) this.landlordBadgeAi2.destroy();
+  if (this.landlordIndex === 0) {
+    this.landlordBadgePlayer = this.add.text(68, 385, '👑 地主', {
+      fontFamily: '"PingFang SC",sans-serif',
+      fontSize: '12px', color: '#000000',
+      backgroundColor: '#FFD700',
+      padding: {x: 4, y: 2},
+      fontStyle: 'bold'
+    }).setDepth(11);
+  } else if (this.landlordIndex === 1) {
+    this.landlordBadgeAi1 = this.add.text(145, 9, '👑', {
+      fontSize: '16px'
+    }).setDepth(12);
+  } else if (this.landlordIndex === 2) {
+    this.landlordBadgeAi2 = this.add.text(765, 9, '👑', {
+      fontSize: '16px'
+    }).setDepth(12);
+  }
+};
+
 GameScene.prototype.finishBidding = function (res) {
   this.landlordIndex = res.highestBidder;
   this.isLandlord = (res.highestBidder === 0);
+  this.updateLandlordUI();
 
   // 显示底牌
   this.showBottomCards(res.landlordCards);
@@ -822,6 +849,7 @@ GameScene.prototype.showBottomCards = function (cards) {
 GameScene.prototype.localAssignLandlord = function () {
   this.landlordIndex = Math.floor(Math.random() * 3);
   this.isLandlord = (this.landlordIndex === 0);
+  this.updateLandlordUI();
   if (this.landlordIndex === 0) {
     for (var i = 0; i < this.remainingCards.length; i++) {
       this.playerHand.push(this.remainingCards[i]);
@@ -1448,7 +1476,7 @@ GameScene.prototype._createChaosOverlay = function (aiId, callback) {
   self.chaosScoreText = scoreText;
 
   // AI 台词气泡
-  self._showAiBubble(aiId, 'easy', 180);
+  self._showAiBubble(aiId, 'easy', 400);
   self._chaosAiId = aiId;
 
   // 5. 新版圆形关闭按钮（悬浮在卡片右上角边缘，红底白叉）
@@ -1541,7 +1569,11 @@ GameScene.prototype._renderQuestion = function (q, aiId) {
   self.chaosElements.push(tag);
 
   // 保留口语题兼容：q.expression, q.word
-  var questionText = q.question || q.text || q.expression || q.word || '【缺失题目内容，请盲猜】';
+  var questionText = q.question || q.text || q.word || '';
+  if (!questionText && q.scene) {
+    questionText = '场景：' + q.scene + '\n对话：' + (q.dialogue || '');
+  }
+  if (!questionText) questionText = '【题目解析降级，请直接根据选项推理】';
   var qText = self.add.text(220, 114, questionText, {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '15px', color: '#222222', fontStyle: 'bold',
@@ -2396,27 +2428,27 @@ GameScene.prototype._showAiBubble = function (aiId, sceneKey, y) {
     // AI \u5934\u50CF\u5706\u5708
     var avatar = self.add.graphics();
     avatar.fillStyle(aiId === 'duidui' ? 0x4FC3F7 : 0xFFB74D, 1);
-  avatar.fillCircle(80, y + 16, 22).setDepth(302);
+  avatar.fillCircle(80, y + 16, 22).setDepth(500);
   avatar.lineStyle(2, 0xFFFFFF, 0.5);
-  avatar.strokeCircle(80, y + 16, 22).setDepth(302);
+  avatar.strokeCircle(80, y + 16, 22).setDepth(500);
   var avatarTxt = self.add.text(80, y + 16, aiId === 'duidui' ? '😎' : '😊', {
     fontFamily: 'sans-serif', fontSize: '18px'
-  }).setOrigin(0.5).setDepth(303);
+  }).setOrigin(0.5).setDepth(501);
   self.chaosBubbleElements.push(avatar, avatarTxt);
 
   // AI \u540D\u5B57\uFF08\u52A0\u5927\uFF09
   var nameTxt = self.add.text(105, y - 4, aiDisplayName, {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '12px', color: '#FFFFFF', fontStyle: 'bold'
-  }).setDepth(302);
+  }).setDepth(500);
   self.chaosBubbleElements.push(nameTxt);
 
   // \u53F0\u8BCD\u6C14\u6CE1\uFF08\u5B9E\u5FC3\u7EFF\u8272\u6C14\u6CE1\u5E26\u8FB9\u6846\uFF09
   var bubble = self.add.graphics();
   bubble.fillStyle(0x1B5E20, 0.85);
-  bubble.fillRoundedRect(bubbleX, bubbleY, bubbleW, bubbleH, 12).setDepth(302);
+  bubble.fillRoundedRect(bubbleX, bubbleY, bubbleW, bubbleH, 12).setDepth(500);
   bubble.lineStyle(1.5, 0x66BB6A, 0.5);
-  bubble.strokeRoundedRect(bubbleX, bubbleY, bubbleW, bubbleH, 12).setDepth(302);
+  bubble.strokeRoundedRect(bubbleX, bubbleY, bubbleW, bubbleH, 12).setDepth(500);
   self.chaosBubbleElements.push(bubble);
 
   // \u4E09\u89D2\u7BAD\u5934\u6307\u5411\u5DE6\u4FA7\u89D2\u8272
@@ -2426,7 +2458,7 @@ GameScene.prototype._showAiBubble = function (aiId, sceneKey, y) {
     bubbleX, bubbleY + bubbleH / 2,
     bubbleX - 12, bubbleY + bubbleH / 2 - 6,
     bubbleX - 12, bubbleY + bubbleH / 2 + 6
-  ).setDepth(302);
+  ).setDepth(500);
   self.chaosBubbleElements.push(arrow);
 
     // 台词文本
@@ -2435,7 +2467,7 @@ GameScene.prototype._showAiBubble = function (aiId, sceneKey, y) {
     fontSize: '14px', color: '#FFFFFF',
     wordWrap: { width: bubbleW - 28 },
     lineSpacing: 2
-  }).setOrigin(0, 0.5).setDepth(303);
+  }).setOrigin(0, 0.5).setDepth(501);
   self.chaosBubbleElements.push(bubbleTxt);
 
   // 搞事情气泡显示3.5秒后自动销毁，解锁队列
@@ -3042,14 +3074,19 @@ var AI_LINES = {
 
 };
 
-function getRandomLine(pool) {
-  if (!pool || pool.length === 0) return '...';
-  return pool[Math.floor(Math.random() * pool.length)];
-}
+var lastUsedLines = {};
 
 function pickAiLine(aiId, sceneKey) {
   var ai = AI_LINES[aiId];
   if (!ai) return '...';
   var pool = ai[sceneKey];
-  return getRandomLine(pool);
+  if (!pool || pool.length === 0) return '...';
+  // 过滤掉上一次刚刚说过的台词
+  var historyKey = aiId + '_' + sceneKey;
+  var available = pool.filter(function(line) { return line !== lastUsedLines[historyKey]; });
+  // 如果词库太少导致全被过滤，就重置
+  if (available.length === 0) available = pool;
+  var picked = available[Math.floor(Math.random() * available.length)];
+  lastUsedLines[historyKey] = picked;
+  return picked;
 }
