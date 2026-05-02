@@ -1619,13 +1619,47 @@ GameScene.prototype._renderQuestion = function (q, aiId) {
     self.chaosElements.push(optBg, optMarkBg, optMarkTxt, optTxt);
   }
 
-  // B46: 30秒超时计时器
+  // F1: 30秒倒计时进度条（取代原有delayedCall）
   if (self.chaosTimeoutTimer) {
     self.chaosTimeoutTimer.remove();
     self.chaosTimeoutTimer = null;
   }
-  self.chaosTimeoutTimer = self.time.delayedCall(30000, function () {
-    self._handleChaosTimeout(aiId);
+  // 进度条背景
+  var progressBarBg = self.add.graphics();
+  progressBarBg.fillStyle(0x555555, 0.5);
+  progressBarBg.fillRect(150, 55, 660, 4).setDepth(305);
+  self.chaosElements.push(progressBarBg);
+  // 进度条前景（动态变色）
+  var progressBar = self.add.graphics().setDepth(306);
+  self.chaosElements.push(progressBar);
+  // 计时相关变量
+  var timerStart = Date.now();
+  var timerDuration = 30000;
+  // 用 time.addEvent 替代 delayedCall 实现逐帧更新
+  self.chaosTimeoutTimer = self.time.addEvent({
+    delay: 50,
+    loop: true,
+    callback: function () {
+      var elapsed = Date.now() - timerStart;
+      var progress = Math.min(elapsed / timerDuration, 1);
+      var remaining = 1 - progress;
+      var barWidth = 660 * remaining;
+      // 颜色: 绿(>50%) → 黄(20-50%) → 红(<20%)
+      var color;
+      if (remaining > 0.5) color = 0x4CAF50;
+      else if (remaining > 0.2) color = 0xFFC107;
+      else color = 0xFF5252;
+      progressBar.clear();
+      progressBar.fillStyle(color, 1);
+      progressBar.fillRect(150, 55, barWidth, 4);
+      if (elapsed >= timerDuration) {
+        if (self.chaosTimeoutTimer) {
+          self.chaosTimeoutTimer.remove();
+          self.chaosTimeoutTimer = null;
+        }
+        self._handleChaosTimeout(aiId);
+      }
+    }
   });
 };
 // ================================================================
