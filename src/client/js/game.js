@@ -186,6 +186,7 @@ GameScene.prototype.init = function () {
   this.playHistory = [];
   this.gameStartTime = Date.now();
   this.totalBombs = 0;
+  this.rocketCount = 0;
   this.chaosScore = 0;
   this.chaosTimeoutTimer = null;
   // 重置气泡队列全局变量
@@ -1007,6 +1008,7 @@ GameScene.prototype.confirmPlay = function (playCards, info) {
   this.addPlayHistory('player', playCards);
   SoundManager.playCard();
   if (info.type === 'BOMB' || info.type === 'ROCKET') this.totalBombs++;
+  if (info.type === 'ROCKET') this.rocketCount++;
 
   if (this.playerHand.length === 0) {
     SoundManager.win();
@@ -1194,6 +1196,7 @@ GameScene.prototype.handleAIPlay = function (aiIndex, aiName, res) {
   var bubbleKey = info.type === 'BOMB' || info.type === 'ROCKET' ? 'bomb' : 'play';
   this._showPlayBubble(aiIndex === 0 ? 'duidui' : 'tiantian', bubbleKey, info.type);
   if (info.type === 'BOMB' || info.type === 'ROCKET') this.totalBombs++;
+  if (info.type === 'ROCKET') this.rocketCount++;
   if (hand.length === 0) {
     this.renderRoundEndPanel(aiIndex === 0 ? 'ai1' : 'ai2');
     return;
@@ -1278,6 +1281,7 @@ GameScene.prototype.localAIPlay = function (aiIndex, aiName) {
   var bubbleKey = info.type === 'BOMB' || info.type === 'ROCKET' ? 'bomb' : 'play';
   this._showPlayBubble(aiIndex === 0 ? 'duidui' : 'tiantian', bubbleKey, info.type);
   if (info.type === 'BOMB' || info.type === 'ROCKET') this.totalBombs++;
+  if (info.type === 'ROCKET') this.rocketCount++;
   if (hand.length === 0) {
     this.renderRoundEndPanel(aiIndex === 0 ? 'ai1' : 'ai2');
     return;
@@ -2525,7 +2529,8 @@ GameScene.prototype.renderRoundEndPanel = function (winner) {
   var handBonus = remainingCards * 2;
 
   var subTotal = baseScore + chaosBonus + handBonus;
-  var multiplier = Math.pow(2, bombMult);
+  var bombCount = bombMult - (self.rocketCount || 0);
+  var multiplier = Math.pow(2, bombCount) * Math.pow(4, self.rocketCount || 0);
   var totalScore = subTotal * multiplier;
 
   var detailRows = [
@@ -2687,6 +2692,10 @@ GameScene.prototype.renderRoundEndPanel = function (winner) {
     self.tweens.add({ targets: btn2Bg, alpha: 1, duration: 200, ease: 'Linear' });
     self.tweens.add({ targets: btn2Txt, alpha: 1, duration: 200, ease: 'Linear' });
   });
+
+  // 回合递增
+  self.round++;
+  self.roundText.setText('第 ' + self.round + '/10 回合');
 };
 
 // ================================================================
