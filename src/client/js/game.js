@@ -1452,7 +1452,7 @@ GameScene.prototype._showTypeSelection = function (aiId, aiName) {
   self.chaosElements.push(title2);
 
   // 2x2 网格：题型卡片
-  var cardX = [220, 500];
+  var cardX = [400, 680];
   var cardY = [107, 181];
   var cardW = 260, cardH = 88;
 
@@ -1524,7 +1524,7 @@ GameScene.prototype._createChaosOverlay = function (aiId, callback) {
   // 1. 半透明遮罩（加深暗度增强沉浸感）
   var overlay = self.add.graphics();
   overlay.fillStyle(0x000000, 0.85);
-  overlay.fillRect(0, 0, 960, 600).setDepth(300);
+  overlay.fillRect(0, 0, 1320, 600).setDepth(300);
   overlay.setInteractive(new Phaser.Geom.Rectangle(0, 0, 960, 600), Phaser.Geom.Rectangle.Contains);
   self.chaosElements = [overlay];
   self.chaosOverlay = overlay;
@@ -2097,17 +2097,17 @@ GameScene.prototype._showSwapUI = function (aiId, fbY) {
 
   function updateConfirmBtn() {
     if (selectedPlayerCardIdx >= 0 && selectedBackIdx >= 0) {
-      confirmBg.clear().fillStyle(0x4ECDC4, 1).fillRoundedRect(220, 390, 200, 44, 10).setDepth(353);
+      confirmBg.clear().fillStyle(0x4ECDC4, 1).fillRoundedRect(420, 390, 200, 44, 10).setDepth(353);
     } else {
-      confirmBg.clear().fillStyle(0x4ECDC4, 0.5).fillRoundedRect(220, 390, 200, 44, 10).setDepth(353);
+      confirmBg.clear().fillStyle(0x4ECDC4, 0.5).fillRoundedRect(420, 390, 200, 44, 10).setDepth(353);
     }
   }
 
   // 确认按钮（左）
   var confirmBg = self.add.graphics();
   confirmBg.fillStyle(0x4ECDC4, 0.5);
-  confirmBg.fillRoundedRect(220, 390, 200, 44, 10).setDepth(353);
-  var confirmTxt = self.add.text(320, 412, '✅ 确认交换', {
+  confirmBg.fillRoundedRect(420, 390, 200, 44, 10).setDepth(353);
+  var confirmTxt = self.add.text(520, 412, '✅ 确认交换', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '15px', color: '#FFFFFF', fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(354);
@@ -2193,12 +2193,12 @@ GameScene.prototype._showSwapUI = function (aiId, fbY) {
   // 取消按钮（右）
   var cancelBg = self.add.graphics();
   cancelBg.fillStyle(0x78909C, 1);
-  cancelBg.fillRoundedRect(540, 390, 200, 44, 10).setDepth(353);
-  var cancelTxt = self.add.text(640, 412, '✖ 跳过交换', {
+  cancelBg.fillRoundedRect(720, 390, 200, 44, 10).setDepth(353);
+  var cancelTxt = self.add.text(820, 412, '✖ 跳过交换', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '15px', color: '#FFFFFF', fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(354);
-  cancelBg.setInteractive(new Phaser.Geom.Rectangle(540, 390, 200, 44), Phaser.Geom.Rectangle.Contains);
+  cancelBg.setInteractive(new Phaser.Geom.Rectangle(720, 390, 200, 44), Phaser.Geom.Rectangle.Contains);
   swapElements.push(cancelBg, cancelTxt);
 
   cancelBg.on('pointerup', function () {
@@ -2511,16 +2511,16 @@ GameScene.prototype._showAiBubble = function (aiId, sceneKey, y) {
     // C2: 气泡自适应高度，防止长文字溢出
     var bubbleW = Math.min(540, 200 + line.length * 10);
     var bubbleH = Math.max(44, 36 + Math.ceil(line.length / 20) * 18);
-    var bubbleX = 230;
+    var bubbleX = 390;
     var bubbleY = y + 10;
 
     // AI \u5934\u50CF\u5706\u5708
     var avatar = self.add.graphics();
     avatar.fillStyle(aiId === 'duidui' ? 0x4FC3F7 : 0xFFB74D, 1);
-  avatar.fillCircle(80, y + 16, 22).setDepth(500);
+  avatar.fillCircle(260, y + 16, 22).setDepth(500);
   avatar.lineStyle(2, 0xFFFFFF, 0.5);
-  avatar.strokeCircle(80, y + 16, 22).setDepth(500);
-  var avatarTxt = self.add.text(80, y + 16, aiId === 'duidui' ? '😎' : '😊', {
+  avatar.strokeCircle(260, y + 16, 22).setDepth(500);
+  var avatarTxt = self.add.text(260, y + 16, aiId === 'duidui' ? '😎' : '😊', {
     fontFamily: 'sans-serif', fontSize: '18px'
   }).setOrigin(0.5).setDepth(501);
   self.chaosBubbleElements.push(avatar, avatarTxt);
@@ -2702,7 +2702,7 @@ function createActionButtons(scene) {
 // Toast
 // ================================================================
 function showToast(scene, message) {
-  var cx = 300;
+  var cx = 660;
   var toastBg = scene.add.graphics();
   toastBg.fillStyle(0x000000, 0.7);
   toastBg.fillRoundedRect(cx - 100, 206, 200, 38, 10).setDepth(200);
