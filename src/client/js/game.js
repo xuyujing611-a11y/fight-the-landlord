@@ -17,9 +17,13 @@ var GAME_STATE = {
   CHAOS_MODE: 'CHAOS_MODE'
 };
 
+// 动态计算手机的真实宽高比，将游戏宽度动态延展
+var screenRatio = window.innerWidth / window.innerHeight;
+var dynamicWidth = Math.max(960, 600 * screenRatio);
+
 var GameConfig = {
   type: Phaser.AUTO,
-  width: 960,
+  width: dynamicWidth,
   height: 600,
   parent: 'game-container',
   backgroundColor: '#0D3B0F',
@@ -267,6 +271,9 @@ GameScene.prototype.preload = function () {
 
 GameScene.prototype.create = function () {
   var self = this;
+  // 将摄像机往左移动，让960x600的核心游玩区永远居中在长屏中央
+  var offsetX = (this.sys.game.config.width - 960) / 2;
+  this.cameras.main.setScroll(-offsetX, 0);
   drawTableBackground(this);
   createTopBar(this);
   createAIArea(this);
@@ -347,7 +354,7 @@ function drawTableBackground(scene) {
   var bg = scene.add.graphics();
   // 更平滑高级的中心径向渐变感（通过叠加半透明图形模拟）
   bg.fillGradientStyle(0x2E7D32, 0x2E7D32, 0x0D3B0F, 0x0D3B0F, 1);
-  bg.fillRect(0, 0, W, H);
+  bg.fillRect(-1000, -500, 3000, 2000);
   // 桌面高光（模拟吊灯打在牌桌上的质感）
   var glow = scene.add.graphics();
   glow.fillStyle(0x4CAF50, 0.12);
@@ -2075,82 +2082,67 @@ GameScene.prototype._showSwapUI = function (aiId, fbY) {
     }
     if (pReal < 0) return;
     var pCard = self.playerHand[pReal];
-    var isWin = (selectedBackIdx === realAICardSlot);
 
+    var isWin = (selectedBackIdx === realAICardSlot);
     var selectedBackPos = backCardPositions[selectedBackIdx];
 
-    // 销毁所有swap UI元素
+    // 销毁所有swap UI元素，避免挡住视线
     for (var ei = 0; ei < swapElements.length; ei++) {
       if (swapElements[ei]) swapElements[ei].destroy();
     }
 
-    var pRank = Doudizhu.RANK_NAMES ? Doudizhu.RANK_NAMES[pCard.rank] : (pCard.rank || '');
-    var pSuit = Doudizhu.SUIT_NAMES ? Doudizhu.SUIT_NAMES[pCard.suit] : (pCard.suit || '');
+    // 核心修复：无论是否猜中，都给玩家强制换牌！
+    // 猜中给 realAICard，猜错随机从 AI 手里抽一张
+    var aiTargetCard = isWin ? realAICard : aiHand[Math.floor(Math.random() * aiHand.length)];
 
-    if (isWin) {
-      var aRank = Doudizhu.RANK_NAMES ? Doudizhu.RANK_NAMES[realAICard.rank] : (realAICard.rank || '');
-      var aSuit = Doudizhu.SUIT_NAMES ? Doudizhu.SUIT_NAMES[realAICard.suit] : (realAICard.suit || '');
+    // 在选中的牌背位置创建飞出的动画卡片
+    var revealCard = self.add.image(selectedBackPos.x, selectedBackPos.y, getCardImageKey(aiTargetCard))
+      .setDisplaySize(backW, backH).setDepth(400);
 
-      // 在选中的牌背位置创建AI牌的正面（翻牌揭示）
-      var revealCard = self.add.image(selectedBackPos.x, selectedBackPos.y, getCardImageKey(realAICard))
-        .setDisplaySize(backW, backH).setDepth(400);
+    // 飞入动画
+    self.tweens.add({
+      targets: revealCard,
+      x: 480, y: 345,
+      scaleX: 0.8, scaleY: 0.8, angle: 720, duration: 600, ease: 'Cubic.easeOut',
+      onComplete: function () {
+        revealCard.destroy();
 
-      var swapMsg = self.add.text(480, fbY + 20, '🔄 用[' + pSuit + pRank + ']换了AI的[' + aSuit + aRank + ']', {
-        fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-        fontSize: '14px', color: '#4CAF50', fontStyle: 'bold',
-        stroke: '#000000', strokeThickness: 2
-      }).setOrigin(0.5).setDepth(310);
-      self.chaosElements.push(swapMsg);
-
-      // 飞入动画
-      self.tweens.add({
-        targets: revealCard,
-        x: 480, y: 345,
-        scaleX: 0.8, scaleY: 0.8,
-        angle: 720,
-        duration: 600,
-        ease: 'Cubic.easeOut',
-        onComplete: function () {
-          revealCard.destroy();
-          var aReal = -1;
-          for (var a = 0; a < aiHand.length; a++) {
-            if (aiHand[a].suit === realAICard.suit && aiHand[a].rank === realAICard.rank) {
-              aReal = a;
-              break;
-            }
+        // 执行底层数据互换
+        var aReal = -1;
+        for (var a = 0; a < aiHand.length; a++) {
+          if (aiHand[a].suit === aiTargetCard.suit && aiHand[a].rank === aiTargetCard.rank) {
+            aReal = a; break;
           }
-          if (aReal >= 0) {
-            self.playerHand.splice(pReal, 1);
-            aiHand.splice(aReal, 1);
-            self.playerHand.push(realAICard);
-            aiHand.push(pCard);
-            self.playerHand = Doudizhu.sortCards(self.playerHand);
-          }
-          self.renderPlayerHand();
-          self.updateAICount(aiId === 'duidui' ? 0 : 1);
-          self._showSwapButtons(aiId, Math.max(fbY + 60, 280));
         }
-      });
-    } else {
-      // 没抽中：揭示AI真实牌位置
-      if (realAICardSlot >= 0 && realAICardSlot < backCardPositions.length) {
-        var realPos = backCardPositions[realAICardSlot];
-        var aiRevealCard = self.add.image(realPos.x, realPos.y, getCardImageKey(realAICard))
-          .setDisplaySize(backW, backH).setDepth(400);
+        if (aReal >= 0) {
+          self.playerHand.splice(pReal, 1);
+          aiHand.splice(aReal, 1);
+          self.playerHand.push(aiTargetCard);
+          aiHand.push(pCard);
+          self.playerHand = Doudizhu.sortCards(self.playerHand);
+        }
+
+        // 重新渲染，让玩家立刻看到牌变了
+        self.renderPlayerHand();
+        self.updateAICount(aiId === 'duidui' ? 0 : 1);
+
+        // 弹出明确的交换成功提示
+        var pSuitStr = Doudizhu.SUIT_NAMES ? Doudizhu.SUIT_NAMES[pCard.suit] : '';
+        var pRankStr = Doudizhu.RANK_NAME_MAP[pCard.rank] || '';
+        var aSuitStr = Doudizhu.SUIT_NAMES ? Doudizhu.SUIT_NAMES[aiTargetCard.suit] : '';
+        var aRankStr = Doudizhu.RANK_NAME_MAP[aiTargetCard.rank] || '';
+
+        var resultText = isWin ? '🎯 欧皇手气！用' : '🔄 盲抽成功！用';
+        var swapMsg = self.add.text(480, fbY + 20, resultText + '[' + pSuitStr + pRankStr + ']换了AI的[' + aSuitStr + aRankStr + ']', {
+          fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+          fontSize: '15px', color: isWin ? '#FFD700' : '#4CAF50', fontStyle: 'bold',
+          stroke: '#000000', strokeThickness: 2
+        }).setOrigin(0.5).setDepth(310);
+        self.chaosElements.push(swapMsg);
+
+        self._showSwapButtons(aiId, Math.max(fbY + 60, 280));
       }
-
-      var missMsg = self.add.text(480, 155, '😅 没抽到AI的牌，下次加油！', {
-        fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-        fontSize: '14px', color: '#FFB74D', fontStyle: 'bold',
-        stroke: '#000000', strokeThickness: 2
-      }).setOrigin(0.5).setDepth(310);
-      self.chaosElements.push(missMsg);
-
-      if (typeof aiRevealCard !== 'undefined') aiRevealCard.destroy();
-      self.renderPlayerHand();
-      self.updateAICount(aiId === 'duidui' ? 0 : 1);
-      self._showSwapButtons(aiId, Math.max(fbY + 60, 280));
-    }
+    });
   });
 
   // 取消按钮（右）
