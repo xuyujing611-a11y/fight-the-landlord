@@ -1604,7 +1604,7 @@ GameScene.prototype._renderQuestion = function (q, aiId) {
     var optTxt = self.add.text(gx + 40, gy + optH / 2, optText, {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
       fontSize: '13px', color: '#333333',
-      wordWrap: { width: optW - 55 },
+      wordWrap: { width: optW - 40 },
       lineSpacing: 1
     }).setOrigin(0, 0.5).setDepth(303);
 
