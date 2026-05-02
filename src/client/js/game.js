@@ -1450,7 +1450,7 @@ GameScene.prototype._createChaosOverlay = function (aiId, callback) {
   // \u534A\u900F\u660E\u906E\u7F69
   var overlay = self.add.graphics();
   overlay.fillStyle(0x000000, 0.75);
-  overlay.fillRect(0, 0, 960, 600).setDepth(300);
+  overlay.fillRect(0, 0, 960, 600).setDepth(400);
   overlay.setInteractive(new Phaser.Geom.Rectangle(0, 0, 960, 600), Phaser.Geom.Rectangle.Contains);
   self.chaosElements = [overlay];
   self.chaosOverlay = overlay;
