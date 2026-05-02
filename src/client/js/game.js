@@ -191,7 +191,7 @@ GameScene.prototype.init = function () {
   this.chaosTimeoutTimer = null;
   // 重置气泡队列全局变量
   this.chaosBubbleTimer = null;
-  bubbleQueue = [];
+  this.chaosBubbleQueue = [];
   bubbleShowing = false;
 };
 
@@ -2166,19 +2166,21 @@ GameScene.prototype._showSwapButtons = function (aiId, btnY) {
 // ================================================================
 // 气泡队列系统 — 防止多个事件同时弹出重叠
 // ================================================================
-var bubbleQueue = [];
+// Q1: 改为实例变量 chaosBubbleQueue 管理
 var BUBBLE_QUEUE_MAX = 3;
 var bubbleShowing = false;
 
-function processBubbleQueue() {
-  if (bubbleQueue.length === 0) {
+// Q1: 改为 GameScene 方法
+GameScene.prototype._processBubbleQueue = function () {
+  if (!this.chaosBubbleQueue) return;
+  if (this.chaosBubbleQueue.length === 0) {
     bubbleShowing = false;
     return;
   }
   bubbleShowing = true;
-  var item = bubbleQueue.shift();
+  var item = this.chaosBubbleQueue.shift();
   item.render();
-}
+};
 
 // ================================================================
 // 出牌 - AI 气泡（调API，不通则回退本地池）
@@ -2437,7 +2439,7 @@ GameScene.prototype._showAiBubble = function (aiId, sceneKey, y) {
       }
       self.chaosBubbleElements = [];
     }
-    processBubbleQueue();
+    self._processBubbleQueue();
   });
   };
 
@@ -2446,9 +2448,9 @@ GameScene.prototype._showAiBubble = function (aiId, sceneKey, y) {
     renderBubble(line);
   };
 
-  bubbleQueue.push({ render: queuedTask });
-  if (bubbleQueue.length > BUBBLE_QUEUE_MAX) bubbleQueue.shift();
-  if (!bubbleShowing) processBubbleQueue();
+  self.chaosBubbleQueue.push({ render: queuedTask });
+  if (self.chaosBubbleQueue.length > BUBBLE_QUEUE_MAX) self.chaosBubbleQueue.shift();
+  if (!bubbleShowing) self._processBubbleQueue();
 };
 // ================================================================
 // 搞事情 - 清除题目区域
