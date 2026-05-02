@@ -416,44 +416,46 @@ function drawTableBackground(scene) {
 function createTopBar(scene) {
   var tb = scene.add.graphics();
   tb.fillStyle(0x000000, 0.35);
-  tb.fillRect(0, 0, 960, 56).setDepth(10);
+  tb.fillRect(0, 0, 1320, 56).setDepth(10);
 
-  scene.roundText = scene.add.text(12, 18, '第 1/10 回合', {
+  scene.roundText = scene.add.text(20, 18, '第 1/10 回合', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '18px', color: '#E8F5E9', fontStyle: 'bold'
   }).setDepth(11);
 
-  // AI1 (王怼怼) - 居左排版
-  var wAvatar = makeAvatarImage(scene, 'avatar_wang', 160, 28, 0x4FC3F7);
-  scene.add.text(195, 12, '王怼怼', {
+  // AI1 (王怼怼) - 向左拉开
+  var ai1X = 240;
+  var wAvatar = makeAvatarImage(scene, 'avatar_wang', ai1X, 28, 0x4FC3F7);
+  scene.add.text(ai1X + 24, 12, '王怼怼', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '17px', color: '#E8F5E9', fontStyle: 'bold'
   }).setDepth(11);
-  scene.ai1Count = scene.add.text(195, 30, '剩余 17 张', {
+  scene.ai1Count = scene.add.text(ai1X + 24, 30, '剩余 17 张', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '30px', color: '#A5D6A7'
   }).setDepth(11).setScale(0.5);
 
-  // AI2 (苏甜甜) - 居右排版
-  var sAvatar = makeAvatarImage(scene, 'avatar_su', 800, 28, 0xFFB74D);
-  scene.add.text(765, 12, '苏甜甜', {
+  // AI2 (苏甜甜) - 向右拉开
+  var ai2X = 1080;
+  var sAvatar = makeAvatarImage(scene, 'avatar_su', ai2X, 28, 0xFFB74D);
+  scene.add.text(ai2X - 24, 12, '苏甜甜', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '17px', color: '#E8F5E9', fontStyle: 'bold'
   }).setOrigin(1, 0).setDepth(11);
-  scene.ai2Count = scene.add.text(765, 30, '剩余 17 张', {
+  scene.ai2Count = scene.add.text(ai2X - 24, 30, '剩余 17 张', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '30px', color: '#A5D6A7'
   }).setOrigin(1, 0).setDepth(11).setScale(0.5);
 
-  // 中央状态文字
-  scene.statusText = scene.add.text(480, 18, '', {
+  // 中央状态文字居中至 660
+  scene.statusText = scene.add.text(660, 18, '', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '18px', color: '#A5D6A7', fontStyle: 'bold'
   }).setOrigin(0.5, 0).setDepth(11);
 
   var sep = scene.add.graphics();
   sep.lineStyle(1.5, 0x66BB6A, 0.3);
-  sep.lineBetween(0, 56, 960, 56);
+  sep.lineBetween(0, 56, 1320, 56);
   sep.setDepth(11);
 }
 
@@ -667,8 +669,8 @@ GameScene.prototype.showBiddingUI = function () {
   var self = this;
   this.hideBiddingUI();
 
-  var cx = 480;
-  var uiY = 280;
+  var cx = 660;
+  var uiY = 260;
   var bids = [
     { label: '\u4E0D\u53EB', value: 0, color: 0xFF6B6B },
     { label: '1\u5206', value: 1, color: 0x4ECDC4 },
@@ -683,9 +685,9 @@ GameScene.prototype.showBiddingUI = function () {
   }).setOrigin(0.5).setDepth(200);
   this.biddingUI.push(promptText);
 
-  var bw = 96, bh = 52, gap = 12;
+  var bw = 110, bh = 60, gap = 20;
   var totalW = bw * 4 + gap * 3;
-  var startX = Math.floor((960 - totalW) / 2);
+  var startX = cx - totalW / 2;
 
   for (var i = 0; i < bids.length; i++) {
     var b = bids[i];
@@ -2652,10 +2654,10 @@ GameScene.prototype._destroyChaos = function () {
 // 功能按钮
 // ================================================================
 function createActionButtons(scene) {
-  var bw = 108, bh = 68, gap = 14;
+  var bw = 100, bh = 60, gap = 20;
   var totalW = bw * 5 + gap * 4;
-  var startX = Math.floor((960 - totalW) / 2);
-  var btnY = 442;
+  var startX = 660 - totalW / 2;
+  var btnY = 420;
 
   var buttons = [
     { label: '\u51FA\u724C', color: 0x4ECDC4, key: 'play' },
@@ -2731,7 +2733,7 @@ GameScene.prototype.renderRoundEndPanel = function (winner) {
   // --- 1. 半透明遮罩（淡入）---
   var overlay = self.add.graphics();
   overlay.fillStyle(0x000000, 0);
-  overlay.fillRect(0, 0, 960, 600).setDepth(400);
+  overlay.fillRect(0, 0, 1320, 600).setDepth(400);
   self.tweens.add({ targets: overlay, alpha: 0.65, duration: 300, ease: 'Linear' });
 
   var panelElements = [overlay];
@@ -2739,10 +2741,10 @@ GameScene.prototype.renderRoundEndPanel = function (winner) {
   // --- 2. 结算卡片 ---
   var cardBg = self.add.graphics();
   cardBg.fillStyle(0x1A1A2E, 0.92);
-  cardBg.fillRoundedRect(200, 60, 560, 480, 12).setDepth(401);
+  cardBg.fillRoundedRect(380, 60, 560, 480, 12).setDepth(401);
   var glowColor = isPlayerWin ? 0xFFD700 : 0xFF5252;
   cardBg.lineStyle(2, glowColor, 0.8);
-  cardBg.strokeRoundedRect(200, 60, 560, 480, 12).setDepth(401);
+  cardBg.strokeRoundedRect(380, 60, 560, 480, 12).setDepth(401);
   panelElements.push(cardBg);
   cardBg.setAlpha(0);
 
@@ -2750,7 +2752,7 @@ GameScene.prototype.renderRoundEndPanel = function (winner) {
   var titleEmoji = isPlayerWin ? '🎉' : (isAI1Win || winner === 'ai2') ? '😅' : '😅';
   var titleText = isPlayerWin ? '你赢了！' : '你输了';
   var titleColor = isPlayerWin ? '#FFD700' : '#FF5252';
-  var title = self.add.text(480, 90, titleEmoji + ' ' + titleText, {
+  var title = self.add.text(660, 90, titleEmoji + ' ' + titleText, {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '28px', fontStyle: 'bold', color: titleColor,
     shadow: { blur: 20, color: titleColor, fill: true }
@@ -2760,7 +2762,7 @@ GameScene.prototype.renderRoundEndPanel = function (winner) {
   // AI获胜副标题
   var aiWinSub = null;
   if (!isPlayerWin && winName) {
-    aiWinSub = self.add.text(480, 120, winName + '获胜！', {
+    aiWinSub = self.add.text(660, 120, winName + '获胜！', {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
       fontSize: '16px', color: '#FF5252'
     }).setOrigin(0.5).setDepth(402).setAlpha(0);
@@ -2807,19 +2809,19 @@ GameScene.prototype.renderRoundEndPanel = function (winner) {
   // --- 5. 得分面板 ---
   var scorePanel = self.add.graphics();
   scorePanel.fillStyle(0x000000, 0.25);
-  scorePanel.fillRoundedRect(240, 142, 480, 260, 8).setDepth(402);
+  scorePanel.fillRoundedRect(420, 142, 480, 260, 8).setDepth(402);
   panelElements.push(scorePanel);
   scorePanel.setAlpha(0);
 
   // 总得分标题
-  var totalLabel = self.add.text(480, 155, '💰 总得分', {
+  var totalLabel = self.add.text(660, 155, '💰 总得分', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '14px', color: '#A5D6A7'
   }).setOrigin(0.5).setDepth(403).setAlpha(0);
   panelElements.push(totalLabel);
 
   // 总得分数字（跳动动画）
-  var totalNum = self.add.text(480, 190, '+' + totalScore, {
+  var totalNum = self.add.text(660, 190, '+' + totalScore, {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '36px', fontStyle: 'bold', color: '#FFD700',
     shadow: { blur: 15, color: '#FFD700', fill: true }
@@ -2829,7 +2831,7 @@ GameScene.prototype.renderRoundEndPanel = function (winner) {
   // 分隔线1
   var div1 = self.add.graphics();
   div1.lineStyle(1, 0xFFFFFF, 0.1);
-  div1.lineBetween(260, 215, 700, 215).setDepth(403);
+  div1.lineBetween(440, 215, 880, 215).setDepth(403);
   panelElements.push(div1);
   div1.setAlpha(0);
 
@@ -2839,7 +2841,7 @@ GameScene.prototype.renderRoundEndPanel = function (winner) {
   for (var ri = 0; ri < detailRows.length; ri++) {
     var dr = detailRows[ri];
     var rowStr = dr.label + ' ' + dr.value + '  ' + dr.icon;
-    var rowTxt = self.add.text(270, rowY, rowStr, {
+    var rowTxt = self.add.text(450, rowY, rowStr, {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
       fontSize: '13px', color: dr.color
     }).setDepth(403).setAlpha(0);
@@ -2851,7 +2853,7 @@ GameScene.prototype.renderRoundEndPanel = function (winner) {
   // 分隔线2
   var div2 = self.add.graphics();
   div2.lineStyle(1, 0xFFFFFF, 0.1);
-  div2.lineBetween(260, 335, 700, 335).setDepth(403);
+  div2.lineBetween(440, 335, 880, 335).setDepth(403);
   panelElements.push(div2);
   div2.setAlpha(0);
 
@@ -2860,7 +2862,7 @@ GameScene.prototype.renderRoundEndPanel = function (winner) {
   var min = Math.floor(elapsed / 60);
   var sec = elapsed % 60;
   var timeStr = '本局用时: ' + min + '分' + sec + '秒';
-  var timeTxt = self.add.text(710, 510, timeStr, {
+  var timeTxt = self.add.text(900, 510, timeStr, {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '10px', color: '#888888'
   }).setDepth(403).setAlpha(0);
@@ -2871,9 +2873,9 @@ GameScene.prototype.renderRoundEndPanel = function (winner) {
   // 再来一局
   var btn1Bg = self.add.graphics();
   btn1Bg.fillStyle(0x4ECDC4, 1);
-  btn1Bg.fillRoundedRect(290, 370, 170, 44, 8).setDepth(403);
-  btn1Bg.setInteractive(new Phaser.Geom.Rectangle(290, 370, 170, 44), Phaser.Geom.Rectangle.Contains);
-  var btn1Txt = self.add.text(375, 392, '🔄 再来一局', {
+  btn1Bg.fillRoundedRect(470, 370, 170, 44, 8).setDepth(403);
+  btn1Bg.setInteractive(new Phaser.Geom.Rectangle(470, 370, 170, 44), Phaser.Geom.Rectangle.Contains);
+  var btn1Txt = self.add.text(555, 392, '🔄 再来一局', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '15px', fontStyle: 'bold', color: '#FFFFFF'
   }).setOrigin(0.5).setDepth(404);
@@ -2885,9 +2887,9 @@ GameScene.prototype.renderRoundEndPanel = function (winner) {
   // 返回首页
   var btn2Bg = self.add.graphics();
   btn2Bg.fillStyle(0x78909C, 1);
-  btn2Bg.fillRoundedRect(500, 370, 170, 44, 8).setDepth(403);
-  btn2Bg.setInteractive(new Phaser.Geom.Rectangle(500, 370, 170, 44), Phaser.Geom.Rectangle.Contains);
-  var btn2Txt = self.add.text(585, 392, '🏠 返回首页', {
+  btn2Bg.fillRoundedRect(680, 370, 170, 44, 8).setDepth(403);
+  btn2Bg.setInteractive(new Phaser.Geom.Rectangle(680, 370, 170, 44), Phaser.Geom.Rectangle.Contains);
+  var btn2Txt = self.add.text(765, 392, '🏠 返回首页', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '15px', fontStyle: 'bold', color: '#FFFFFF'
   }).setOrigin(0.5).setDepth(404);
