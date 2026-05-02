@@ -2140,14 +2140,14 @@ GameScene.prototype._showPlayBubble = function (aiId, event, context) {
     self.playBubbleElements = [];
 
     var isDuidui = (aiId === 'duidui');
-    var y = 55;
+    var y = 96;
     var aiDisplayName = isDuidui ? '王怼怼' : '苏甜甜';
     var avatarX = isDuidui ? 80 : 880;
     var avatarColor = isDuidui ? 0x4FC3F7 : 0xFFB74D;
 
     var bubbleW = Math.min(280, 140 + line.length * 10);
     var bubbleH = 36;
-    var bubbleX = isDuidui ? 90 : 690;
+    var bubbleX = isDuidui ? 110 : (avatarX - bubbleW - 30);
     var bubbleY = y + 10;
     var cornerRadius = isDuidui ? 12 : 4;
     var bubbleBgColor = isDuidui ? 0x1B5E20 : 0x311B92;
