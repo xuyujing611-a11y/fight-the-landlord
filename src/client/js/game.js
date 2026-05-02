@@ -1048,7 +1048,7 @@ GameScene.prototype.doPlayerPass = function () {
   }
   var self = this;
   this.gameState = GAME_STATE.WAITING_AI;
-  this.time.delayedCall(800, function () { self.doAITurn(1); });
+  this.time.delayedCall(800, function () { self.doAITurn(0); });
 };
 
 GameScene.prototype.doHint = function () {
