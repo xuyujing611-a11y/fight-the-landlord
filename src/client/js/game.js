@@ -1989,6 +1989,11 @@ GameScene.prototype._showSwapUI = function (aiId, fbY) {
   for (var bi = 0; bi < numBacks; bi++) {
     var bcx = backStartX + bi * backOverlap + backW / 2;
     var isReal = (bi === realAICardSlot);
+    // 牌背阴影
+    var cardShadow = self.add.graphics();
+    cardShadow.fillStyle(0x000000, 0.3);
+    cardShadow.fillRoundedRect(bcx - backW/2 - 2, 260 - backH/2 - 2, backW + 4, backH + 4, 4).setDepth(351);
+    swapElements.push(cardShadow);
     var backCard = self.add.image(bcx, 260, 'cardBack').setDisplaySize(backW, backH).setDepth(352);
     backCard.setInteractive();
     backCard.setData('isReal', isReal);
@@ -2018,21 +2023,21 @@ GameScene.prototype._showSwapUI = function (aiId, fbY) {
 
   function updateConfirmBtn() {
     if (selectedPlayerCardIdx >= 0 && selectedBackIdx >= 0) {
-      confirmBg.clear().fillStyle(0x4ECDC4, 1).fillRoundedRect(290, 310, 200, 44, 10).setDepth(353);
+      confirmBg.clear().fillStyle(0x4ECDC4, 1).fillRoundedRect(220, 390, 200, 44, 10).setDepth(353);
     } else {
-      confirmBg.clear().fillStyle(0x4ECDC4, 0.5).fillRoundedRect(290, 310, 200, 44, 10).setDepth(353);
+      confirmBg.clear().fillStyle(0x4ECDC4, 0.5).fillRoundedRect(220, 390, 200, 44, 10).setDepth(353);
     }
   }
 
-  // 确认按钮
+  // 确认按钮（左）
   var confirmBg = self.add.graphics();
   confirmBg.fillStyle(0x4ECDC4, 0.5);
-  confirmBg.fillRoundedRect(290, 310, 200, 44, 10).setDepth(353);
-  var confirmTxt = self.add.text(390, 332, '✅ 确认交换', {
+  confirmBg.fillRoundedRect(220, 390, 200, 44, 10).setDepth(353);
+  var confirmTxt = self.add.text(320, 412, '✅ 确认交换', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '15px', color: '#FFFFFF', fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(354);
-  confirmBg.setInteractive(new Phaser.Geom.Rectangle(290, 310, 200, 44), Phaser.Geom.Rectangle.Contains);
+  confirmBg.setInteractive(new Phaser.Geom.Rectangle(220, 390, 200, 44), Phaser.Geom.Rectangle.Contains);
   swapElements.push(confirmBg, confirmTxt);
 
   confirmBg.on('pointerup', function () {
@@ -2126,15 +2131,15 @@ GameScene.prototype._showSwapUI = function (aiId, fbY) {
     }
   });
 
-  // 取消按钮
+  // 取消按钮（右）
   var cancelBg = self.add.graphics();
   cancelBg.fillStyle(0x78909C, 1);
-  cancelBg.fillRoundedRect(290, 360, 200, 44, 10).setDepth(353);
-  var cancelTxt = self.add.text(390, 382, '✖ 跳过交换', {
+  cancelBg.fillRoundedRect(540, 390, 200, 44, 10).setDepth(353);
+  var cancelTxt = self.add.text(640, 412, '✖ 跳过交换', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '15px', color: '#FFFFFF', fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(354);
-  cancelBg.setInteractive(new Phaser.Geom.Rectangle(290, 360, 200, 44), Phaser.Geom.Rectangle.Contains);
+  cancelBg.setInteractive(new Phaser.Geom.Rectangle(540, 390, 200, 44), Phaser.Geom.Rectangle.Contains);
   swapElements.push(cancelBg, cancelTxt);
 
   cancelBg.on('pointerup', function () {

@@ -127,12 +127,12 @@ Z 深度 = 10。上方有浅色提示文字 "出牌区" (x=480, y=218)。
 
 ### 4.4 出牌记录面板
 
-位于右上角，不遮挡手牌:
+位于左上角，不遮挡手牌:
 | 属性 | 值 |
 |------|-----|
-| 背景 | `fillRoundedRect(800, 60, 150, 140, 6)`, 黑色 0.2 |
+| 背景 | `fillRoundedRect(12, 58, 140, 240, 6)`, 黑色 0.2 |
 | 标题 | "出牌", fontSize 9px, color `#81C784` |
-| 内容区 | (808, 76), 135px 自动换行, fontSize 9px, color `#C8E6C9` |
+| 内容区 | (20, 74), 124px 自动换行, fontSize 9px, color `#C8E6C9` |
 | 最大记录 | 最近 8 条, 显示最近 6 条 |
 
 ---
@@ -156,40 +156,29 @@ fillRoundedRect(20, 300, 920, 115, 10)
 |------|-----|
 | 牌宽度 (cw) | **56 px** |
 | 牌高度 (ch) | **80 px** |
+| 牌间距 (gap) | **4 px** — 均匀展开，无重叠 |
 | Z 深度 | 110 (高优先级确保在手牌区上方) |
 
-### 5.3 重叠量公式 (Overlap)
+### 5.3 排列公式 (均匀展开)
 
 ```javascript
-var overlap = n > 6 ? Math.min(33, (700 - cw) / (n - 1)) : 33;
-// cw = 56, 所以 overlap ∈ [33, min(33, 700/(n-1))]
+var n = hand.length, cw = 56, ch = 80, gap = 4;
+var totalWidth = cw * n + gap * (n - 1);
+var startX = 180 + (700 - totalWidth) / 2;
+var baseY = 345;
+
+for (var ii = 0; ii < n; ii++) {
+  var cx = startX + ii * (cw + gap) + cw / 2;
+  var cy = baseY;  // 直线排列，无弧线
+}
 ```
 
-- 当 n ≤ 6: overlap = 33
-- 当 n > 6: overlap = min(33, (700 - 56) / (n - 1))
-
-总宽度: `totalWidth = cw + (n - 1) * overlap`
-起始 X: `startX = 180 + (700 - totalWidth) / 2`
-基准 Y: `baseY = 345`
-
-### 5.4 弧线偏移公式
-
-```javascript
-var arcOffset = Math.pow((i / (n - 1)) - 0.5, 2) * 36;
-var cy = baseY - arcOffset;
-```
-
-这是以 `baseY` 为底边的**上凸弧线**：
-- 中间牌 (i ≈ n/2): `(0.5 - 0.5)² * 36 = 0`，偏移为 0，位置最高
-- 两端牌 (i = 0 或 i = n-1): `(0 - 0.5)² * 36 = 0.25 * 36 = 9`，偏移 9px 向下
-- 弧线高度差最大为 **9px**
-
-### 5.5 选中/取消状态
+### 5.4 选中/取消状态
 
 | 动作 | 效果 |
 |------|------|
-| 选中（点击未选中的牌） | `this.y -= 16`（牌上移 16px） |
-| 取消选中（点击已选中的牌） | `this.y += 16`（牌回到原位） |
+| 选中（点击未选中的牌） | `scale(1.15)` 放大突出 |
+| 取消选中（点击已选中的牌） | `scale(1.0)` 恢复原尺寸 |
 | 选中的牌集合 | 存储在 `selectedCards`（索引数组） |
 | 点击限制 | 仅在 `PLAYER_TURN` 状态可点击 |
 | 非回合点击提示 | Toast "现在不是你的出牌阶段" |
