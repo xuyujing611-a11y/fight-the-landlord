@@ -2857,21 +2857,23 @@ GameScene.prototype.renderRoundEndPanel = function (winner) {
 // 出牌记录区域
 // ================================================================
 function createPlayHistoryArea(scene) {
-  // 紧凑的历史记录：右上角小面板，不遮挡手牌
+  // A3: 扩大历史面板，移到左侧显眼位置
   var bg = scene.add.graphics();
-  bg.fillStyle(0x000000, 0.2);
-  bg.fillRoundedRect(800, 60, 150, 140, 6).setDepth(200);
+  bg.fillStyle(0x000000, 0.35);
+  bg.fillRoundedRect(12, 58, 140, 240, 8).setDepth(200);
+  bg.lineStyle(1, 0x66BB6A, 0.3);
+  bg.strokeRoundedRect(12, 58, 140, 240, 8).setDepth(200);
 
-  scene.add.text(808, 65, '出牌', {
+  scene.add.text(18, 62, '📋 出牌记录', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '9px', color: '#81C784'
+    fontSize: '10px', color: '#81C784', fontStyle: 'bold'
   }).setDepth(201);
 
-  scene.playHistoryText = scene.add.text(808, 76, '', {
+  scene.playHistoryText = scene.add.text(18, 76, '', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '9px', color: '#C8E6C9',
-    lineSpacing: 3,
-    wordWrap: { width: 135 }
+    fontSize: '10px', color: '#C8E6C9',
+    lineSpacing: 4,
+    wordWrap: { width: 126 }
   }).setDepth(201);
 }
 
