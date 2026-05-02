@@ -600,7 +600,7 @@ GameScene.prototype.showBiddingUI = function () {
   if (state && state.handStrength !== undefined) {
     var strength = state.handStrength;
     var label = strength >= 20 ? '\u624B\u724C\u5F88\u5F3A' : (strength >= 14 ? '\u624B\u724C\u4E0D\u9519' : (strength >= 9 ? '\u624B\u724C\u4E00\u822C' : '\u624B\u724C\u8F83\u5F31'));
-    var infoText = this.add.text(cx, 733, '\u2605 ' + label + ' (\u5F3A\u5EA6\u5206: ' + strength + ')', {
+    var infoText = this.add.text(cx, 260, '\u2605 ' + label + ' (\u5F3A\u5EA6\u5206: ' + strength + ')', {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
       fontSize: '10px', color: '#A5D6A7'
     }).setOrigin(0.5).setDepth(200);
@@ -1287,6 +1287,21 @@ GameScene.prototype.displayPlay = function (cards, player) {
     var pkey = getCardImageKey(cards[pi]);
     var pimg = this.add.image(pcx, pos.y, pkey).setDisplaySize(pos.w, pos.h).setDepth(12);
     arr.push(pimg);
+    // 牌面叠加文字
+    var pc = cards[pi];
+    var rankNames = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'];
+    var suitSymbols = { spade:'♠', heart:'♥', club:'♣', diamond:'♦' };
+    var cardLabel = pc.suit === 'joker'
+      ? (Doudizhu.RANK_NAME_MAP[pc.rank] || 'Joker')
+      : (rankNames[pc.rank] || '') + (suitSymbols[pc.suit] || '');
+    var txtOverlay = this.add.text(pcx - pos.w/2 + 2, pos.y - pos.h/2 + 2, cardLabel, {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: (player === 'player' ? '11px' : '9px'),
+      color: '#FFFFFF',
+      stroke: '#000000',
+      strokeThickness: 2
+    }).setOrigin(0, 0).setDepth(13);
+    arr.push(txtOverlay);
   }
 };
 GameScene.prototype.doAction = function () {
@@ -2033,7 +2048,7 @@ function showToast(scene, message) {
   var toastBg = scene.add.graphics();
   toastBg.fillStyle(0x000000, 0.7);
   toastBg.fillRoundedRect(cx - 100, 206, 200, 38, 10).setDepth(200);
-  var toastText = scene.add.text(cx, 299, message, {
+  var toastText = scene.add.text(cx, 225, message, {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '13px', color: '#FFFFFF'
   }).setOrigin(0.5).setDepth(201);
@@ -2049,14 +2064,14 @@ function showToast(scene, message) {
 function createPlayHistoryArea(scene) {
   var bg = scene.add.graphics();
   bg.fillStyle(0x000000, 0.25);
-  bg.fillRoundedRect(12, 500, 936, 92, 6).setDepth(200);
+  bg.fillRoundedRect(12, 390, 936, 92, 6).setDepth(200);
 
-  scene.add.text(20, 510, '最近出牌', {
+  scene.add.text(20, 400, '最近出牌', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '10px', color: '#81C784'
   }).setDepth(201);
 
-  scene.playHistoryText = scene.add.text(20, 516, '', {
+  scene.playHistoryText = scene.add.text(20, 406, '', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '11px', color: '#C8E6C9',
     lineSpacing: 2,

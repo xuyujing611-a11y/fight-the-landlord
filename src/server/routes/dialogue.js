@@ -50,6 +50,22 @@ const DEFAULT_EMOTION = {
   tiantian: { play: 'happy', pass: 'happy', bomb: 'happy', win: 'happy', lose: 'sad', taunt: 'taunt' }
 };
 
+/**
+ * 根据事件类型获取推荐的显示延迟（毫秒）
+ * 前端用此值控制气泡展示时长
+ */
+function getDisplayDelay(event) {
+  const delays = {
+    bomb: 5000,
+    taunt: 5000,
+    win: 6000,
+    lose: 5000,
+    play: 4000,
+    pass: 3000
+  };
+  return delays[event] || 4000;
+}
+
 // ============================================================
 // POST /api/ai/dialogue
 // ============================================================
@@ -67,6 +83,8 @@ router.post('/', async (req, res) => {
     if (!validEvents.includes(event)) {
       return res.status(400).json({ error: `event must be one of: ${validEvents.join(', ')}` });
     }
+
+    const displayDelay = getDisplayDelay(event);
 
     // 尝试用 LLM 生成
     if (process.env.LLM_API_KEY) {
@@ -114,7 +132,8 @@ router.post('/', async (req, res) => {
           return res.json({
             line,
             emotion: DEFAULT_EMOTION[aiId][event] || 'happy',
-            source: 'ai'
+            source: 'ai',
+            displayDelay
           });
         }
       } catch (e) {
@@ -128,7 +147,8 @@ router.post('/', async (req, res) => {
     res.json({
       line,
       emotion: DEFAULT_EMOTION[aiId][event] || 'happy',
-      source: 'fallback'
+      source: 'fallback',
+      displayDelay
     });
 
   } catch (err) {
@@ -140,7 +160,8 @@ router.post('/', async (req, res) => {
     res.json({
       line: fallbackPool[Math.floor(Math.random() * fallbackPool.length)],
       emotion: DEFAULT_EMOTION[aiId][evt] || 'happy',
-      source: 'error'
+      source: 'error',
+      displayDelay: getDisplayDelay(evt)
     });
   }
 });
