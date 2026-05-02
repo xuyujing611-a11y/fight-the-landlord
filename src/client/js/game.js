@@ -1702,12 +1702,20 @@ GameScene.prototype._handleChaosTimeout = function (aiId) {
   var self = this;
   self.chaosQuestionAnswered = true;
   self._clearQuestionArea();
-  // 显示超时反馈
-  var fbIcon = self.add.text(480, 103, '⏱ 超时了！AI趁机拿走了你一张牌', {
-    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '17px', color: '#FF5252', fontStyle: 'bold'
-  }).setOrigin(0.5).setDepth(305);
-  self.chaosElements.push(fbIcon);
+  // 显示超时反馈：根据手牌情况显示不同消息
+  if (!self.playerHand || self.playerHand.length === 0) {
+    var fbIcon = self.add.text(480, 103, '⏱ 超时了！', {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '17px', color: '#FF5252', fontStyle: 'bold'
+    }).setOrigin(0.5).setDepth(305);
+    self.chaosElements.push(fbIcon);
+  } else {
+    var fbIcon = self.add.text(480, 103, '⏱ 超时了！AI趁机拿走了你一张牌', {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '17px', color: '#FF5252', fontStyle: 'bold'
+    }).setOrigin(0.5).setDepth(305);
+    self.chaosElements.push(fbIcon);
+  }
   // 超时 = 答错，直接走答错换牌
   self._showSwapResult(aiId, false, 180);
 };
@@ -1720,13 +1728,22 @@ GameScene.prototype._handleChaosTimeout = function (aiId) {
 // ================================================================
 GameScene.prototype._showSwapResult = function (aiId, isCorrect, fbY) {
   var self = this;
-  if (!self.playerHand || self.playerHand.length === 0) return;
-
   var aiHand = aiId === 'duidui' ? self.ai1Hand : self.ai2Hand;
   var aiName = aiId === 'duidui' ? '王怼怼' : '苏甜甜';
 
+  // 答错后玩家手牌为空：不进行AI拿牌，直接显示提示和底部按钮（修复卡UI问题）
+  if (!self.playerHand || self.playerHand.length === 0) {
+    var emptyMsg = self.add.text(480, 155, '你的手牌为空，AI无牌可拿', {
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '14px', color: '#FFB74D', fontStyle: 'bold',
+      stroke: '#000000', strokeThickness: 2
+    }).setOrigin(0.5).setDepth(310);
+    self.chaosElements.push(emptyMsg);
+    self._showSwapButtons(aiId, Math.max(fbY + 60, 251));
+    return;
+  }
+
   // 答错：AI从玩家手牌随机拿一张
-  if (self.playerHand.length === 0) return;
   var idx = Math.floor(Math.random() * self.playerHand.length);
   var lostCard = self.playerHand[idx];
 
