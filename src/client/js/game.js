@@ -1803,6 +1803,7 @@ GameScene.prototype._showSwapResult = function (aiId, isCorrect, fbY) {
     var playerCardX = startX + idx * overlap + cw / 2;
 
     // AI目标位置
+    // Q4: AI目标坐标（基于顶栏头像位置）
     var targetX = aiId === 'duidui' ? 80 : 880;
     var targetY = aiId === 'duidui' ? 160 : 200;
 
@@ -1920,6 +1921,13 @@ GameScene.prototype._showSwapUI = function (aiId, fbY) {
         if (selectedPlayerCardEl && selectedPlayerCardEl !== card) {
           selectedPlayerCardEl.setDisplaySize(myCardW, myCardH).setDepth(352);
         }
+        if (selectedPlayerCardEl === card) {
+          // Q3: 已选中→取消
+          card.setDisplaySize(myCardW, myCardH).setDepth(352);
+          selectedPlayerCardIdx = -1;
+          selectedPlayerCardEl = null;
+          return;
+        }
         selectedPlayerCardIdx = idx;
         selectedPlayerCardEl = card;
         card.setDisplaySize(myCardW + 6, myCardH + 6).setDepth(355);
@@ -1958,6 +1966,14 @@ GameScene.prototype._showSwapUI = function (aiId, fbY) {
       cardEl.on('pointerdown', function () {
         if (selectedBackEl && selectedBackEl !== cardEl) {
           selectedBackEl.setDisplaySize(backW, backH).setDepth(352);
+        }
+        if (selectedBackEl === cardEl) {
+          // Q3: 已选中→取消
+          cardEl.setDisplaySize(backW, backH).setDepth(352);
+          selectedBackIdx = -1;
+          selectedBackEl = null;
+          updateConfirmBtn();
+          return;
         }
         selectedBackIdx = bIdx;
         selectedBackEl = cardEl;
@@ -2511,6 +2527,8 @@ GameScene.prototype._destroyChaos = function () {
     this.chaosBubbleTimer.remove();
     this.chaosBubbleTimer = null;
   }
+  // Q2: 346270205347251272346260224346263241351230237345210227
+  this.chaosBubbleQueue = [];
 
   // \u6062\u590D\u51FA\u724C\u97F3\u6548
   SoundManager.resumeAll();
