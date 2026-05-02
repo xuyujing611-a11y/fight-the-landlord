@@ -22,9 +22,14 @@ var GameConfig = {
   width: 960,
   height: 600,
   parent: 'game-container',
-  backgroundColor: '#1B5E20',
+  backgroundColor: '#0D3B0F',
   dom: { createContainer: true },
-  scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+  // 开启高清屏支持，解决分辨率不清晰的问题
+  resolution: window.devicePixelRatio || 1,
+  scale: {
+    mode: Phaser.Scale.FIT,
+    autoCenter: Phaser.Scale.CENTER_BOTH
+  },
   audio: {
     disableWebAudio: false,
     noAudio: false
@@ -255,28 +260,8 @@ GameScene.prototype.create = function () {
   }).setOrigin(1, 0.5).setInteractive().setDepth(200);
 
   function zoomCanvasToFill() {
-    var container = document.getElementById('game-container');
-    if (!container) return;
-    if (document.fullscreenElement || document.webkitFullscreenElement) {
-      // 全屏：容器撑满全屏，Phaser.FILL缩放填满（允许左右裁剪，不裁顶部/底部按钮区域）
-      container.style.width = window.innerWidth + 'px';
-      container.style.height = window.innerHeight + 'px';
-      container.style.position = 'fixed';
-      container.style.top = '0';
-      container.style.left = '0';
-      // 全屏时改为FILL模式填满屏幕（避免两侧绿边）
-      game.scale.mode = Phaser.Scale.FILL;
-      if (game && game.scale) game.scale.refresh();
-    } else {
-      // 退出全屏：恢复原始样式和FIT模式
-      container.style.width = '';
-      container.style.height = '';
-      container.style.position = '';
-      container.style.top = '';
-      container.style.left = '';
-      game.scale.mode = Phaser.Scale.FIT;
-      if (game && game.scale) game.scale.refresh();
-    }
+    // 坚决删掉 FILL 模式，依靠 Phaser.Scale.FIT + HTML背景色的延伸来适配长屏
+    if (game && game.scale) { game.scale.refresh(); }
   }
 
   fsBtn.on('pointerdown', function () {
@@ -316,34 +301,26 @@ GameScene.prototype.create = function () {
 function drawTableBackground(scene) {
   var W = 960, H = 600;
   var bg = scene.add.graphics();
-  bg.fillGradientStyle(0x1B5E20, 0x1B5E20, 0x0D3B0F, 0x0D3B0F, 1);
+  // 更平滑高级的中心径向渐变感（通过叠加半透明图形模拟）
+  bg.fillGradientStyle(0x2E7D32, 0x2E7D32, 0x0D3B0F, 0x0D3B0F, 1);
   bg.fillRect(0, 0, W, H);
+  // 桌面高光（模拟吊灯打在牌桌上的质感）
   var glow = scene.add.graphics();
-  glow.fillStyle(0x2E7D32, 0.15);
-  glow.fillEllipse(W / 2, H / 2 - 40, 320, 354);
-  glow.fillStyle(0x388E3C, 0.1);
-  glow.fillEllipse(W / 2, H / 2 - 40, 240, 360);
+  glow.fillStyle(0x4CAF50, 0.12);
+  glow.fillEllipse(W / 2, H / 2 - 40, 680, 420);
+  glow.fillStyle(0x66BB6A, 0.08);
+  glow.fillEllipse(W / 2, H / 2 - 40, 450, 280);
+  // 牌桌内嵌金线边框，提升高级感
   var border = scene.add.graphics();
-  border.lineStyle(2, 0x4CAF50, 0.3);
-  border.strokeRoundedRect(13, 52, W - 26, H - 130, 9);
+  border.lineStyle(2, 0xFFD700, 0.15); // 微弱的金色描边
+  border.strokeRoundedRect(16, 56, W - 32, H - 136, 12);
+  // 弱化原有的出牌框提示线
   var diamond = scene.add.graphics();
-  diamond.lineStyle(1, 0x66BB6A, 0.15);
+  diamond.lineStyle(1, 0x66BB6A, 0.08);
   var cx = W / 2, cy = H / 2 - 40;
   diamond.strokeRect(cx - 80, cy - 83, 118, 166);
   diamond.strokeRect(cx - 48, cy - 59, 96, 118);
-
-  // Decorative table corners
-  var cPos = [[35, 63], [W-35, 63], [35, H-57], [W-35, H-57]];
-  for (var ci = 0; ci < cPos.length; ci++) {
-    var dx = cPos[ci][0], dy = cPos[ci][1];
-    diamond.lineStyle(1, 0x4CAF50, 0.18);
-    diamond.strokeCircle(dx, dy, 9);
-    diamond.strokeCircle(dx, dy, 10);
-    diamond.strokeCircle(dx, dy, 5);
-  }
-
-  // Center decorative circles
-  diamond.lineStyle(1, 0x66BB6A, 0.08);
+  // 中心弱化装饰
   diamond.strokeCircle(cx, cy - 10, 67);
   diamond.strokeCircle(cx, cy - 10, 93);
 }

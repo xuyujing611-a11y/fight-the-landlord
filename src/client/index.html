@@ -2,42 +2,44 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <!-- 核心修复：viewport-fit=cover 适配刘海屏，禁止缩放 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="screen-orientation" content="landscape">
+  <meta name="apple-mobile-web-app-capable" content="yes">
   <title>AI斗地主</title>
   <link rel="icon" type="image/x-icon" href="favicon.ico">
   <style>
-    /* 全局重置 + 竖屏锁定 */
     * { margin: 0; padding: 0; box-sizing: border-box; }
+    /* 背景色深绿色，完美融入长屏，告别黑边 */
     html, body {
       width: 100%; height: 100%;
       background: #0D3B0F;
       overflow: hidden;
-      font-family: "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+      font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
       -webkit-tap-highlight-color: transparent;
     }
     #game-container {
       width: 100%; height: 100%;
       display: flex; align-items: center; justify-content: center;
+    }
+    /* 强制横屏提示 UI */
+    #orientation-lock {
+      display: none;
+      position: fixed; top: 0; left: 0;
+      width: 100%; height: 100%;
       background: #1B5E20;
-      overflow: hidden;
-      /* fill viewport, let Phaser handle scaling */
+      z-index: 99999;
+      color: white;
+      justify-content: center; align-items: center;
+      flex-direction: column;
     }
-    #game-container canvas {
-      display: block;
-      width: 100% !important;
-      height: 100% !important;
+    .phone-icon { font-size: 48px; margin-bottom: 20px; animation: rotatePhone 1.5s ease-in-out infinite; }
+    @keyframes rotatePhone { 0% { transform: rotate(0deg); } 100% { transform: rotate(-90deg); } }
+    /* 竖屏时隐藏游戏显示横屏提示 */
+    @media screen and (orientation: portrait) {
+      #game-container { display: none !important; }
+      #orientation-lock { display: flex !important; }
     }
-    #game-container:-webkit-full-screen {
-      width: 100vw !important;
-      height: 100vh !important;
-    }
-    #game-container:fullscreen {
-      width: 100vw !important;
-      height: 100vh !important;
-    }
-
     /* 加载画面 */
     #loading-screen {
       position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -67,6 +69,11 @@
   </style>
 </head>
 <body>
+  <!-- 竖屏拦截器 -->
+  <div id="orientation-lock">
+    <div class="phone-icon">📱</div>
+    <h2 style="letter-spacing: 2px;">为了最佳体验，请将手机横屏游玩</h2>
+  </div>
 
   <!-- 加载画面 -->
   <div id="loading-screen">
@@ -80,20 +87,11 @@
 
   <!-- Phaser 3 CDN -->
   <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
-
-  <!-- CardEngine.js -->
   <script src="js/CardEngine.js"></script>
-
-  <!-- API 客户端 -->
   <script src="js/apiClient.js"></script>
-
-  <!-- 游戏主逻辑 -->
   <script src="js/game.js"></script>
-
   <script>
-    // 监听游戏启动后隐藏加载画面
     window.addEventListener('load', function () {
-      // Phaser 需要几帧初始化，延迟隐藏
       setTimeout(function () {
         var ls = document.getElementById('loading-screen');
         if (ls) ls.classList.add('hidden');
