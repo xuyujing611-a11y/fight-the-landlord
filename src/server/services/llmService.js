@@ -76,6 +76,12 @@ function safeParseJson(str) {
 }
 
 /** 通用 HTTP POST 请求 */
+// 熔断器
+let llmFailCount = 0;
+let llmLastFailTime = 0;
+const LLM_CIRCUIT_THRESHOLD = 3;
+const LLM_CIRCUIT_COOLDOWN = 30000; // 30秒
+
 function httpPost(url, headers, body) {
   return new Promise((resolve, reject) => {
     const bodyStr = JSON.stringify(body);
@@ -86,7 +92,7 @@ function httpPost(url, headers, body) {
       path: urlObj.pathname + urlObj.search,
       method: 'POST',
       headers: { ...headers, 'Content-Length': Buffer.byteLength(bodyStr) },
-      timeout: 20000
+      timeout: 8000
     };
     const req = https.request(options, (res) => {
       const chunks = [];
@@ -116,6 +122,15 @@ function httpPost(url, headers, body) {
  */
 async function callLLM(systemPrompt, userPrompt, opts) {
   const providerName = process.env.LLM_PROVIDER || 'deepseek';
+
+  // 熔断检查
+  if (llmFailCount >= LLM_CIRCUIT_THRESHOLD) {
+    if (Date.now() - llmLastFailTime < LLM_CIRCUIT_COOLDOWN) {
+      throw new Error('LLM circuit breaker open, cooling down');
+    }
+    llmFailCount = 0;
+  }
+
   const apiKey = process.env.LLM_API_KEY;
   if (!apiKey) throw new Error('LLM_API_KEY not set');
 
@@ -132,8 +147,15 @@ async function callLLM(systemPrompt, userPrompt, opts) {
     maxTokens: opts?.maxTokens ?? 1000
   };
   const body = provider.parseBody(model, messages, safeOpts);
-  const raw = await httpPost(provider.baseUrl, provider.headers(apiKey), body);
-  return provider.parseResponse(raw);
+  try {
+    const raw = await httpPost(provider.baseUrl, provider.headers(apiKey), body);
+    llmFailCount = 0; // 成功时重置
+    return provider.parseResponse(raw);
+  } catch (e) {
+    llmFailCount++;
+    llmLastFailTime = Date.now();
+    throw e;
+  }
 }
 
 /**
@@ -152,6 +174,13 @@ async function callLLMForPlay(hand, lastPlay, difficulty) {
     `上家出的牌: ${lastStr}`,
     `难度: ${difficulty || 'normal'}`,
     '',
+    '=== 大师级策略指引 ===',
+    '1. 手牌审视：先分析手牌结构（单张、对子、三张、顺子、炸弹），评估整体牌力',
+    '2. 先手原则：如果你是先手（lastPlay=null），优先出中等牌力的牌，保留炸弹/大牌控场',
+    '3. 压制策略：上家出牌时，能用刚好大的牌压就不浪费更大牌；判断能否控场再决定是否压制',
+    '4. 底牌控制：如果你是地主，考虑3张底牌的优势；如果你是农民，配合队友压制地主',
+    '5. CoT推理：先分析局面在脑中推理，再给出最终出牌',
+    '',
     '请返回以下 JSON 格式（不要多余文字）：',
     '{',
     '  "cards": [{ "suit": "spade", "rank": 0 }],',
@@ -162,7 +191,7 @@ async function callLLMForPlay(hand, lastPlay, difficulty) {
     return await callLLM(
       '你是斗地主AI出牌专家。请根据手牌和局面给出最优出牌建议。仅返回JSON。',
       prompt,
-      { temperature: 0.7, maxTokens: 500 }
+      { temperature: 0.6, maxTokens: 600 }
     );
   } catch (e) {
     console.warn('LLM call failed:', e.message);

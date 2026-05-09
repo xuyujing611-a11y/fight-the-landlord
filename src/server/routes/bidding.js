@@ -20,6 +20,8 @@ const { Doudizhu } = cardUtils;
 
 // 叫分状态 — 用 Map 按 sessionId/playerId 存储，避免多人冲突
 const biddingStates = new Map();
+const biddingTimers = new Map();
+const BIDDING_TTL = 5 * 60 * 1000;
 
 function getBiddingState(id) {
   return biddingStates.get(id) || null;
@@ -27,15 +29,29 @@ function getBiddingState(id) {
 
 function setBiddingState(id, state) {
   if (biddingStates.size > 100) {
-    // 防止内存泄漏：清理旧 session
     const oldest = biddingStates.keys().next().value;
     biddingStates.delete(oldest);
+    if (biddingTimers.has(oldest)) { clearTimeout(biddingTimers.get(oldest)); biddingTimers.delete(oldest); }
   }
+  // 清除旧定时器
+  if (biddingTimers.has(id)) { clearTimeout(biddingTimers.get(id)); }
+  // 5分钟自动过期
+  biddingTimers.set(id, setTimeout(function() {
+    console.log('[Bidding] TTL expired for', id);
+    resetBidding(id);
+  }, BIDDING_TTL));
   biddingStates.set(id, state);
 }
 
 function resetBidding(id) {
-  if (id) biddingStates.delete(id);
+  if (id) {
+    if (biddingTimers.has(id)) { clearTimeout(biddingTimers.get(id)); biddingTimers.delete(id); }
+    biddingStates.delete(id);
+  } else {
+    biddingTimers.forEach(function(t) { clearTimeout(t); });
+    biddingTimers.clear();
+    biddingStates.clear();
+  }
 }
 
 /** 规范化单张牌：确保王牌的suit正确 */
@@ -127,7 +143,7 @@ router.post('/start', (req, res) => {
     }
 
     // 随机选定先叫的玩家
-    const firstBidder = Math.floor(Math.random() * 3);
+    const firstBidder = 0;
 
     // 叫分顺序: 从firstBidder开始，顺时针
     const order = [];

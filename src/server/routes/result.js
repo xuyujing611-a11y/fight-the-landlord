@@ -50,10 +50,21 @@ router.post('/', (req, res) => {
     const isPlayerWin = winner === 'player';
     const result = isPlayerWin ? 'win' : 'lose';
     const winnerName = WINNER_NAMES[winner] || '未知';
-    const bomb = Math.max(bombMultiplier || 1, 1);
-    const chaos = chaosScore || 0;
-    const remain = remainingCards || 0;
-    const playerCards = playerHandCards || 0;
+
+    // 结果边界校验
+    const safeBaseScore = Math.min(Math.max(baseScore || 0, 0), 30);
+    const safeBombMultiplier = Math.min(Math.max(bombMultiplier || 1, 1), 8);
+    const safeChaosScore = Math.min(Math.max(chaosScore || 0, 0), 20);
+    const safeRemainingCards = Math.min(Math.max(remainingCards || 0, 0), 20);
+    const safePlayerHandCards = Math.min(Math.max(playerHandCards || 0, 0), 20);
+    if (baseScore > 30 || bombMultiplier > 8 || chaosScore > 20 || remainingCards > 20 || playerHandCards > 20) {
+      console.warn('[Cheat Alert] Suspicious score values from IP:', req.ip, JSON.stringify(req.body));
+    }
+
+    const bomb = Math.max(safeBombMultiplier, 1);
+    const chaos = safeChaosScore;
+    const remain = safeRemainingCards;
+    const playerCards = safePlayerHandCards;
 
     // ── 分数计算 ──────────────────────────────────────
     //

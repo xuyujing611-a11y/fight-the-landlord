@@ -12,11 +12,38 @@
 
 const express = require('express');
 const fs = require('fs');
+const fsPromises = fs.promises;
 const path = require('path');
 const router = express.Router();
 
 const DATA_FILE = path.resolve(__dirname, '../data/wrongbook.json');
 const MAX_RECORDS = 500;
+
+// 写入锁 + 防抖
+let isWriting = false;
+let pendingWrite = null;
+
+async function flushWrite() {
+  if (isWriting) return;
+  isWriting = true;
+  while (pendingWrite) {
+    const data = pendingWrite;
+    pendingWrite = null;
+    try {
+      const dir = path.dirname(DATA_FILE);
+      await fsPromises.mkdir(dir, { recursive: true });
+      await fsPromises.writeFile(DATA_FILE, JSON.stringify(data), 'utf8');
+    } catch (e) {
+      console.error('[WrongBook] Save error:', e.message);
+    }
+  }
+  isWriting = false;
+}
+
+function scheduleSave(records) {
+  pendingWrite = records.slice();
+  flushWrite();
+}
 
 /** 从磁盘加载错题本 */
 function loadWrongBook() {
@@ -27,22 +54,9 @@ function loadWrongBook() {
       if (Array.isArray(data)) return data;
     }
   } catch (e) {
-    console.warn('[WrongBook] Failed to load data file, starting fresh:', e.message);
+    console.warn('[WrongBook] Failed to load, starting fresh:', e.message);
   }
   return [];
-}
-
-/** 写入磁盘 */
-function saveWrongBook(records) {
-  try {
-    const dir = path.dirname(DATA_FILE);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    fs.writeFileSync(DATA_FILE, JSON.stringify(records), 'utf8');
-  } catch (e) {
-    console.error('[WrongBook] Failed to save data file:', e.message);
-  }
 }
 
 // 启动时加载
@@ -63,7 +77,7 @@ const WRONG_BOOK = loadWrongBook();
 // ============================================================
 router.post('/record', (req, res) => {
   try {
-    const { questionType, question, userAnswer, correctAnswer, difficulty, cards, playerId } = req.body;
+    const { questionType, question, userAnswer, correctAnswer, difficulty, cards, playerId, options } = req.body;
 
     // 参数校验
     if (!questionType || !question || userAnswer === undefined || correctAnswer === undefined) {
@@ -76,6 +90,7 @@ router.post('/record', (req, res) => {
       id: `wrong_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       questionType,
       question,
+      options: options || null,
       userAnswer,
       correctAnswer,
       difficulty: difficulty || 'normal',
@@ -96,7 +111,7 @@ router.post('/record', (req, res) => {
       }
 
       // 持久化到磁盘
-      saveWrongBook(WRONG_BOOK);
+      scheduleSave(WRONG_BOOK);
     }
 
     res.json({
@@ -204,13 +219,13 @@ router.post('/clear', (req, res) => {
         WRONG_BOOK.splice(i, 1);
       }
     }
-    saveWrongBook(WRONG_BOOK);
+    scheduleSave(WRONG_BOOK);
     res.json({ cleared: before - WRONG_BOOK.length, message: `Cleared records for ${playerId}` });
   } else {
     // 全量清空
     const before = WRONG_BOOK.length;
     WRONG_BOOK.length = 0;
-    saveWrongBook(WRONG_BOOK);
+    scheduleSave(WRONG_BOOK);
     res.json({ cleared: before, message: 'All wrong book records cleared' });
   }
 });

@@ -77,14 +77,23 @@ var SoundManager = {
     try {
       var name = this.bgmNames[this.bgmIndex];
       var bgm = this.scene.sound.add(name, { loop: true, volume: 0.25 });
-      bgm.play();
       this.bgmPlaying = true;
       this.currentBgm = bgm;
+      if (this.scene.sound.locked) {
+        this.scene.sound.once('unlocked', function() { bgm.play(); });
+      } else {
+        bgm.play();
+      }
     } catch (e) {
-      console.warn('BGM未找到，已跳过');
+      console.warn('BGM出错:', e.message);
     }
   },
   switchBGM: function() {
+    // 安全判断：如果BGM文件尚未加载，跳过
+    if (!this.scene || !this.scene.cache.audio.exists(this.bgmNames[this.bgmIndex])) {
+      if (this.scene && this.scene.showToast) this.scene.showToast(this.scene, 'BGM加载中...');
+      return '加载中';
+    }
     // 停止当前BGM
     if (this.currentBgm) {
       this.currentBgm.stop();
@@ -156,6 +165,27 @@ var SoundManager = {
     try {
       this.scene.sound.play(key, { volume: 0.8 });
     } catch(e) { /* 语音文件没加载到就静默跳过 */ }
+  },
+  playTypeVoice: function(type, aiId) {
+    if (!this.scene || !this._ensureReady()) return;
+    var voiceMap = {
+      SINGLE: 'voice_' + aiId + '_single',
+      PAIR: 'voice_' + aiId + '_pair',
+      TRIPLE: 'voice_duidui_triple',
+      TRIPLE_PLUS_ONE: 'voice_duidui_triple_one',
+      TRIPLE_PLUS_TWO: 'voice_duidui_triple_two',
+      STRAIGHT: 'voice_' + aiId + '_straight',
+      CONSECUTIVE_PAIRS: 'voice_duidui_consecutive_pairs',
+      AIRPLANE: 'voice_' + aiId + '_airplane',
+      AIRPLANE_PLUS_SINGLES: 'voice_duidui_airplane_plus',
+      AIRPLANE_PLUS_PAIRS: 'voice_duidui_airplane_plus',
+      FOUR_PLUS_TWO: 'voice_duidui_four_two',
+      FOUR_PLUS_TWO_PAIRS: 'voice_duidui_four_two',
+      BOMB: 'voice_duidui_bomb',
+      ROCKET: 'voice_duidui_rocket'
+    };
+    var key = voiceMap[type];
+    if (key) this.playVoice(key);
   }
 };
 
@@ -229,18 +259,36 @@ GameScene.prototype.init = function () {
   this.gameStartTime = Date.now();
   this.totalBombs = 0;
   this.rocketCount = 0;
+  this.hasDoneChaosThisTurn = false;
   this.chaosScore = 0;
   this.chaosTimeoutTimer = null;
+  this.chaosPrefetchCache = {};
   // 重置气泡队列全局变量
   this.chaosBubbleTimer = null;
   this.chaosBubbleQueue = [];
-  bubbleShowing = false;
+  this.bubbleShowing = false;
+  this.BUBBLE_QUEUE_MAX = 3;
 };
 
 GameScene.prototype.preload = function () {
+  var cx = 660, cy = 300;
+  var progressBox = this.add.graphics();
+  progressBox.fillStyle(0x222222, 0.8);
+  progressBox.fillRoundedRect(cx - 160, cy - 25, 320, 50, 10);
+  var progressBar = this.add.graphics();
+  var loadingText = this.add.text(cx, cy - 50, '游戏加载中...', {
+    fontSize: '20px', color: '#ffffff'
+  }).setOrigin(0.5);
+  this.load.on('progress', function(v) {
+    progressBar.clear().fillStyle(0x4ECDC4, 1).fillRoundedRect(cx - 150, cy - 15, 300 * v, 30, 8);
+  });
+  this.load.on('complete', function() {
+    progressBar.destroy(); progressBox.destroy(); loadingText.destroy();
+  });
   // \u5934\u50CF
   this.load.image('avatar_wang', 'assets/avatars/wang_duidui.png');
   this.load.image('avatar_su', 'assets/avatars/su_tiantian.png');
+  this.load.image('avatar_player', 'assets/avatars/player_avatar.png');
 
   // \u724C\u9762\u56FE\u7247 (54\u5F20)
   var suitNames = ['Clubs','Diamonds','Hearts','Spades'];
@@ -262,8 +310,6 @@ GameScene.prototype.preload = function () {
   }
   this.load.audio('dieShuffle1', 'assets/sounds/dieShuffle1.mp3');
   this.load.audio('bgm_chinese', 'assets/sounds/bgm_chinese.mp3');
-  this.load.audio('bgm_jazz', 'assets/sounds/bgm_jazz.mp3');
-  this.load.audio('bgm_ambient', 'assets/sounds/bgm_ambient.mp3');
   // 额外音效
   this.load.audio('cardShuffle', 'assets/sounds/cardShuffle.mp3');
   this.load.audio('cardFan1', 'assets/sounds/cardFan1.mp3');
@@ -290,11 +336,46 @@ GameScene.prototype.preload = function () {
   this.load.audio('voice_tiantian_timeout', 'assets/sounds/voice_tiantian_timeout.mp3');
   this.load.audio('voice_tiantian_swap', 'assets/sounds/voice_tiantian_swap.mp3');
   this.load.audio('voice_tiantian_turn', 'assets/sounds/voice_tiantian_turn.mp3');
-  this.load.audio('voice_tiantian_chaos', 'assets/sounds/voice_tiantian_chaos.mp3');
-};
+
+  // 牌型语音
+  var voiceFiles = ['single','pair','triple','triple_one','triple_two','straight',
+    'consecutive_pairs','airplane','airplane_plus','four_two','spring','lastone'];
+  voiceFiles.forEach(function(v) {
+    this.load.audio('voice_duidui_' + v, 'assets/sounds/voice_duidui_' + v + '.mp3');
+  }, this);
+  ['pair','straight','airplane'].forEach(function(v) {
+    this.load.audio('voice_tiantian_' + v, 'assets/sounds/voice_tiantian_' + v + '.mp3');
+  }, this);
+
+  this.load.audio('voice_duidui_weak', 'assets/sounds/voice_duidui_weak.mp3');
+  this.load.audio('voice_duidui_arrogant', 'assets/sounds/voice_duidui_arrogant.mp3');
+  this.load.audio('voice_duidui_confident', 'assets/sounds/voice_duidui_confident.mp3');
+  this.load.audio('voice_duidui_beat', 'assets/sounds/voice_duidui_beat.mp3');
+  this.load.audio('voice_duidui_cantbeat', 'assets/sounds/voice_duidui_cantbeat.mp3');
+  this.load.audio('voice_duidui_call', 'assets/sounds/voice_duidui_call.mp3');
+  this.load.audio('voice_duidui_nocall', 'assets/sounds/voice_duidui_nocall.mp3');
+  this.load.audio('voice_tiantian_amazing', 'assets/sounds/voice_tiantian_amazing.mp3');
+  this.load.audio('voice_tiantian_cheer', 'assets/sounds/voice_tiantian_cheer.mp3');
+  this.load.audio('voice_tiantian_unlucky', 'assets/sounds/voice_tiantian_unlucky.mp3');
+  this.load.audio('voice_tiantian_plead', 'assets/sounds/voice_tiantian_plead.mp3');
+  this.load.audio('voice_tiantian_grab', 'assets/sounds/voice_tiantian_grab.mp3');
+}
 
 GameScene.prototype.create = function () {
   var self = this;
+  // 唯一ID（不重复，绑定数据归属）
+  var playerId = localStorage.getItem('doudizhu_playerId');
+  if (!playerId) {
+    playerId = 'player_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    localStorage.setItem('doudizhu_playerId', playerId);
+  }
+  // 昵称（界面显示用）
+  var displayName = localStorage.getItem('doudizhu_displayName');
+  if (!displayName) {
+    displayName = prompt('请输入你的昵称：') || '玩家';
+    localStorage.setItem('doudizhu_displayName', displayName);
+  }
+  showToast(self, '欢迎回来，' + displayName + '！');
   // 画布尺寸已设为1320×600，所有UI坐标基于此布局，无需相机偏移
   drawTableBackground(this);
   createTopBar(this);
@@ -316,7 +397,7 @@ GameScene.prototype.create = function () {
     self.checkAPIConnection();
   });
 
-  var fsBtn = self.add.text(1280, 24, '⛶', {
+  var fsBtn = self.add.text(1300, 24, '⤢', {
     fontSize: '22px', color: '#FFFFFF',
     backgroundColor: '#00000066', padding: { x: 8, y: 6 }
   }).setOrigin(1, 0.5).setInteractive().setDepth(200);
@@ -340,6 +421,16 @@ GameScene.prototype.create = function () {
     }
   });
 
+  // 静音按钮
+  var muteBtn = self.add.text(1250, 24, '🔊', {
+    fontSize: '20px', color: '#FFFFFF',
+    backgroundColor: '#00000066', padding: { x: 6, y: 4 }
+  }).setOrigin(1, 0.5).setInteractive().setDepth(200);
+  muteBtn.on('pointerdown', function() {
+    self.sound.mute = !self.sound.mute;
+    muteBtn.setText(self.sound.mute ? '🔇' : '🔊');
+  });
+
   // 首次点击自动全屏
   var autoFSdone = false;
   self.input.once('pointerdown', function () {
@@ -351,19 +442,39 @@ GameScene.prototype.create = function () {
   });
 
   // BGM切换按钮
-  var bgmBtn = self.add.text(920, 56, '🎵', {
-    fontSize: '16px', color: '#FFFFFF',
+  var bgmBtn = self.add.text(1200, 24, '🎵', {
+    fontSize: '20px', color: '#FFFFFF',
     backgroundColor: '#00000066',
     padding: { x: 6, y: 4 }
-  }).setOrigin(0.5, 0).setInteractive().setDepth(200);
+  }).setOrigin(1, 0.5).setInteractive().setDepth(200);
   bgmBtn.on('pointerdown', function () {
     var name = SoundManager.switchBGM();
     showToast(self, 'BGM: ' + name);
   });
 
-  // 叫分阶段
-  this.time.delayedCall(800, function () {
+  // 开始斗地主按钮（替换自动延迟启动）
+  var startBtnBg = self.add.graphics();
+  startBtnBg.fillStyle(0x4ECDC4, 1);
+  startBtnBg.fillRoundedRect(560, 260, 200, 80, 15).setDepth(250);
+  startBtnBg.setInteractive(new Phaser.Geom.Rectangle(560, 260, 200, 80), Phaser.Geom.Rectangle.Contains);
+  var startBtnTxt = self.add.text(660, 300, '开始斗地主', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '28px', color: '#FFFFFF', fontStyle: 'bold'
+  }).setOrigin(0.5).setDepth(251);
+  startBtnBg.on('pointerup', function() {
+    startBtnBg.destroy();
+    startBtnTxt.destroy();
     self.startBiddingPhase();
+  });
+
+  // 预取题目
+  if (self.prefetchChaosQuestions) self.prefetchChaosQuestions();
+  // 延迟加载非核心音频
+  this.time.delayedCall(2000, function() {
+    self.load.audio('bgm_jazz', 'assets/sounds/bgm_jazz.mp3');
+    self.load.audio('bgm_ambient', 'assets/sounds/bgm_ambient.mp3');
+    self.load.audio('voice_tiantian_chaos', 'assets/sounds/voice_tiantian_chaos.mp3');
+    self.load.start();
   });
 };
 
@@ -386,10 +497,10 @@ function drawTableBackground(scene) {
 
   // 外圈圆角边框
   bg.lineStyle(2, 0x4CAF50, 0.3);
-  bg.strokeRoundedRect(13, 52, W - 26, 470, 9);
+  bg.strokeRoundedRect(13, 52, W - 26, 500, 9);
 
   // 四角装饰圆
-  var corners = [[35, 63], [W - 35, 63], [35, 543], [W - 35, 543]];
+  var corners = [[35, 63], [W - 35, 63], [35, 573], [W - 35, 573]];
   corners.forEach(function (pos) {
     bg.lineStyle(1, 0x4CAF50, 0.18);
     bg.strokeCircle(pos[0], pos[1], 9);
@@ -424,11 +535,11 @@ function createTopBar(scene) {
   // AI1 (王怼怼) - 向左拉开
   var ai1X = 240;
   var wAvatar = makeAvatarImage(scene, 'avatar_wang', ai1X, 28, 0x4FC3F7);
-  scene.add.text(ai1X + 24, 12, '王怼怼', {
+  scene.add.text(ai1X + 34, 12, '王怼怼', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '17px', color: '#E8F5E9', fontStyle: 'bold'
   }).setDepth(11);
-  scene.ai1Count = scene.add.text(ai1X + 24, 30, '剩余 17 张', {
+  scene.ai1Count = scene.add.text(ai1X + 34, 30, '剩余 17 张', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '30px', color: '#A5D6A7'
   }).setDepth(11).setScale(0.5);
@@ -436,11 +547,11 @@ function createTopBar(scene) {
   // AI2 (苏甜甜) - 向右拉开
   var ai2X = 1080;
   var sAvatar = makeAvatarImage(scene, 'avatar_su', ai2X, 28, 0xFFB74D);
-  scene.add.text(ai2X - 24, 12, '苏甜甜', {
+  scene.add.text(ai2X - 34, 12, '苏甜甜', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '17px', color: '#E8F5E9', fontStyle: 'bold'
   }).setOrigin(1, 0).setDepth(11);
-  scene.ai2Count = scene.add.text(ai2X - 24, 30, '剩余 17 张', {
+  scene.ai2Count = scene.add.text(ai2X - 34, 30, '剩余 17 张', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '30px', color: '#A5D6A7'
   }).setOrigin(1, 0).setDepth(11).setScale(0.5);
@@ -508,11 +619,15 @@ function createPlayArea(scene) {
 function createHandArea(scene) {
   var handBg = scene.add.graphics();
   handBg.fillStyle(0x000000, 0.15);
-  handBg.fillRoundedRect(200, 300, 920, 115, 10).setDepth(10);
+  handBg.fillRoundedRect(200, 330, 920, 115, 10).setDepth(10);
   scene.add.text(68, 305, '\u4F60\u7684\u624B\u724C', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '22px', color: '#A5D6A7'
   }).setDepth(11).setScale(0.5);
+  scene.playerAvatar = makeAvatarImage(scene, 'avatar_player', 100, 385, 0x66BB6A);
+  scene.add.text(100, 415, '我', {
+    fontSize: '16px', color: '#FFFFFF', fontStyle: 'bold'
+  }).setOrigin(0.5).setDepth(12).setScale(0.5);
 }
 
 GameScene.prototype.renderPlayerHand = function () {
@@ -537,7 +652,7 @@ GameScene.prototype.renderPlayerHand = function () {
   var overlap = n > 1 ? Math.min(45, (maxHandZoneW - cw) / (n - 1)) : 45;
   var totalWidth = cw + (n - 1) * overlap;
   var startX = (1320 - totalWidth) / 2;
-  var baseY = 370;
+  var baseY = 400;
 
   for (var ii = 0; ii < n; ii++) {
     var card = hand[ii];
@@ -546,7 +661,7 @@ GameScene.prototype.renderPlayerHand = function () {
     var cy = baseY - arcOffset;
     var key = getCardImageKey(card);
 
-    var img = self.add.image(cx, cy, key).setDisplaySize(cw, ch).setDepth(110);
+    var img = self.add.image(cx, cy, key).setDisplaySize(cw, ch).setDepth(110 + ii);
 
     // \u70B9\u51FB\u4E0E\u9009\u62E9
     img.setInteractive();
@@ -554,6 +669,7 @@ GameScene.prototype.renderPlayerHand = function () {
     img.setData('card', card);
     img.setData('selected', false);
     img.setData('origY', cy);
+    img.setData('baseDepth', 110 + ii);
 
     img.on('pointerdown', function () {
       if (self.gameState !== GAME_STATE.PLAYER_TURN) {
@@ -565,6 +681,7 @@ GameScene.prototype.renderPlayerHand = function () {
       if (s) {
         this.y += 24;
         this.setData('selected', false);
+        this.setDepth(this.getData('baseDepth'));
         var pos = self.selectedCards.indexOf(idx2);
         if (pos >= 0) self.selectedCards.splice(pos, 1);
         SoundManager.deselectCard();
@@ -591,6 +708,7 @@ GameScene.prototype._clearCardSelection = function () {
       var origY = el.getData('origY');
       if (origY !== undefined) { el.y = origY; }
       el.setData('selected', false);
+      el.setDepth(el.getData('baseDepth') || 110);
     }
   }
 };
@@ -668,7 +786,7 @@ GameScene.prototype.showBiddingUI = function () {
   this.hideBiddingUI();
 
   var cx = 660;
-  var uiY = 260;
+  var uiY = 280;
   var bids = [
     { label: '\u4E0D\u53EB', value: 0, color: 0xFF6B6B },
     { label: '1\u5206', value: 1, color: 0x4ECDC4 },
@@ -677,7 +795,7 @@ GameScene.prototype.showBiddingUI = function () {
   ];
 
   // 提示文字
-  var promptText = this.add.text(cx, 170, '\u8BF7\u53EB\u5206', {
+  var promptText = this.add.text(cx, 180, '\u8BF7\u53EB\u5206', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '15px', color: '#FFFFFF', fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(200);
@@ -716,7 +834,7 @@ GameScene.prototype.showBiddingUI = function () {
   if (state && state.handStrength !== undefined) {
     var strength = state.handStrength;
     var label = strength >= 20 ? '\u624B\u724C\u5F88\u5F3A' : (strength >= 14 ? '\u624B\u724C\u4E0D\u9519' : (strength >= 9 ? '\u624B\u724C\u4E00\u822C' : '\u624B\u724C\u8F83\u5F31'));
-    var infoText = this.add.text(cx, 260, '\u2605 ' + label + ' (\u5F3A\u5EA6\u5206: ' + strength + ')', {
+    var infoText = this.add.text(cx, 230, '\u2605 ' + label + ' (\u5F3A\u5EA6\u5206: ' + strength + ')', {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
       fontSize: '20px', color: '#A5D6A7'
     }).setOrigin(0.5).setDepth(200).setScale(0.5);
@@ -726,7 +844,10 @@ GameScene.prototype.showBiddingUI = function () {
 
 GameScene.prototype.hideBiddingUI = function () {
   for (var i = 0; i < this.biddingUI.length; i++) {
-    if (this.biddingUI[i]) this.biddingUI[i].destroy();
+    if (this.biddingUI[i]) {
+      this.tweens.killTweensOf(this.biddingUI[i]);
+      this.biddingUI[i].destroy();
+    }
   }
   this.biddingUI = [];
 };
@@ -823,6 +944,9 @@ GameScene.prototype.doAIBidding = function (aiIndex) {
 
   var bidLabel = bid === 0 ? '\u4E0D\u53EB' : bid + '\u5206';
   this.setStatusText(aiName + ' \u53EB\u4E86 ' + bidLabel);
+  if (bid >= 2 && aiIndex === 1) SoundManager.playVoice('voice_duidui_call');
+  if (bid === 0 && aiIndex === 1) SoundManager.playVoice('voice_duidui_nocall');
+  if (bid === 3 && aiIndex === 2) SoundManager.playVoice('voice_tiantian_grab');
 
   if (this.isAPIMode && this.biddingId) {
     ApiClient.placeBid(this.biddingId, aiIndex, bid)
@@ -845,22 +969,22 @@ GameScene.prototype.updateLandlordUI = function() {
   if (this.landlordBadgePlayer) this.landlordBadgePlayer.destroy();
   if (this.landlordBadgeAi1) this.landlordBadgeAi1.destroy();
   if (this.landlordBadgeAi2) this.landlordBadgeAi2.destroy();
-  if (this.landlordIndex === 0) {
-    this.landlordBadgePlayer = this.add.text(68, 385, '👑 地主', {
-      fontFamily: '"PingFang SC",sans-serif',
-      fontSize: '24px', color: '#000000',
-      backgroundColor: '#FFD700',
-      padding: {x: 4, y: 2},
-      fontStyle: 'bold'
-    }).setDepth(11).setScale(0.5);
-  } else if (this.landlordIndex === 1) {
-    this.landlordBadgeAi1 = this.add.text(145, 9, '👑', {
-      fontSize: '16px'
-    }).setDepth(12);
-  } else if (this.landlordIndex === 2) {
-    this.landlordBadgeAi2 = this.add.text(765, 9, '👑', {
-      fontSize: '16px'
-    }).setDepth(12);
+  var positions = [
+    { x: 100, y: 425 },
+    { x: 240, y: 55 },
+    { x: 1080, y: 55 }
+  ];
+  for (var i = 0; i < 3; i++) {
+    var isLandlord = (this.landlordIndex === i);
+    var roleText = isLandlord ? '👑 地主' : '👨‍🌾 农民';
+    var bgColor = isLandlord ? '#FFD700' : '#81C784';
+    var badge = this.add.text(positions[i].x, positions[i].y, roleText, {
+      fontSize: '32px', color: '#000000',
+      backgroundColor: bgColor, padding: { x: 4, y: 2 }, fontStyle: 'bold'
+    }).setOrigin(0.5, 0).setDepth(15).setScale(0.5);
+    if (i === 0) this.landlordBadgePlayer = badge;
+    else if (i === 1) this.landlordBadgeAi1 = badge;
+    else this.landlordBadgeAi2 = badge;
   }
 };
 
@@ -907,6 +1031,8 @@ GameScene.prototype.finishBidding = function (res) {
   var self = this;
   this.time.delayedCall(1200, function () {
     self.gameState = GAME_STATE.PLAYER_TURN;
+    self.hasDoneChaosThisTurn = false;
+    if (self.startTurnTimer) self.startTurnTimer();
     self.setStatusText('\u8F6E\u5230\u4F60\u51FA\u724C\uFF08\u81EA\u7531\u51FA\u724C\uFF09');
     self.showActionButtons();
     SoundManager.playerTurn();
@@ -930,7 +1056,14 @@ GameScene.prototype.showBottomCards = function (cards) {
     }).setOrigin(0.5).setDepth(20).setScale(0.5);
     return;
   }
-  // B38: \u53D6\u6D88\u663E\u793A\u5E95\u724C\u724C\u80CC\u56FE\u7247\uFF0C\u5E95\u724C\u76F4\u63A5\u878D\u5165\u5730\u4E3B\u624B\u724C
+  // 展示3张底牌牌面
+  var startX = 660 - 50;
+  for (var i = 0; i < cards.length; i++) {
+    var key = getCardImageKey(cards[i]);
+    var img = this.add.image(startX + i * 50, 72, key)
+      .setDisplaySize(42, 60).setDepth(20);
+    this.bottomCardImgs.push(img);
+  }
 };
 
 // ================================================================
@@ -962,6 +1095,8 @@ GameScene.prototype.localAssignLandlord = function () {
   var self = this;
   this.time.delayedCall(1200, function () {
     self.gameState = GAME_STATE.PLAYER_TURN;
+    self.hasDoneChaosThisTurn = false;
+    if (self.startTurnTimer) self.startTurnTimer();
     self.setStatusText('轮到你出牌（自由出牌）');
     SoundManager.playVoice('voice_tiantian_turn');
     self.showActionButtons();
@@ -1038,6 +1173,7 @@ function apiGetSimple(path) {
 
 GameScene.prototype.doPlayerPlay = function () {
   var self = this;
+  this.clearTurnTimer();
   // 1. \u72B6\u6001\u62E6\u622A
   if (self.gameState !== GAME_STATE.PLAYER_TURN) {
     showToast(self, '\u73B0\u5728\u4E0D\u662F\u4F60\u7684\u51FA\u724C\u9636\u6BB5');
@@ -1066,6 +1202,7 @@ GameScene.prototype.doPlayerPlay = function () {
 };
 
 GameScene.prototype.confirmPlay = function (playCards, info) {
+  this.clearTurnTimer();
   var self = this;
   var playSet = {};
   for (var i = 0; i < playCards.length; i++) {
@@ -1089,7 +1226,16 @@ GameScene.prototype.confirmPlay = function (playCards, info) {
   // \u51FA\u724C\u8BB0\u5F55+\u97F3\u6548
   this.addPlayHistory('player', playCards);
   SoundManager.playCard();
-  if (info.type === 'BOMB' || info.type === 'ROCKET') { this.totalBombs++; SoundManager.bomb(); }
+  SoundManager.playTypeVoice(info.type, 'duidui');
+  if (this.playerHand.length === 1) {
+    SoundManager.playVoice('voice_duidui_lastone');
+  }
+  if (info.type === 'BOMB' || info.type === 'ROCKET') { this.totalBombs++; SoundManager.bomb();
+    SoundManager.playVoice('voice_tiantian_amazing');
+    if (this.lastPlayPlayer && this.lastPlayPlayer !== 'player') {
+      SoundManager.playVoice('voice_tiantian_unlucky');
+    }
+  }
   if (info.type === 'ROCKET') this.rocketCount++;
 
   if (this.playerHand.length === 0) {
@@ -1102,6 +1248,7 @@ GameScene.prototype.confirmPlay = function (playCards, info) {
 };
 
 GameScene.prototype.doPlayerPass = function () {
+  this.clearTurnTimer();
   if (this.gameState !== GAME_STATE.PLAYER_TURN) return;
   if (!this.lastPlay || this.lastPlay.length === 0) {
     showToast(this, '\u81EA\u7531\u51FA\u724C\u9636\u6BB5\u4E0D\u80FD\u8DF3\u8FC7');
@@ -1128,6 +1275,8 @@ GameScene.prototype.doPlayerPass = function () {
       this.time.delayedCall(800, function () { selfB1.doAITurn(aiIdx); });
     } else {
       this.gameState = GAME_STATE.PLAYER_TURN;
+  this.hasDoneChaosThisTurn = false;
+      if (this.startTurnTimer) this.startTurnTimer();
       this.setStatusText('\u4E24\u5BB6\u90FD\u8FC7\uFF0C\u8F6E\u5230\u4F60\u81EA\u7531\u51FA\u724C');
     }
     return;
@@ -1199,6 +1348,14 @@ GameScene.prototype.doAITurn = function (aiIndex) {
     this.renderRoundEndPanel(aiIndex === 0 ? 'ai1' : 'ai2');
     return;
   }
+  // 如果AI无牌可出，直接过牌，不走API
+  if (this.lastPlay && this.lastPlay.length > 0) {
+    var validPlays = Doudizhu.findValidPlays(hand, this.lastPlay);
+    if (validPlays.length === 0) {
+      this.time.delayedCall(1000, function() { self.handleAIPass(aiIndex, aiName); });
+      return;
+    }
+  }
 
   if (this.isAPIMode && typeof ApiClient !== 'undefined') {
     this.time.delayedCall(1200, function () {
@@ -1259,8 +1416,25 @@ GameScene.prototype.handleAIPlay = function (aiIndex, aiName, res) {
   // 先出气泡，模拟AI思考感
   var bubbleKey = info.type === 'BOMB' || info.type === 'ROCKET' ? 'bomb' : 'play';
   this._showPlayBubble(aiIndex === 0 ? 'duidui' : 'tiantian', bubbleKey, info.type);
-  if (info.type === 'BOMB' || info.type === 'ROCKET') { this.totalBombs++; SoundManager.bomb(); }
+  if (info.type === 'BOMB' || info.type === 'ROCKET') { this.totalBombs++; SoundManager.bomb();
+    if (aiIndex === 0) SoundManager.playVoice('voice_duidui_arrogant'); }
   if (info.type === 'ROCKET') this.rocketCount++;
+  SoundManager.playTypeVoice(info.type, aiIndex === 0 ? 'duidui' : 'tiantian');
+  if (info.type !== 'BOMB' && info.type !== 'ROCKET' && aiIndex === 0 && this.lastPlayPlayer === 'player') {
+    SoundManager.playVoice('voice_duidui_beat');
+  }
+  if (playCards.length > 0 && playCards[0].rank <= 6 && aiIndex === 0 && Math.random() < 0.3) {
+    SoundManager.playVoice('voice_duidui_weak');
+  }
+  if (aiIndex === 0 && hand.length === 1) {
+    SoundManager.playVoice('voice_duidui_confident');
+  }
+  if (aiIndex === 1 && Math.random() < 0.2) {
+    SoundManager.playVoice('voice_tiantian_cheer');
+  }
+  if (hand.length === 1 && aiIndex === 1 && Math.random() < 0.5) {
+    SoundManager.playVoice('voice_tiantian_plead');
+  }
   this.addPlayHistory(aiIndex === 0 ? 'ai1' : 'ai2', playCards);
   var self = this;
   // 800ms后摆牌+更新UI
@@ -1277,6 +1451,8 @@ GameScene.prototype.handleAIPlay = function (aiIndex, aiName, res) {
       self.time.delayedCall(1200, function () { self.doAITurn(1); });
     } else {
       self.gameState = GAME_STATE.PLAYER_TURN;
+    self.hasDoneChaosThisTurn = false;
+      if (self.startTurnTimer) self.startTurnTimer();
       SoundManager.playerTurn();
       self.setStatusText('\u8F6E\u5230\u4F60\u51FA\u724C');
     }
@@ -1285,6 +1461,9 @@ GameScene.prototype.handleAIPlay = function (aiIndex, aiName, res) {
 
 GameScene.prototype.handleAIPass = function (aiIndex, aiName) {
   this.passCount++;
+  if (aiIndex === 0 && Math.random() < 0.5) {
+    SoundManager.playVoice('voice_duidui_cantbeat');
+  }
   this.setStatusText(aiName + ' \u4E0D\u51FA');
   this.updateAICount(aiIndex);
   this.addPlayHistory(aiIndex === 0 ? 'ai1' : 'ai2', true);
@@ -1297,6 +1476,8 @@ GameScene.prototype.handleAIPass = function (aiIndex, aiName) {
     // \u81EA\u7531\u51FA\u724C\u6743\u7ED9\u4E0A\u4E00\u8F6E\u6700\u540E\u51FA\u724C\u8005\uFF08\u4E0D\u662F\u5F53\u524Dpass\u7684\u4EBA\uFF09
     if (this.lastPlayPlayer === 'player') {
       this.gameState = GAME_STATE.PLAYER_TURN;
+  this.hasDoneChaosThisTurn = false;
+      if (this.startTurnTimer) this.startTurnTimer();
       this.setStatusText('\u4E24\u5BB6\u90FD\u8FC7\uFF0C\u8F6E\u5230\u4F60\u81EA\u7531\u51FA\u724C');
     } else {
       var lastAiIdx = this.lastPlayPlayer === 'ai1' ? 0 : 1;
@@ -1314,11 +1495,14 @@ GameScene.prototype.handleAIPass = function (aiIndex, aiName) {
     this.time.delayedCall(1200, function () { self.doAITurn(1); });
   } else {
     this.gameState = GAME_STATE.PLAYER_TURN;
-    this.setStatusText('\u8F6E\u5230\u4F60\u51FA\u724C');
+  this.hasDoneChaosThisTurn = false;
+    if (this.startTurnTimer) this.startTurnTimer();
+      this.setStatusText('\u8F6E\u5230\u4F60\u51FA\u724C');
   }
 };
 
 GameScene.prototype.localAIPlay = function (aiIndex, aiName) {
+  try {
   var hand = aiIndex === 0 ? this.ai1Hand : this.ai2Hand;
   var plays = Doudizhu.findValidPlays(hand, this.lastPlay);
   if (plays.length === 0) { this.handleAIPass(aiIndex, aiName); return; }
@@ -1351,8 +1535,25 @@ GameScene.prototype.localAIPlay = function (aiIndex, aiName) {
   this.addPlayHistory(aiIndex === 0 ? 'ai1' : 'ai2', chosen);
   var bubbleKey = info.type === 'BOMB' || info.type === 'ROCKET' ? 'bomb' : 'play';
   this._showPlayBubble(aiIndex === 0 ? 'duidui' : 'tiantian', bubbleKey, info.type);
-  if (info.type === 'BOMB' || info.type === 'ROCKET') { this.totalBombs++; SoundManager.bomb(); }
+  if (info.type === 'BOMB' || info.type === 'ROCKET') { this.totalBombs++; SoundManager.bomb();
+    if (aiIndex === 0) SoundManager.playVoice('voice_duidui_arrogant'); }
   if (info.type === 'ROCKET') this.rocketCount++;
+  SoundManager.playTypeVoice(info.type, aiIndex === 0 ? 'duidui' : 'tiantian');
+  if (info.type !== 'BOMB' && info.type !== 'ROCKET' && aiIndex === 0 && this.lastPlayPlayer === 'player') {
+    SoundManager.playVoice('voice_duidui_beat');
+  }
+  if (chosen.length > 0 && chosen[0].rank <= 6 && aiIndex === 0 && Math.random() < 0.3) {
+    SoundManager.playVoice('voice_duidui_weak');
+  }
+  if (aiIndex === 0 && hand.length === 1) {
+    SoundManager.playVoice('voice_duidui_confident');
+  }
+  if (aiIndex === 1 && Math.random() < 0.2) {
+    SoundManager.playVoice('voice_tiantian_cheer');
+  }
+  if (hand.length === 1 && aiIndex === 1 && Math.random() < 0.5) {
+    SoundManager.playVoice('voice_tiantian_plead');
+  }
   if (hand.length === 0) {
     this.renderRoundEndPanel(aiIndex === 0 ? 'ai1' : 'ai2');
     return;
@@ -1363,8 +1564,14 @@ GameScene.prototype.localAIPlay = function (aiIndex, aiName) {
     this.time.delayedCall(1200, function () { self.doAITurn(1); });
   } else {
     this.gameState = GAME_STATE.PLAYER_TURN;
+  this.hasDoneChaosThisTurn = false;
+    if (this.startTurnTimer) this.startTurnTimer();
     SoundManager.playerTurn();
     this.setStatusText('\u8F6E\u5230\u4F60\u51FA\u724C');
+  }
+  } catch (e) {
+    console.error("[localAIPlay] Error:", e);
+    this.handleAIPass(aiIndex, aiName);
   }
 };
 
@@ -1411,9 +1618,17 @@ GameScene.prototype.displayPlay = function (cards, player) {
 GameScene.prototype.doAction = function () {
   var self = this;
   if (this.gameState !== GAME_STATE.PLAYER_TURN && this.gameState !== GAME_STATE.CHAOS_MODE) return;
+  if (this.hasDoneChaosThisTurn) {
+    showToast(this, '每回合只能搞事情一次');
+    return;
+  }
+  this.hasDoneChaosThisTurn = true;
 
   // 暂停出牌音效
   SoundManager.pauseAll();
+
+  // 清除出牌倒计时
+  this.clearTurnTimer();
 
   // 设置螺旋模式
   this.gameState = GAME_STATE.CHAOS_MODE;
@@ -1425,9 +1640,17 @@ GameScene.prototype.doAction = function () {
   var aiName = aiId === 'duidui' ? '王怼怼' : '苏甜甜';
 
   // 创建遮罩 -> 先显示题型选择
-  self._createChaosOverlay(aiId, function () {
-    self._showTypeSelection(aiId, aiName);
-  });
+  try {
+    self._createChaosOverlay(aiId, function () {
+      self._showTypeSelection(aiId, aiName);
+    });
+  } catch (e) {
+    console.error('[Chaos] doAction error:', e);
+    self.gameState = GAME_STATE.PLAYER_TURN;
+    self.hasDoneChaosThisTurn = false;
+    if (self.startTurnTimer) self.startTurnTimer();
+    SoundManager.resumeAll();
+  }
 };
 
 GameScene.prototype._showTypeSelection = function (aiId, aiName) {
@@ -1450,9 +1673,9 @@ GameScene.prototype._showTypeSelection = function (aiId, aiName) {
   self.chaosElements.push(title2);
 
   // 2x2 网格：题型卡片
-  var cardX = [390, 670];
-  var cardY = [107, 181];
-  var cardW = 260, cardH = 88;
+  var cardX = [300, 680];
+  var cardY = [107, 257];
+  var cardW = 340, cardH = 120;
 
   for (var ti = 0; ti < types.length; ti++) {
     var t = types[ti];
@@ -1468,18 +1691,18 @@ GameScene.prototype._showTypeSelection = function (aiId, aiName) {
     cardBg.strokeRoundedRect(-cardW / 2, -cardH / 2, cardW, cardH, 12);
 
     var iconTxt = self.add.text(-cardW / 2 + 16, -cardH / 2 + 16, t.icon, {
-      fontFamily: 'sans-serif', fontSize: '28px'
+      fontFamily: 'sans-serif', fontSize: '48px'
     });
 
-    var labelTxt = self.add.text(-cardW / 2 + 60, -cardH / 2 + 18, t.label, {
+    var labelTxt = self.add.text(-cardW / 2 + 80, -cardH / 2 + 18, t.label, {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '15px', color: '#222222', fontStyle: 'bold'
+      fontSize: '22px', color: '#222222', fontStyle: 'bold'
     });
 
-    var descTxt = self.add.text(-cardW / 2 + 60, -cardH / 2 + 44, t.desc, {
+    var descTxt = self.add.text(-cardW / 2 + 80, -cardH / 2 + 50, t.desc, {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '22px', color: '#888888'
-    }).setScale(0.5);
+      fontSize: '14px', color: '#888888'
+    });
 
     cardGroup.add([cardBg, iconTxt, labelTxt, descTxt]);
     cardGroup.setSize(cardW, cardH);
@@ -1500,6 +1723,7 @@ GameScene.prototype._showTypeSelection = function (aiId, aiName) {
       group.on('pointerdown', function () {
         if (self.chaosTypeSelection) {
           self.chaosTypeSelection = false;
+          self.currentChaosType = typeId;
           if (self.chaosTitle) self.chaosTitle.setVisible(true);
           for (var di = self.chaosElements.length - 1; di >= 8; di--) {
             if (self.chaosElements[di]) self.chaosElements[di].destroy();
@@ -1530,15 +1754,17 @@ GameScene.prototype._createChaosOverlay = function (aiId, callback) {
   // 2. 白色题目卡片背景（增加阴影与层次感）
   var cardShadow = self.add.graphics();
   cardShadow.fillStyle(0x000000, 0.4);
-  cardShadow.fillRoundedRect(270, 55, 780, 380, 16).setDepth(300);
+  cardShadow.fillRoundedRect(232, 52, 860, 380, 16).setDepth(300);
   self.chaosElements.push(cardShadow);
+  self.chaosShadow = cardShadow;
 
+  var cardX = 230, cardY = 50, cardW = 860;
   var cardBg = self.add.graphics();
   cardBg.fillStyle(0xFFFFFF, 1);
-  cardBg.fillRoundedRect(85, 50, 800, 380, 16);
+  cardBg.fillRoundedRect(cardX, cardY, cardW, 380, 16);
   // 内发光 / 主题紫色边框
   cardBg.lineStyle(3, 0x7C4DFF, 0.8);
-  cardBg.strokeRoundedRect(85, 50, 800, 380, 16);
+  cardBg.strokeRoundedRect(cardX, cardY, cardW, 380, 16);
   cardBg.setDepth(301);
   self.chaosElements.push(cardBg);
   self.chaosCardBg = cardBg;
@@ -1546,11 +1772,11 @@ GameScene.prototype._createChaosOverlay = function (aiId, callback) {
   // 3. 标题（美化排版）
   var title = self.add.text(660, 77, "🔥 搞事情！答题挑战", {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '22px',
+    fontSize: '26px',
     color: '#7C4DFF',
     fontStyle: 'bold',
     stroke: '#FFFFFF',
-    strokeThickness: 3
+    strokeThickness: 4
   }).setOrigin(0.5, 0).setDepth(302);
   self.chaosElements.push(title);
   self.chaosTitle = title;
@@ -1558,8 +1784,8 @@ GameScene.prototype._createChaosOverlay = function (aiId, callback) {
   // 4. 分数显示（变为胶囊样式）
   var scoreBg = self.add.graphics();
   scoreBg.fillStyle(0xFFD700, 0.2);
-  scoreBg.fillRoundedRect(680, 75, 85, 28, 14).setDepth(302);
-  var scoreText = self.add.text(722, 89, "得分: " + (self.chaosScore || 0), {
+  scoreBg.fillRoundedRect(945, 76, 80, 26, 13).setDepth(302);
+  var scoreText = self.add.text(985, 89, "得分: " + (self.chaosScore || 0), {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '13px',
     color: '#D84315',
@@ -1575,14 +1801,14 @@ GameScene.prototype._createChaosOverlay = function (aiId, callback) {
   // 5. 新版圆形关闭按钮（悬浮在卡片右上角边缘，红底白叉）
   var closeBtnBg = self.add.graphics();
   closeBtnBg.fillStyle(0xFF4757, 1);
-  closeBtnBg.fillCircle(875, 50, 18).setDepth(304);
+  closeBtnBg.fillCircle(cardX + cardW - 17, cardY + 17, 16).setDepth(304);
   closeBtnBg.lineStyle(3, 0xFFFFFF, 1);
-  closeBtnBg.strokeCircle(875, 50, 18).setDepth(304);
-  closeBtnBg.setInteractive(new Phaser.Geom.Circle(875, 50, 18), Phaser.Geom.Circle.Contains);
+  closeBtnBg.strokeCircle(cardX + cardW - 17, cardY + 17, 16).setDepth(304);
+  closeBtnBg.setInteractive(new Phaser.Geom.Circle(cardX + cardW - 17, cardY + 17, 16), Phaser.Geom.Circle.Contains);
   closeBtnBg.on('pointerup', function () { self._destroyChaos(); });
-  var closeBtnText = self.add.text(875, 50, "✖", {
+  var closeBtnText = self.add.text(cardX + cardW - 17, cardY + 17, "✖", {
     fontFamily: 'sans-serif',
-    fontSize: '18px',
+    fontSize: '16px',
     color: '#FFFFFF',
     fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(305);
@@ -1598,7 +1824,7 @@ GameScene.prototype._showChaosQuestion = function (aiId, aiName, type) {
   // 1. 屏幕中间加个醒目的加载提示面板
   var loadingBg = self.add.graphics();
   loadingBg.fillStyle(0x000000, 0.7);
-  loadingBg.fillRoundedRect(380, 200, 200, 60, 12).setDepth(350);
+  loadingBg.fillRoundedRect(560, 200, 200, 60, 12).setDepth(350);
   var loadingTxt = self.add.text(660, 230, '⏳ ' + aiName + ' 正在生成题目...', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '14px', color: '#FFFFFF', fontStyle: 'bold'
@@ -1609,6 +1835,18 @@ GameScene.prototype._showChaosQuestion = function (aiId, aiName, type) {
   // 随机播放搞事情开场语音
   var chaosVoice = Math.random() > 0.5 ? 'voice_duidui_taunt' : 'voice_tiantian_chaos';
   SoundManager.playVoice(chaosVoice);
+
+  // 查预取缓存
+  var cached = self.chaosPrefetchCache && self.chaosPrefetchCache[type];
+  if (cached && cached.length > 0) {
+    var q = cached.shift();
+    if (self._chaosLoadingElements) {
+      self._chaosLoadingElements.forEach(function(el) { if(el) el.destroy(); });
+      self._chaosLoadingElements = null;
+    }
+    self._renderQuestion(q, aiId);
+    return;
+  }
 
   if (this.isAPIMode && typeof ApiClient !== 'undefined') {
     ApiClient.generateChaosQuestion(type || 'random', 'normal', 1)
@@ -1652,7 +1890,12 @@ GameScene.prototype._renderQuestion = function (q, aiId) {
   }
   self._clearQuestionArea();
 
-  var typeLabel = q.questionType || q.type || '知识题';
+  var rawType = q.questionType || q.type || '';
+  var typeMap = {
+    'vocabulary':'四六级单词','expression':'口语表达',
+    'trivia':'冷知识','life_hack':'生活常识','bomb_mixed':'混合炸弹'
+  };
+  var typeLabel = typeMap[rawType] || rawType || '知识题';
   console.log('[Chaos] typeLabel:', typeLabel, 'q:', JSON.stringify(q));
   var typeIcon = '🧠';
   if (typeLabel.indexOf('voc') >= 0 || typeLabel.indexOf('word') >= 0) typeIcon = '📚';
@@ -1660,10 +1903,10 @@ GameScene.prototype._renderQuestion = function (q, aiId) {
   if (typeLabel.indexOf('trivia') >= 0) typeIcon = '💡';
   if (typeLabel.indexOf('life') >= 0) typeIcon = '🏠';
 
-  var tag = self.add.text(350, 97, typeIcon + ' ' + typeLabel, {
+  var tag = self.add.text(660, 120, typeIcon + ' ' + typeLabel, {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '13px', color: '#FF6B35', fontStyle: 'bold'
-  }).setDepth(302);
+  }).setOrigin(0.5).setDepth(302);
   self.chaosElements.push(tag);
 
   // 保留口语题兼容：q.expression, q.word
@@ -1672,21 +1915,38 @@ GameScene.prototype._renderQuestion = function (q, aiId) {
     questionText = '场景：' + q.scene + '\n对话：' + (q.dialogue || '');
   }
   if (!questionText) questionText = '【题目解析降级，请直接根据选项推理】';
-  var qText = self.add.text(350, 114, questionText, {
+  var qText = self.add.text(660, 140, questionText, {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '15px', color: '#222222', fontStyle: 'bold',
-    wordWrap: { width: 600 }, lineSpacing: 4
-  }).setDepth(302);
+    fontSize: '22px', color: '#222222', fontStyle: 'bold',
+    wordWrap: { width: 760 }, lineSpacing: 6
+  }).setOrigin(0.5, 0).setDepth(302);
   self.chaosElements.push(qText);
 
-  var options = q.options || {};
+  var options = q.options || q.Options || {};
+  if (Array.isArray(options)) {
+    var tmp = {}; ['A','B','C','D'].forEach(function(k,i){tmp[k]=options[i];});
+    options = tmp;
+  }
+  if (Object.keys(options).length === 0) {
+    options = { A:'选项解析失败', B:'盲猜B', C:'盲猜C', D:'盲猜D' };
+    if (!q.answer) q.answer = 'A';
+  }
   var optionKeys = ['A', 'B', 'C', 'D'];
   self.chaosQuestionAnswered = false;
 
-  var optH = 85;
-  var optW = 340;
-  var gridX = [130, 470];
-  var gridY = [158, 250];
+  var optH = 120;
+  var optW = 380;
+  var startX = 660 - (optW * 2 + 40) / 2;
+  var gridX = [startX, startX + optW + 40];
+  var startY = Math.max(185, 140 + qText.displayHeight + 20);
+  var gridY = [startY, startY + optH + 15];
+  // 如果题目文字+选项超出卡片，拉伸白色卡片
+  var neededHeight = startY + (optH * 2) + 40;
+  if (neededHeight > 380 && self.chaosCardBg) {
+    self.chaosCardBg.clear().fillStyle(0xFFFFFF, 1).fillRoundedRect(230, 50, 860, neededHeight, 16)
+      .lineStyle(3, 0x7C4DFF, 0.8).strokeRoundedRect(230, 50, 860, neededHeight, 16);
+    if (self.chaosShadow) self.chaosShadow.clear().fillStyle(0x000000, 0.4).fillRoundedRect(232, 52, 860, neededHeight, 16);
+  }
 
   for (var oi = 0; oi < optionKeys.length; oi++) {
     var ok = optionKeys[oi];
@@ -1710,16 +1970,16 @@ GameScene.prototype._renderQuestion = function (q, aiId) {
 
     var optMarkBg = self.add.graphics();
     optMarkBg.fillStyle(0x4ECDC4, 1);
-    optMarkBg.fillCircle(gx + 24, gy + optH / 2, 14).setDepth(303);
+    optMarkBg.fillCircle(gx + 26, gy + optH / 2, 16).setDepth(303);
     var optMarkTxt = self.add.text(gx + 24, gy + optH / 2, ok, {
       fontFamily: '"PingFang SC",sans-serif',
-      fontSize: '14px', color: '#FFFFFF', fontStyle: 'bold'
+      fontSize: '20px', color: '#FFFFFF', fontStyle: 'bold'
     }).setOrigin(0.5).setDepth(304);
 
     var optTxt = self.add.text(gx + 46, gy + optH / 2, optText, {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '13px', color: '#333333',
-      wordWrap: { width: optW - 56, useAdvancedWrap: true },
+      fontSize: '22px', color: '#333333',
+      wordWrap: { width: optW - 56 },
       lineSpacing: 2
     }).setOrigin(0, 0.5).setDepth(303);
 
@@ -1750,18 +2010,18 @@ GameScene.prototype._renderQuestion = function (q, aiId) {
   }
   var progressBarBg = self.add.graphics();
   progressBarBg.fillStyle(0x000000, 0.1);
-  progressBarBg.fillRoundedRect(330, 55, 660, 4, 2).setDepth(305);
+  progressBarBg.fillRoundedRect(250, 55, 820, 6, 3).setDepth(305);
   var progressBar = self.add.graphics().setDepth(306);
   self.chaosElements.push(progressBarBg, progressBar);
   var timerStart = Date.now();
-  var timerDuration = 30000;
+  var timerDuration = 60000;
   self.chaosTimeoutTimer = self.time.addEvent({
     delay: 50, loop: true,
     callback: function () {
       var elapsed = Date.now() - timerStart;
       var remaining = 1 - Math.min(elapsed / timerDuration, 1);
       var color = remaining > 0.5 ? 0x4ECDC4 : (remaining > 0.2 ? 0xFFC107 : 0xFF5252);
-      progressBar.clear().fillStyle(color, 1).fillRoundedRect(150, 55, 660 * remaining, 4, 2);
+      progressBar.clear().fillStyle(color, 1).fillRoundedRect(250, 55, 820 * remaining, 6, 3);
       if (elapsed >= timerDuration) {
         if (self.chaosTimeoutTimer) {
           self.chaosTimeoutTimer.remove();
@@ -1790,6 +2050,38 @@ GameScene.prototype._handleOptionClick = function (self, optBg, optKey, aiId, q)
   } else {
     SoundManager.lose();
     SoundManager.playVoice(Math.random() > 0.5 ? 'voice_duidui_wrong' : 'voice_tiantian_wrong');
+    // 答错时记录错题
+    var playerId = localStorage.getItem('doudizhu_playerId');
+    var recordedQuestion = q.question || q.text || q.word || '';
+    if (!recordedQuestion && q.scene) {
+      recordedQuestion = '场景：' + q.scene + ' / 对话：' + (q.dialogue || '');
+    }
+    if (!recordedQuestion) recordedQuestion = '未知题目';
+    if (self.isAPIMode && typeof ApiClient !== 'undefined') {
+      ApiClient.recordWrong({
+        questionType: q._type || q.questionType || q.type || 'trivia',
+        question: recordedQuestion,
+        options: q.options || q.Options || {},
+        userAnswer: optKey,
+        correctAnswer: q.answer,
+        difficulty: q._difficulty || q.difficulty || 'normal',
+        playerId: playerId
+      }).catch(function(err){ console.warn('错题记录失败:', err); });
+    }
+    // 本地备份
+    var localWrongBook = JSON.parse(localStorage.getItem('doudizhu_wrongbook') || '[]');
+    localWrongBook.unshift({
+      id: 'local_' + Date.now(),
+      questionType: q._type || q.questionType || q.type || 'trivia',
+      question: recordedQuestion,
+      options: q.options || q.Options || {},
+      userAnswer: optKey,
+      correctAnswer: q.answer,
+      isCorrect: false,
+      timestamp: new Date().toISOString()
+    });
+    if (localWrongBook.length > 100) localWrongBook = localWrongBook.slice(0, 100);
+    localStorage.setItem('doudizhu_wrongbook', JSON.stringify(localWrongBook));
   }
   self._clearQuestionArea();
 
@@ -1803,22 +2095,23 @@ GameScene.prototype._handleOptionClick = function (self, optBg, optKey, aiId, q)
   // 动态叠加 Y 坐标，防止长答案重叠
   var fbY = 145;
   if (!isCorrect && q.answer) {
-    var correctAns = self.add.text(400, fbY, '正确答案: ' + q.answer + '. ' + (q.options[q.answer] || ''), {
+    var correctAns = self.add.text(660, fbY, '正确答案: ' + q.answer + '. ' + (q.options[q.answer] || ''), {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '14px', color: '#4CAF50', fontStyle: 'bold',
-      wordWrap: { width: 520, useAdvancedWrap: true }, lineSpacing: 4
-    }).setDepth(305);
+      fontSize: '22px', color: '#2E7D32', fontStyle: 'bold',
+      wordWrap: { width: 760 }, lineSpacing: 4
+    }).setOrigin(0.5, 0).setDepth(305);
     self.chaosElements.push(correctAns);
-    fbY += correctAns.height + 15;
+    fbY += correctAns.displayHeight + 8;
   }
-  if (q.explanation) {
-    var expl = self.add.text(400, fbY, '解析: ' + q.explanation, {
+  var explText = q.explanation || q.definition || q.translation || q.fun_fact || q.pro_tip;
+  if (explText) {
+    var expl = self.add.text(660, fbY, '解析: ' + explText, {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-      fontSize: '13px', color: '#555555',
-      wordWrap: { width: 520, useAdvancedWrap: true }, lineSpacing: 4
-    }).setDepth(305);
+      fontSize: '17px', color: '#333333',
+      wordWrap: { width: 760 }, lineSpacing: 2
+    }).setOrigin(0.5, 0).setDepth(305);
     self.chaosElements.push(expl);
-    fbY += expl.height + 15;
+    fbY += expl.displayHeight + 8;
   }
   self._showAiBubble(aiId, feedbackScene, fbY + 5);
   if (isCorrect) {
@@ -1864,8 +2157,9 @@ GameScene.prototype._showSwapResult = function (aiId, isCorrect, fbY) {
     if (!c) return '无';
     if (c.suit === 'joker') return c.rank > 14 ? '大王' : '小王';
     var suits = { 'spade': '黑桃', 'heart': '红桃', 'club': '梅花', 'diamond': '方块' };
-    var ranks = { 1: 'A', 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'J', 12: 'Q', 13: 'K', 14: 'A', 15: '2' };
-    return (suits[c.suit] || '') + (ranks[c.rank] || c.rank);
+    var rankNames = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'];
+    var rankDisplay = (c.rank >= 0 && c.rank < rankNames.length) ? rankNames[c.rank] : '?';
+    return (suits[c.suit] || '') + rankDisplay;
   };
   // 确认面板的起始位置，根据上一块动态决定，保证不遮挡
   var confirmPanelY = Math.max(fbY + 10, 150);
@@ -1882,6 +2176,7 @@ GameScene.prototype._showSwapResult = function (aiId, isCorrect, fbY) {
   var lostCard = self.playerHand[idx];
   var aiMinCard = null;
   var aiMinIdx = -1;
+  if (confirmPanelY > 380) confirmPanelY = 380;
   if (aiHand && aiHand.length > 0) {
     for (var k = 0; k < aiHand.length; k++) {
       if (aiMinCard === null || aiHand[k].rank < aiMinCard.rank) {
@@ -1892,9 +2187,9 @@ GameScene.prototype._showSwapResult = function (aiId, isCorrect, fbY) {
   }
   var panelBg = self.add.graphics();
   panelBg.fillStyle(0xFFF8E1, 1);
-  panelBg.fillRoundedRect(400, confirmPanelY, 520, 130, 10).setDepth(308);
+  panelBg.fillRoundedRect(360, confirmPanelY, 600, 190, 10).setDepth(308);
   panelBg.lineStyle(2, 0xFFC107, 1);
-  panelBg.strokeRoundedRect(400, confirmPanelY, 520, 130, 10).setDepth(308);
+  panelBg.strokeRoundedRect(360, confirmPanelY, 600, 190, 10).setDepth(308);
   self.chaosElements.push(panelBg);
   var hintTxt = self.add.text(660, confirmPanelY + 20, '⚠️ 惩罚：' + aiName + ' 决定用它的最小牌换走你的一张牌！', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
@@ -1905,35 +2200,35 @@ GameScene.prototype._showSwapResult = function (aiId, isCorrect, fbY) {
   var drawCardWithShadow = function(x, y, cardObj) {
     var shadow = self.add.graphics();
     shadow.fillStyle(0x000000, 0.2);
-    shadow.fillRoundedRect(x - 20 + 3, y - 28 + 3, 40, 56, 4).setDepth(309);
+    shadow.fillRoundedRect(x - 38 + 3, y - 53 + 3, 75, 105, 4).setDepth(309);
     self.chaosElements.push(shadow);
     var key = getCardImageKey(cardObj);
-    var img = self.add.image(x, y, key).setDisplaySize(40, 56).setDepth(310);
+    var img = self.add.image(x, y, key).setDisplaySize(75, 105).setDepth(310);
     self.chaosElements.push(img);
   };
-  var t1 = self.add.text(420, confirmPanelY + 65, '你的牌:', {
-    fontFamily: '"PingFang SC"', fontSize: '15px', color: '#333'
+  var t1 = self.add.text(450, confirmPanelY + 85, '你的牌:', {
+    fontFamily: '"PingFang SC"', fontSize: '18px', color: '#333'
   }).setOrigin(1, 0.5).setDepth(309);
-  drawCardWithShadow(450, confirmPanelY + 65, lostCard);
-  var swapIcon = self.add.text(660, confirmPanelY + 65, '🔄', {
-    fontSize: '26px'
+  drawCardWithShadow(480, confirmPanelY + 85, lostCard);
+  var swapIcon = self.add.text(660, confirmPanelY + 85, '🔄', {
+    fontSize: '36px'
   }).setOrigin(0.5).setDepth(309);
-  var t2 = self.add.text(570, confirmPanelY + 65, 'AI的牌:', {
-    fontFamily: '"PingFang SC"', fontSize: '15px', color: '#333'
+  var t2 = self.add.text(870, confirmPanelY + 85, 'AI的牌:', {
+    fontFamily: '"PingFang SC"', fontSize: '18px', color: '#333'
   }).setOrigin(0, 0.5).setDepth(309);
   if (aiMinCard) {
-    drawCardWithShadow(590, confirmPanelY + 65, aiMinCard);
+    drawCardWithShadow(900, confirmPanelY + 85, aiMinCard);
   } else {
-    self.add.text(590, confirmPanelY + 65, '无牌', {
+    self.add.text(590, confirmPanelY + 85, '无牌', {
       fontSize: '16px', color: '#E65100'
     }).setOrigin(0.5).setDepth(309);
   }
   self.chaosElements.push(t1, swapIcon, t2);
   var btnBg = self.add.graphics();
   btnBg.fillStyle(0xFF5252, 1);
-  btnBg.fillRoundedRect(420, confirmPanelY + 105, 120, 36, 8).setDepth(310);
-  btnBg.setInteractive(new Phaser.Geom.Rectangle(420, confirmPanelY + 105, 120, 36), Phaser.Geom.Rectangle.Contains);
-  var btnTxt = self.add.text(660, confirmPanelY + 123, '接受惩罚', {
+  btnBg.fillRoundedRect(560, confirmPanelY + 150, 200, 50, 10).setDepth(310);
+  btnBg.setInteractive(new Phaser.Geom.Rectangle(560, confirmPanelY + 150, 200, 50), Phaser.Geom.Rectangle.Contains);
+  var btnTxt = self.add.text(660, confirmPanelY + 175, '接受惩罚', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '17px', color: '#FFF', fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(311);
@@ -1954,7 +2249,7 @@ GameScene.prototype._showSwapResult = function (aiId, isCorrect, fbY) {
     self.updateAICount(aiId === 'duidui' ? 0 : 1);
     var pName = getChineseCardName(lostCard);
     var aName = getChineseCardName(aiMinCard);
-    var swapText = self.add.text(660, confirmPanelY + 115, '✅ 互换完毕：' + aiName + ' 用 [' + aName + '] 换了你的 [' + pName + ']', {
+    var swapText = self.add.text(660, 470, '✅ 互换完毕：' + aiName + ' 用 [' + aName + '] 换了你的 [' + pName + ']', {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
       fontSize: '16px', color: '#4CAF50', fontStyle: 'bold'
     }).setOrigin(0.5).setDepth(310);
@@ -1997,9 +2292,10 @@ GameScene.prototype._showSwapUI = function (aiId, fbY) {
   }).setOrigin(0.5).setDepth(351);
   swapElements.push(titleTxt);
 
-  var hintTxt = self.add.text(660, 112, '选一张你的牌交出，然后猜AI的牌位置', {
+  var hintTxt = self.add.text(660, 118, '选一张你的牌交出，然后猜AI的牌位置', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '13px', color: '#AAAAAA'
+    fontSize: '16px', color: '#FFFFFF', fontStyle: 'bold',
+    stroke: '#000000', strokeThickness: 3
   }).setOrigin(0.5).setDepth(351);
   swapElements.push(hintTxt);
 
@@ -2011,44 +2307,48 @@ GameScene.prototype._showSwapUI = function (aiId, fbY) {
   swapElements.push(playerLabel);
 
   var myHandSorted = Doudizhu.sortCards(self.playerHand.slice());
-  var myCardW = 44, myCardH = 64, myOverlap = 30;
+  var myCardW = 84, myCardH = 120, myOverlap = 25;
   var myTotalW = myCardW + (myHandSorted.length - 1) * myOverlap;
   var myStartX = Math.floor((1320 - myTotalW) / 2);
 
   for (var mi = 0; mi < myHandSorted.length; mi++) {
     var mcx = myStartX + mi * myOverlap + myCardW / 2;
     var mkey = getCardImageKey(myHandSorted[mi]);
-    var mcard = self.add.image(mcx, 175, mkey).setDisplaySize(myCardW, myCardH).setDepth(352);
+    var mcard = self.add.image(mcx, 195, mkey).setDisplaySize(myCardW, myCardH).setDepth(352);
     mcard.setInteractive();
+    mcard.setData('origY', 195);
     swapElements.push(mcard);
     (function (idx, card) {
       card.on('pointerdown', function () {
         if (selectedPlayerCardEl && selectedPlayerCardEl !== card) {
           selectedPlayerCardEl.setDisplaySize(myCardW, myCardH).setDepth(352);
+          selectedPlayerCardEl.setY(selectedPlayerCardEl.getData('origY'));
         }
         if (selectedPlayerCardEl === card) {
           // Q3: 已选中→取消
           card.setDisplaySize(myCardW, myCardH).setDepth(352);
+          card.setY(card.getData('origY'));
           selectedPlayerCardIdx = -1;
           selectedPlayerCardEl = null;
           return;
         }
         selectedPlayerCardIdx = idx;
         selectedPlayerCardEl = card;
-        card.setDisplaySize(myCardW + 6, myCardH + 6).setDepth(355);
+        card.setDisplaySize(myCardW + 10, myCardH + 10).setDepth(352);
+        card.setY(card.getData('origY') - 15);
       });
     })(mi, mcard);
   }
 
   // 下方牌背盲选（3-5张，1张是真AI牌）
-  var backLabel = self.add.text(660, 230, '猜猜哪张是AI的牌（完全盲选）', {
+  var backLabel = self.add.text(660, 245, '猜猜哪张是AI的牌（完全盲选）', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '12px', color: '#FFB74D', fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(351);
   swapElements.push(backLabel);
 
   var numBacks = 2 + Math.floor(Math.random() * 2); // 2-3
-  var backW = 40, backH = 56, backOverlap = 34;
+  var backW = 78, backH = 108, backOverlap = backW + 16;
   var backTotalW = backW + (numBacks - 1) * backOverlap;
   var backStartX = Math.floor((1320 - backTotalW) / 2);
 
@@ -2058,28 +2358,41 @@ GameScene.prototype._showSwapUI = function (aiId, fbY) {
 
   var backCardPositions = [];
 
+  var selectedGoldBorder = null;
   for (var bi = 0; bi < numBacks; bi++) {
     var bcx = backStartX + bi * backOverlap + backW / 2;
+    var bcy = 320;
     var isReal = (bi === realAICardSlot);
     // 牌背阴影
     var cardShadow = self.add.graphics();
-    cardShadow.fillStyle(0x000000, 0.3);
-    cardShadow.fillRoundedRect(bcx - backW/2 - 2, 260 - backH/2 - 2, backW + 4, backH + 4, 4).setDepth(351);
+    cardShadow.fillStyle(0x000000, 0.5);
+    cardShadow.fillRoundedRect(bcx - backW/2 - 2, bcy - backH/2 - 2, backW + 4, backH + 4, 4).setDepth(351 + bi * 2);
     swapElements.push(cardShadow);
-    var backCard = self.add.image(bcx, 260, 'cardBack').setDisplaySize(backW, backH).setDepth(352);
+    var backCard = self.add.image(bcx, bcy, 'cardBack').setDisplaySize(backW, backH).setDepth(352 + bi * 2);
     backCard.setInteractive();
     backCard.setData('isReal', isReal);
     swapElements.push(backCard);
-    backCardPositions.push({ x: bcx, y: 260 });
+    backCardPositions.push({ x: bcx, y: bcy });
 
     (function (bIdx, cardEl, crdX, crdY) {
+      cardEl.setData('origY', crdY);
       cardEl.on('pointerdown', function () {
         if (selectedBackEl && selectedBackEl !== cardEl) {
-          selectedBackEl.setDisplaySize(backW, backH).setDepth(352);
+          selectedBackEl.setDisplaySize(backW, backH).setDepth(352 + bIdx * 2);
+          selectedBackEl.setY(selectedBackEl.getData('origY'));
+          if (selectedGoldBorder) {
+            selectedGoldBorder.destroy();
+            selectedGoldBorder = null;
+          }
         }
         if (selectedBackEl === cardEl) {
           // Q3: 已选中→取消
-          cardEl.setDisplaySize(backW, backH).setDepth(352);
+          cardEl.setDisplaySize(backW, backH).setDepth(352 + bIdx * 2);
+          cardEl.setY(cardEl.getData('origY'));
+          if (selectedGoldBorder) {
+            selectedGoldBorder.destroy();
+            selectedGoldBorder = null;
+          }
           selectedBackIdx = -1;
           selectedBackEl = null;
           updateConfirmBtn();
@@ -2087,29 +2400,40 @@ GameScene.prototype._showSwapUI = function (aiId, fbY) {
         }
         selectedBackIdx = bIdx;
         selectedBackEl = cardEl;
-        cardEl.setDisplaySize(backW + 6, backH + 6).setDepth(355);
+        cardEl.setDisplaySize(backW + 10, backH + 10).setDepth(360);
+        cardEl.setY(cardEl.getData('origY') - 15);
+        if (selectedGoldBorder) selectedGoldBorder.destroy();
+        selectedGoldBorder = self.add.graphics();
+        var boxW = backW + 18; var boxH = backH + 18;
+        selectedGoldBorder.lineStyle(3, 0xFFD700, 1);
+        selectedGoldBorder.strokeRoundedRect(
+          crdX - (backW+10)/2 - 4,
+          crdY - 15 - (backH+10)/2 - 4,
+          boxW, boxH, 8
+        ).setDepth(361);
+        swapElements.push(selectedGoldBorder);
         updateConfirmBtn();
       });
-    })(bi, backCard, bcx, 260);
+    })(bi, backCard, bcx, bcy);
   }
 
   function updateConfirmBtn() {
     if (selectedPlayerCardIdx >= 0 && selectedBackIdx >= 0) {
-      confirmBg.clear().fillStyle(0x4ECDC4, 1).fillRoundedRect(420, 390, 200, 44, 10).setDepth(353);
+      confirmBg.clear().fillStyle(0x4ECDC4, 1).fillRoundedRect(450, 410, 200, 44, 10).setDepth(353);
     } else {
-      confirmBg.clear().fillStyle(0x4ECDC4, 0.5).fillRoundedRect(420, 390, 200, 44, 10).setDepth(353);
+      confirmBg.clear().fillStyle(0x4ECDC4, 0.5).fillRoundedRect(450, 410, 200, 44, 10).setDepth(353);
     }
   }
 
   // 确认按钮（左）
   var confirmBg = self.add.graphics();
   confirmBg.fillStyle(0x4ECDC4, 0.5);
-  confirmBg.fillRoundedRect(420, 390, 200, 44, 10).setDepth(353);
-  var confirmTxt = self.add.text(520, 412, '✅ 确认交换', {
+  confirmBg.fillRoundedRect(450, 410, 200, 44, 10).setDepth(353);
+  var confirmTxt = self.add.text(550, 432, '✅ 确认交换', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '17px', color: '#FFFFFF', fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(354);
-  confirmBg.setInteractive(new Phaser.Geom.Rectangle(220, 390, 200, 44), Phaser.Geom.Rectangle.Contains);
+  confirmBg.setInteractive(new Phaser.Geom.Rectangle(450, 410, 200, 44), Phaser.Geom.Rectangle.Contains);
   swapElements.push(confirmBg, confirmTxt);
 
   confirmBg.on('pointerup', function () {
@@ -2191,12 +2515,12 @@ GameScene.prototype._showSwapUI = function (aiId, fbY) {
   // 取消按钮（右）
   var cancelBg = self.add.graphics();
   cancelBg.fillStyle(0x78909C, 1);
-  cancelBg.fillRoundedRect(720, 390, 200, 44, 10).setDepth(353);
-  var cancelTxt = self.add.text(820, 412, '✖ 跳过交换', {
+  cancelBg.fillRoundedRect(670, 410, 200, 44, 10).setDepth(353);
+  var cancelTxt = self.add.text(770, 432, '✖ 跳过交换', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
     fontSize: '17px', color: '#FFFFFF', fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(354);
-  cancelBg.setInteractive(new Phaser.Geom.Rectangle(720, 390, 200, 44), Phaser.Geom.Rectangle.Contains);
+  cancelBg.setInteractive(new Phaser.Geom.Rectangle(670, 410, 200, 44), Phaser.Geom.Rectangle.Contains);
   swapElements.push(cancelBg, cancelTxt);
 
   cancelBg.on('pointerup', function () {
@@ -2215,29 +2539,31 @@ GameScene.prototype._showSwapButtons = function (aiId, btnY) {
       child.destroy();
     }
   });
+  btnY = 520;
   var againBg = self.add.graphics();
   againBg.fillStyle(0x4ECDC4, 1);
-  againBg.fillRoundedRect(550, btnY, 220, 40, 10).setDepth(305);
-  var againTxt = self.add.text(660, btnY + 20, '🔄 再来一题', {
+  againBg.fillRoundedRect(420, btnY, 220, 50, 10).setDepth(305);
+  var againTxt = self.add.text(540, btnY + 25, '🔄 再来一题', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '15px', color: '#FFFFFF', fontStyle: 'bold'
+    fontSize: '22px', color: '#FFFFFF', fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(306);
-  againBg.setInteractive(new Phaser.Geom.Rectangle(550, btnY, 220, 40), Phaser.Geom.Rectangle.Contains);
+  againBg.setInteractive(new Phaser.Geom.Rectangle(420, btnY, 220, 50), Phaser.Geom.Rectangle.Contains);
   againBg.on('pointerup', function () {
     self.chaosQuestionAnswered = false;
     self._clearQuestionArea();
     var aiId2 = Math.random() < 0.5 ? 'duidui' : 'tiantian';
-    self._showChaosQuestion(aiId2, aiId2 === 'duidui' ? '王怼怼' : '苏甜甜');
+    var chaosType = self.currentChaosType || undefined;
+    self._showChaosQuestion(aiId2, aiId2 === 'duidui' ? '王怼怼' : '苏甜甜', chaosType);
   });
   self.chaosElements.push(againBg, againTxt);
   var closeBg = self.add.graphics();
   closeBg.fillStyle(0xFF6B6B, 1);
-  closeBg.fillRoundedRect(675, btnY, 220, 40, 10).setDepth(305);
-  var closeTxt = self.add.text(785, btnY + 20, '✖ 关掉回牌', {
+  closeBg.fillRoundedRect(660, btnY, 220, 50, 10).setDepth(305);
+  var closeTxt = self.add.text(780, btnY + 25, '✖ 关掉回牌', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '15px', color: '#FFFFFF', fontStyle: 'bold'
+    fontSize: '22px', color: '#FFFFFF', fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(306);
-  closeBg.setInteractive(new Phaser.Geom.Rectangle(675, btnY, 220, 40), Phaser.Geom.Rectangle.Contains);
+  closeBg.setInteractive(new Phaser.Geom.Rectangle(660, btnY, 220, 50), Phaser.Geom.Rectangle.Contains);
   closeBg.on('pointerup', function () {
     self._destroyChaos();
   });
@@ -2277,18 +2603,15 @@ GameScene.prototype._showSwapButtons = function (aiId, btnY) {
 // ================================================================
 // 气泡队列系统 — 防止多个事件同时弹出重叠
 // ================================================================
-// Q1: 改为实例变量 chaosBubbleQueue 管理
-var BUBBLE_QUEUE_MAX = 3;
-var bubbleShowing = false;
 
 // Q1: 改为 GameScene 方法
 GameScene.prototype._processBubbleQueue = function () {
   if (!this.chaosBubbleQueue) return;
   if (this.chaosBubbleQueue.length === 0) {
-    bubbleShowing = false;
+    this.bubbleShowing = false;
     return;
   }
-  bubbleShowing = true;
+  this.bubbleShowing = true;
   var item = this.chaosBubbleQueue.shift();
   item.render();
 };
@@ -2331,11 +2654,11 @@ GameScene.prototype._showPlayBubble = function (aiId, event, context) {
     var tempStyle = isEmergency ? {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
       fontSize: '16px', color: '#FFCDD2', fontStyle: 'bold',
-      wordWrap: { width: 200, useAdvancedWrap: true }
+      wordWrap: { width: 200 }
     } : {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
       fontSize: '14px', color: '#FFFFFF',
-      wordWrap: { width: 200, useAdvancedWrap: true }
+      wordWrap: { width: 200 }
     };
     var tempTxt = self.add.text(0, 0, line, tempStyle);
     var tempBounds = tempTxt.getBounds();
@@ -2370,11 +2693,11 @@ GameScene.prototype._showPlayBubble = function (aiId, event, context) {
     var textStyle = isEmergency ? {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
       fontSize: '16px', color: '#FFCDD2', fontStyle: 'bold',
-      wordWrap: { width: bubbleW - 28, useAdvancedWrap: true }
+      wordWrap: { width: bubbleW - 28 }
     } : {
       fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
       fontSize: '14px', color: '#FFFFFF',
-      wordWrap: { width: bubbleW - 28, useAdvancedWrap: true },
+      wordWrap: { width: bubbleW - 28 },
       lineSpacing: 4
     };
     var textX = isDuidui ? (bubbleX + 14) : (bubbleX + 10);
@@ -2575,8 +2898,8 @@ GameScene.prototype._showAiBubble = function (aiId, sceneKey, y) {
   };
 
   self.chaosBubbleQueue.push({ render: queuedTask });
-  if (self.chaosBubbleQueue.length > BUBBLE_QUEUE_MAX) self.chaosBubbleQueue.shift();
-  if (!bubbleShowing) self._processBubbleQueue();
+  if (self.chaosBubbleQueue.length > this.BUBBLE_QUEUE_MAX) self.chaosBubbleQueue.shift();
+  if (!this.bubbleShowing) self._processBubbleQueue();
 };
 // ================================================================
 // 搞事情 - 清除题目区域
@@ -2608,14 +2931,21 @@ GameScene.prototype._clearQuestionArea = function () {
 // 搞事情 - 销毁搞事情UI，恢复出牌
 // ================================================================
 GameScene.prototype._destroyChaos = function () {
+  console.log('_destroyChaos called, state=', this.gameState);
   if (this.chaosElements) {
     for (var i = 0; i < this.chaosElements.length; i++) {
-      if (this.chaosElements[i]) this.chaosElements[i].destroy();
+      if (this.chaosElements[i]) {
+        this.tweens.killTweensOf(this.chaosElements[i]);
+        this.chaosElements[i].destroy();
+      }
     }
   }
   if (this.chaosBubbleElements) {
     for (var j = 0; j < this.chaosBubbleElements.length; j++) {
-      if (this.chaosBubbleElements[j]) this.chaosBubbleElements[j].destroy();
+      if (this.chaosBubbleElements[j]) {
+        this.tweens.killTweensOf(this.chaosBubbleElements[j]);
+        this.chaosBubbleElements[j].destroy();
+      }
     }
   }
   this.chaosElements = null;
@@ -2643,11 +2973,385 @@ GameScene.prototype._destroyChaos = function () {
   // \u6062\u590D\u51FA\u724C\u97F3\u6548
   SoundManager.resumeAll();
   this.gameState = GAME_STATE.PLAYER_TURN;
+  this.hasDoneChaosThisTurn = false;
+  if (this.startTurnTimer) this.startTurnTimer();
 
   // \u6062\u590D\u6E38\u620F\u72B6\u6001
   this._showAiBubble(this._chaosAiId || "duidui", "close", 180);
-  this.setStatusText('\u641E\u4E8B\u60C5\u7ED3\u675F\uFF0C\u7EE7\u7EED\u51FA\u724C');
+  this.setStatusText('搞事情结束，继续出牌');
 };
+
+// ================================================================
+// 题目预取
+// ================================================================
+GameScene.prototype.prefetchChaosQuestions = function () {
+  var self = this;
+  if (typeof ApiClient === 'undefined' || !this.isAPIMode) return;
+  var types = ['vocabulary','expression','trivia','life_hack'];
+  types.forEach(function(type) {
+    if (self.chaosPrefetchCache[type] && self.chaosPrefetchCache[type].length > 0) return;
+    ApiClient.generateChaosQuestion(type, 'normal', 2)
+      .then(function(res) {
+        if (res.success && res.questions && res.questions.length > 0) {
+          self.chaosPrefetchCache[type] = res.questions;
+        }
+      })
+      .catch(function() {});
+  });
+};
+
+// ================================================================
+// 回合倒计时
+// ================================================================
+GameScene.prototype.startTurnTimer = function () {
+  this.clearTurnTimer();
+  var self = this;
+  var duration = 30000;
+  var startTime = Date.now();
+  var barBg = self.add.graphics();
+  barBg.fillStyle(0x000000, 0.3);
+  barBg.fillRoundedRect(360, 465, 600, 8, 4).setDepth(150);
+  self._turnTimerBarBg = barBg;
+  var bar = self.add.graphics().setDepth(151);
+  self._turnTimerBar = bar;
+  self._turnTimer = self.time.addEvent({
+    delay: 100, loop: true,
+    callback: function() {
+      var elapsed = Date.now() - startTime;
+      var remaining = 1 - Math.min(elapsed / duration, 1);
+      var color = remaining > 0.33 ? 0x4ECDC4 : (remaining > 0.1 ? 0xFFC107 : 0xFF5252);
+      bar.clear().fillStyle(color, 1).fillRoundedRect(362, 467, 596 * remaining, 4, 2);
+      if (remaining < 0.17 && Math.floor(elapsed / 500) % 2 === 0) {
+        bar.clear().fillStyle(0xFF1744, 1).fillRoundedRect(362, 467, 596 * remaining, 4, 2);
+      }
+      if (elapsed >= duration) {
+        self.clearTurnTimer();
+        self.autoPlayOnTimeout();
+      }
+    }
+  });
+};
+
+GameScene.prototype.clearTurnTimer = function () {
+  if (this._turnTimer) { this._turnTimer.remove(); this._turnTimer = null; }
+  if (this._turnTimerBar) { this._turnTimerBar.destroy(); this._turnTimerBar = null; }
+  if (this._turnTimerBarBg) { this._turnTimerBarBg.destroy(); this._turnTimerBarBg = null; }
+};
+
+GameScene.prototype.autoPlayOnTimeout = function () {
+  if (this.gameState !== GAME_STATE.PLAYER_TURN) return;
+  if (this.selectedCards.length > 0) {
+    this.doPlayerPlay();
+    return;
+  }
+  if (this.lastPlay && this.lastPlay.length > 0) {
+    this.doPlayerPass();
+    return;
+  }
+  if (this.playerHand && this.playerHand.length > 0) {
+    this.selectedCards = [0];
+    this.doPlayerPlay();
+    this.selectedCards = [];
+  }
+};
+
+// ================================================================
+// 错题本UI
+// ================================================================
+GameScene.prototype.closeWrongBook = function () {
+  // 恢复倒计时
+  if (this._turnTimer) this._turnTimer.paused = false;
+  if (this.chaosTimeoutTimer) this.chaosTimeoutTimer.paused = false;
+
+  if (this.wrongBookOverlay) this.wrongBookOverlay.destroy();
+  if (this.wbFixedElements) this.wbFixedElements.forEach(function(e){e.destroy();});
+  if (this.wrongBookContent) { this.wrongBookContent.destroy(); this.wrongBookContent = null; }
+  if (this.wrongBookTabs) { this.wrongBookTabs.forEach(function(e){e.destroy();}); this.wrongBookTabs = null; }
+  this.wbFixedElements = null;
+  this.wrongBookOverlay = null;
+};
+
+GameScene.prototype.showWrongBookUI = function () {
+  var self = this;
+  self.closeWrongBook();
+  self._wrongBookDismissed = false;
+  // 重置分页状态
+  self.wbRecords = [];
+  self.wbCurrentOffset = 0;
+  self.wbPageSize = 10;
+  self.wbHasMore = false;
+  self.wbActiveTab = null;
+  // 先渲染空框架
+  self.renderWrongBookDOM([]);
+  // 冻结时钟和动画
+  self.time.paused = true;
+  self.tweens.pauseAll();
+  // 加载第一页
+  self.loadWrongBookData();
+};
+
+GameScene.prototype.loadWrongBookData = function () {
+  var self = this;
+  var playerId = localStorage.getItem('doudizhu_playerId');
+  var params = {
+    playerId: playerId,
+    offset: self.wbCurrentOffset,
+    limit: self.wbPageSize
+  };
+  if (self.wbActiveTab) params.type = self.wbActiveTab;
+  // 尝试从API加载
+  if (typeof ApiClient !== 'undefined' && self.isAPIMode) {
+    ApiClient.getWrongBook(params)
+      .then(function (data) {
+        if (data.records && data.total > 0) {
+          self.wbRecords = self.wbRecords.concat(data.records);
+          self.wbHasMore = (self.wbCurrentOffset + self.wbPageSize) < data.total;
+          self.wbCurrentOffset += self.wbPageSize;
+          self.renderWrongBookDOM(self.wbRecords);
+        } else if (data.total === 0) {
+          // API无数据，尝试本地
+          self._loadLocalWrongBook();
+        } else {
+          self.renderWrongBookDOM(self.wbRecords);
+        }
+      })
+      .catch(function () {
+        // API失败，降级本地
+        self._loadLocalWrongBook();
+      });
+  } else {
+    // 纯前端模式，直接从本地加载
+    self._loadLocalWrongBook();
+  }
+};
+
+GameScene.prototype._loadLocalWrongBook = function () {
+  var self = this;
+  try {
+    var allRecords = JSON.parse(localStorage.getItem('doudizhu_wrongbook') || '[]');
+    var filtered = self.wbActiveTab ? allRecords.filter(function(r) { return r.questionType === self.wbActiveTab; }) : allRecords;
+    var page = filtered.slice(self.wbCurrentOffset, self.wbCurrentOffset + self.wbPageSize);
+    if (page.length > 0) {
+      self.wbRecords = self.wbRecords.concat(page);
+      self.wbCurrentOffset += self.wbPageSize;
+      self.wbHasMore = self.wbCurrentOffset < filtered.length;
+    }
+    self.renderWrongBookDOM(self.wbRecords);
+  } catch (e) {
+    console.warn('本地错题加载失败:', e);
+    self.renderWrongBookDOM([]);
+  }
+};
+
+GameScene.prototype.renderWrongBookDOM = function (records) {
+  var self = this;
+  if (self._wrongBookDismissed) return;
+  self.closeWrongBook();
+
+  // 遮罩
+  var overlay = self.add.graphics();
+  overlay.fillStyle(0x000000, 0.8);
+  overlay.fillRect(0, 0, 1320, 600).setDepth(400);
+  overlay.setInteractive(new Phaser.Geom.Rectangle(0, 0, 1320, 600), Phaser.Geom.Rectangle.Contains);
+  self.wrongBookOverlay = overlay;
+
+  // 面板背景
+  var panelBg = self.add.graphics();
+  panelBg.fillStyle(0x1A1A2E, 0.95);
+  panelBg.fillRoundedRect(180, 30, 960, 540, 12).setDepth(401);
+  panelBg.lineStyle(2, 0x7C4DFF, 0.8);
+  panelBg.strokeRoundedRect(180, 30, 960, 540, 12).setDepth(401);
+
+  // 标题
+  var titleTxt = self.add.text(660, 52, '📖 错题本', {
+    fontSize: '24px', color: '#FFFFFF', fontStyle: 'bold'
+  }).setOrigin(0.5).setDepth(402);
+
+  // 关闭按钮
+  var closeBg = self.add.graphics();
+  closeBg.fillStyle(0xFF4757, 1);
+  closeBg.fillCircle(1120, 50, 20).setDepth(405);
+  closeBg.lineStyle(2, 0xFFFFFF, 0.8);
+  closeBg.strokeCircle(1120, 50, 20).setDepth(405);
+  closeBg.setInteractive(new Phaser.Geom.Circle(1120, 50, 20), Phaser.Geom.Circle.Contains);
+  var closeTxt = self.add.text(1120, 50, '✖', {
+    fontSize: '20px', color: '#FFFFFF', fontStyle: 'bold'
+  }).setOrigin(0.5).setDepth(406);
+  closeBg.on('pointerup', function() {
+    self._wrongBookDismissed = true;
+    self.time.paused = false;
+    self.tweens.resumeAll();
+    self.closeWrongBook();
+  });
+
+  // 固定UI存到this上，方便closeWrongBook统一销毁
+  self.wbFixedElements = [panelBg, titleTxt, closeBg, closeTxt];
+
+  // 分类tab（独立，不会被销毁）
+  var tabs = ['全部','单词','口语','冷知识','生活'];
+  var tabTypes = [null,'vocabulary','expression','trivia','life_hack'];
+  var tabElements = [];
+  var activeTabType = null;
+
+  function renderTabButtons() {
+    tabElements.forEach(function(e) { e.destroy(); });
+    tabElements = [];
+    for (var ti = 0; ti < tabs.length; ti++) {
+      (function(tabType, tabLabel, idx) {
+        var isActive = (tabType === activeTabType);
+        var tBg = self.add.graphics();
+        tBg.fillStyle(isActive ? 0x7C4DFF : 0x444444, 1);
+        tBg.fillRoundedRect(240 + idx * 140, 80, 130, 30, 6).setDepth(403);
+        tBg.setInteractive(new Phaser.Geom.Rectangle(240 + idx * 140, 80, 130, 30), Phaser.Geom.Rectangle.Contains);
+        tabElements.push(tBg);
+        var tTxt = self.add.text(240 + idx * 140 + 65, 95, tabLabel, {
+          fontSize: '15px', color: '#FFFFFF', fontStyle: 'bold'
+        }).setOrigin(0.5).setDepth(404);
+        tabElements.push(tTxt);
+        tBg.on('pointerup', function() {
+          activeTabType = tabType;
+          self.wbActiveTab = tabType;
+          self.wbRecords = [];
+          self.wbCurrentOffset = 0;
+          self.wbHasMore = false;
+          renderTabButtons();
+          renderRecords(null);
+          self.loadWrongBookData();
+        });
+      })(tabTypes[ti], tabs[ti], ti);
+    }
+    self.wrongBookTabs = tabElements;
+  }
+
+  // 渲染记录列表
+  var contentGroup = null;
+  function renderRecords(filterType) {
+    if (contentGroup) { contentGroup.destroy(); contentGroup = null; }
+    var container = self.add.container(0, 0).setDepth(403);
+    contentGroup = container;
+    var filtered = filterType ? records.filter(function(r) { return r.questionType === filterType; }) : records;
+
+    if (filtered.length === 0) {
+      var empty = self.add.text(660, 300, '暂无错题记录 📝', {
+        fontSize: '20px', color: '#888888'
+      }).setOrigin(0.5).setDepth(403);
+      container.add(empty);
+      self.wrongBookContent = container;
+      return;
+    }
+
+    var yPos = 120;
+    var maxShow = filtered.length;
+
+    // 遮罩
+    var maskShape = self.add.graphics();
+    maskShape.fillStyle(0xffffff);
+    maskShape.fillRect(180, 110, 960, 450);
+    var mask = maskShape.createGeometryMask();
+    container.setMask(mask);
+    self.wbFixedElements.push(maskShape);
+    for (var ri = 0; ri < maxShow; ri++) {
+      var r = filtered[ri];
+
+      // 卡片背景（高度加大到110）
+      var cardBg = self.add.graphics();
+      cardBg.fillStyle(0x252540, 1);
+      cardBg.fillRoundedRect(210, yPos, 900, 110, 8).setDepth(403);
+      container.add(cardBg);
+
+      // 编号
+      var numTxt = self.add.text(225, yPos + 6, (ri+1) + '.', {
+        fontSize: '14px', color: '#F48FB1', fontStyle: 'bold'
+      }).setDepth(404);
+      container.add(numTxt);
+
+      // 题型标签
+      var typeNames = { 'vocabulary':'📚单词','expression':'💬口语','trivia':'🧠冷知识','life_hack':'🏠生活','bomb_mixed':'💣混合' };
+      var typeTag = self.add.text(255, yPos + 6, typeNames[r.questionType] || r.questionType, {
+        fontSize: '12px', color: '#7C4DFF', fontStyle: 'bold',
+        backgroundColor: '#2A1A4E', padding: {x:4, y:2}
+      }).setDepth(404);
+      container.add(typeTag);
+
+      // 题目（完整显示，自动换行）
+      var qTxt = self.add.text(255, yPos + 26, r.question || '', {
+        fontSize: '14px', color: '#E0E0E0', wordWrap: { width: 600 }
+      }).setDepth(404);
+      container.add(qTxt);
+
+      // 选项（从yPos+62移到yPos+48，wordWrap 800）
+      var optStr = '';
+      if (r.options) {
+        var ks = ['A','B','C','D'];
+        for (var oi = 0; oi < ks.length; oi++) {
+          if (r.options[ks[oi]]) optStr += ks[oi] + '.' + r.options[ks[oi]] + '  ';
+        }
+      }
+      var optTxt = self.add.text(255, yPos + 58, optStr, {
+        fontSize: '12px', color: '#AAAAAA', wordWrap: { width: 800 }
+      }).setDepth(404);
+      container.add(optTxt);
+
+      // 答案（yPos+90）
+      var ansTxt = self.add.text(255, yPos + 90, '❌ 你选: ' + (r.userAnswer || '?') + '  ✅ 正确: ' + (r.correctAnswer || '?'), {
+        fontSize: '13px', color: (r.isCorrect ? '#4ECDC4' : '#FF6B6B'), fontStyle: 'bold'
+      }).setDepth(404);
+      container.add(ansTxt);
+
+      // 时间（右下角右对齐yPos+90）
+      var timeStr = r.timestamp ? r.timestamp.substring(0, 10) + ' ' + r.timestamp.substring(11, 16) : '';
+      var timeTxt = self.add.text(1080, yPos + 90, timeStr, {
+        fontSize: '11px', color: '#666666'
+      }).setOrigin(1, 0).setDepth(404);
+      container.add(timeTxt);
+
+      yPos += 120;
+    }
+
+    if (self.wbHasMore) {
+      var loadBg = self.add.graphics();
+      loadBg.fillStyle(0x7C4DFF, 1);
+      loadBg.fillRoundedRect(560, yPos + 10, 200, 36, 8).setDepth(404);
+      loadBg.setInteractive(new Phaser.Geom.Rectangle(560, yPos + 10, 200, 36), Phaser.Geom.Rectangle.Contains);
+      container.add(loadBg);
+      var loadTxt = self.add.text(660, yPos + 28, '加载更多...', {
+        fontSize: '15px', color: '#FFFFFF', fontStyle: 'bold'
+      }).setOrigin(0.5).setDepth(405);
+      container.add(loadTxt);
+      loadBg.on('pointerup', function() {
+        self.loadWrongBookData();
+      });
+    }
+
+    // 可滚动交互
+    var hitZone = self.add.zone(660, 335, 960, 450).setInteractive();
+    container.add(hitZone);
+    self.input.setDraggable(hitZone);
+    var contentHeight = yPos - 120 + 80;
+    var minY = Math.min(0, 450 - contentHeight);
+    hitZone.on('drag', function(pointer) {
+      container.y += (pointer.y - pointer.prevPosition.y);
+      container.y = Math.round(container.y);
+      checkScroll();
+    });
+    hitZone.on('wheel', function(pointer, deltaX, deltaY, deltaZ) {
+      container.y -= Math.round(deltaY * 0.5);
+      container.y = Math.round(container.y);
+      checkScroll();
+    });
+
+    function checkScroll() {
+      if (container.y > 0) container.y = 0;
+      if (container.y < minY) container.y = minY;
+    }
+    checkScroll();
+    self.wrongBookContent = container;
+  }
+
+  renderTabButtons();
+  renderRecords(null);
+};
+
 // ================================================================
 // 功能按钮
 // ================================================================
@@ -2655,15 +3359,17 @@ function createActionButtons(scene) {
   var bw = 100, bh = 60, gap = 20;
   var totalW = bw * 5 + gap * 4;
   var startX = 660 - totalW / 2;
-  var btnY = 450;
+  var btnY = 480;
 
   var buttons = [
-    { label: '\u51FA\u724C', color: 0x4ECDC4, key: 'play' },
-    { label: '\u63D0\u793A', color: 0xFFD93D, key: 'hint' },
-    { label: '\u4E0D\u51FA', color: 0xFF6B6B, key: 'pass' },
-    { label: '\u641E\u4E8B\u60C5', color: 0x7C4DFF, key: 'action' },
-    { label: '\u5E95\u724C\u67E5\u770B', color: 0x78909C, key: 'bottom' }
+    { label: '出牌', color: 0x4ECDC4, key: 'play' },
+    { label: '提示', color: 0xFFD93D, key: 'hint' },
+    { label: '不出', color: 0xFF6B6B, key: 'pass' },
+    { label: '搞事情', color: 0x7C4DFF, key: 'action' },
+    { label: '底牌查看', color: 0x29B6F6, key: 'bottom' }
   ];
+
+  var bottomBtnW = 200, bottomBtnH = 50;
 
   if (!scene.actionButtons) scene.actionButtons = [];
 
@@ -2689,11 +3395,33 @@ function createActionButtons(scene) {
           case 'hint': scene.doHint(); break;
           case 'pass': scene.doPlayerPass(); break;
           case 'action': scene.doAction(); break;
-          case 'bottom': scene.showBottomCards(scene.remainingCards); break;
+          case 'bottom':
+            if (scene.gameState === GAME_STATE.BIDDING || scene.gameState === GAME_STATE.INIT) {
+              showToast(scene, '叫分阶段尚未结束，不能查看底牌！');
+            } else {
+              scene.showBottomCards(scene.remainingCards);
+              showToast(scene, '已在顶部中心展示底牌');
+            }
+            break;
         }
       });
     })(b.key);
   }
+
+  // 第二行：错题本按钮
+  var wbBg = scene.add.graphics();
+  wbBg.fillStyle(0x8D6E63, 1);
+  wbBg.fillRoundedRect(560, btnY + 70, bottomBtnW, bottomBtnH, 8).setDepth(100);
+  wbBg.setInteractive(new Phaser.Geom.Rectangle(560, btnY + 70, bottomBtnW, bottomBtnH), Phaser.Geom.Rectangle.Contains);
+  scene.actionButtons.push(wbBg);
+  var wbTxt = scene.add.text(660, btnY + 95, '📖 错题本', {
+    fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+    fontSize: '20px', color: '#FFFFFF', fontStyle: 'bold'
+  }).setOrigin(0.5).setDepth(101);
+  scene.actionButtons.push(wbTxt);
+  wbBg.on('pointerup', function() {
+    scene.showWrongBookUI();
+  });
 }
 
 // ================================================================
@@ -2958,23 +3686,25 @@ GameScene.prototype.renderRoundEndPanel = function (winner) {
 // 出牌记录区域
 // ================================================================
 function createPlayHistoryArea(scene) {
+  var areaWidth = 192;
+  var targetX = 1320 - areaWidth - 12;
   var bg = scene.add.graphics();
   // 颜色加深，增加边框质感
   bg.fillStyle(0x000000, 0.45);
-  bg.fillRoundedRect(12, 58, 160, 250, 8).setDepth(200);
+  bg.fillRoundedRect(targetX, 58, areaWidth, 350, 8).setDepth(200);
   bg.lineStyle(1.5, 0x4CAF50, 0.5);
-  bg.strokeRoundedRect(12, 58, 160, 250, 8).setDepth(200);
+  bg.strokeRoundedRect(targetX, 58, areaWidth, 350, 8).setDepth(200);
 
-  scene.add.text(82, 68, '📜 出牌记录', {
+  scene.add.text(targetX + areaWidth / 2, 68, '📜 出牌记录', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '14px', color: '#A5D6A7', fontStyle: 'bold'
+    fontSize: '16px', color: '#A5D6A7', fontStyle: 'bold'
   }).setOrigin(0.5).setDepth(201);
 
-  scene.playHistoryText = scene.add.text(18, 85, '', {
+  scene.playHistoryText = scene.add.text(targetX + 6, 85, '', {
     fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
-    fontSize: '13px', color: '#FFFFFF',
+    fontSize: '15px', color: '#FFFFFF',
     lineSpacing: 8,
-    wordWrap: { width: 145 }
+    wordWrap: { width: areaWidth - 17 }
   }).setDepth(201);
 }
 
@@ -3009,7 +3739,7 @@ GameScene.prototype.addPlayHistory = function (player, cardsOrPass) {
   }
   this.playHistory.push(entry);
   // 保留最近 9 条记录，避免撑爆面板
-  if (this.playHistory.length > 9) {
+  if (this.playHistory.length > 12) {
     this.playHistory.shift();
   }
   this.renderPlayHistory();
@@ -3177,3 +3907,4 @@ function pickAiLine(aiId, sceneKey) {
   lastUsedLines[historyKey] = picked;
   return picked;
 }
+

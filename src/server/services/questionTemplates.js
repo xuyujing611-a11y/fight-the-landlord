@@ -33,6 +33,7 @@ const PROMPTS = {
 4. 干扰项必须与正确选项属于同类词性，但意义不同
 5. 正确选项是四六级考纲词汇
 6. 给出正确选项的中文释义和句子释义
+7. 【严格字数限制】题干（question）必须在 100 字符以内；explanation 必须在 500 字符以内。
 
 ## Output Format (纯 JSON，不要多余文字)
 {
@@ -49,7 +50,9 @@ const PROMPTS = {
         normal: '四级核心 (4000词)，句子12-18词，干扰项有一定混淆',
         hard: '六级核心 (6000词)，句子15-25词，干扰项容易混淆',
         extreme: '六级+考研 (8000+词)，句子20-30词，干扰项极易混淆' };
-      return `请生成一道${difficulty}难度的四六级词汇选择题。\n${labels[difficulty] || labels.normal}\n按指定的JSON格式输出，不要多余文字。【重要指令】为了保证游戏趣味性，请从极其冷门、罕见或意想不到的角度切入，绝不重复！[随机噪声种子：${Date.now()}_${Math.random()}_${Math.random().toString(36).substr(2, 5)}]`;
+      var topics = ['宇宙天文','人体奥秘','自然地理','远古生物','心理认知','极限运动','人工智能','航空航天','深海探索','未来科技'];
+      var chosenTopic = topics[Math.floor(Math.random() * topics.length)];
+      return `请生成一道${difficulty}难度的四六级词汇选择题，主题为「${chosenTopic}」。\n${labels[difficulty] || labels.normal}\n按指定的JSON格式输出，不要多余文字。【重要指令】为了保证游戏趣味性，请从极其冷门、罕见或意想不到的角度切入，绝不重复！【最后重申：题干绝对不能超过100字，解析绝对不能超过500字符！】[随机噪声种子：${Date.now()}_${Math.random()}_${Math.random().toString(36).substr(2, 5)}]`;
     }
   },
 
@@ -63,6 +66,7 @@ const PROMPTS = {
 2. 题干给出一个日常对话场景 + 包含空缺的英文句子（用 ______ 表示空缺）
 3. 4 个选项 (A/B/C/D)，1 个正确地道表达，3 个干扰项
 4. 干扰项必须是"看起来像但实际不地道"的错误表达（中国学生常犯错误）
+5. 【严格字数限制】题干（question）必须在 100 字符以内；explanation 必须在 500 字符以内。
 
 ## Output Format (纯 JSON)
 {
@@ -80,7 +84,9 @@ const PROMPTS = {
         normal: '日常习语，如 "hit the sack", "under the weather"',
         hard: '隐喻表达，如 "ballpark figure", "the elephant in the room"',
         extreme: '冷门地道，如 "throw someone under the bus"' };
-      return `请生成一道${difficulty}难度的口语表达选择题。\n${desc[difficulty] || desc.normal}\n按指定的JSON格式输出。【重要指令】为了保证游戏趣味性，请从极其冷门、罕见或意想不到的角度切入，绝不重复！[随机噪声种子：${Date.now()}_${Math.random()}_${Math.random().toString(36).substr(2, 5)}]`;
+      var topics = ['餐厅点餐','职场沟通','旅行问路','购物还价','约会社交','课堂讨论','电话礼仪','道歉致谢','抱怨投诉','庆祝祝福'];
+      var chosenTopic = topics[Math.floor(Math.random() * topics.length)];
+      return `请生成一道${difficulty}难度的口语表达选择题，主题场景为「${chosenTopic}」。\n${desc[difficulty] || desc.normal}\n按指定的JSON格式输出。【重要指令】为了保证游戏趣味性，请从极其冷门、罕见或意想不到的角度切入，绝不重复！【最后重申：题干绝对不能超过100字，解析绝对不能超过500字符！】[随机噪声种子：${Date.now()}_${Math.random()}_${Math.random().toString(36).substr(2, 5)}]`;
     }
   },
 
@@ -111,7 +117,9 @@ const PROMPTS = {
         normal: '20-50% 人知道，所有选项都看着像真的',
         hard: '5-20% 人知道，正确答案是最不像真的那个',
         extreme: '<5% 人知道，全是没听过的冷事实' };
-      return `请生成一道${difficulty}难度的冷知识选择题。\n${desc[difficulty] || desc.normal}\n按指定的JSON格式输出。【重要指令】为了保证游戏趣味性，请从极其冷门、罕见或意想不到的角度切入，绝不重复！[随机噪声种子：${Date.now()}_${Math.random()}_${Math.random().toString(36).substr(2, 5)}]`;
+      var topics = ['动物奇趣','人体彩蛋','科学悖论','历史冷门','科技彩蛋','植物奥秘','地质奇观','气象怪谈','数学趣闻','心理错觉'];
+      var chosenTopic = topics[Math.floor(Math.random() * topics.length)];
+      return `请生成一道${difficulty}难度的冷知识选择题，主题为「${chosenTopic}」。\n${desc[difficulty] || desc.normal}\n按指定的JSON格式输出。【重要指令】为了保证游戏趣味性，请从极其冷门、罕见或意想不到的角度切入，绝不重复！【最后重申：题干绝对不能超过100字，解析绝对不能超过500字符！】[随机噪声种子：${Date.now()}_${Math.random()}_${Math.random().toString(36).substr(2, 5)}]`;
     }
   },
 
@@ -142,7 +150,9 @@ const PROMPTS = {
         normal: '多数人半懂，有一个好像听过的伪选项',
         hard: '生活达人级别，每个选项都有人试过',
         extreme: '颠覆常识，正确答案和大多数人认为的相反' };
-      return `请生成一道${difficulty}难度的生活常识选择题。\n${desc[difficulty] || desc.normal}\n按指定的JSON格式输出。【重要指令】为了保证游戏趣味性，请从极其冷门、罕见或意想不到的角度切入，绝不重复！[随机噪声种子：${Date.now()}_${Math.random()}_${Math.random().toString(36).substr(2, 5)}]`;
+      var topics = ['厨房妙招','家居收纳','衣物打理','数码技巧','健康误区','出行省钱','饮食冷门','清洁秘方','园艺技巧','宠物须知'];
+      var chosenTopic = topics[Math.floor(Math.random() * topics.length)];
+      return `请生成一道${difficulty}难度的生活常识选择题，主题为「${chosenTopic}」。\n${desc[difficulty] || desc.normal}\n按指定的JSON格式输出。【重要指令】为了保证游戏趣味性，请从极其冷门、罕见或意想不到的角度切入，绝不重复！【最后重申：题干绝对不能超过100字，解析绝对不能超过500字符！】[随机噪声种子：${Date.now()}_${Math.random()}_${Math.random().toString(36).substr(2, 5)}]`;
     }
   },
 
@@ -168,7 +178,7 @@ const PROMPTS = {
   "difficulty": "extreme"
 }`,
     getUserPrompt: (difficulty) => {
-      return `请生成一道炸弹级混合题，难度${difficulty}，至少混合两种题型元素。\n要求更有趣、更出乎意料。按指定的JSON格式输出。【重要指令】为了保证游戏趣味性，请从极其冷门、罕见或意想不到的角度切入，绝不重复！[随机噪声种子：${Date.now()}_${Math.random()}_${Math.random().toString(36).substr(2, 5)}]`;
+      return `请生成一道炸弹级混合题，难度${difficulty}，至少混合两种题型元素。\n要求更有趣、更出乎意料。按指定的JSON格式输出。【重要指令】为了保证游戏趣味性，请从极其冷门、罕见或意想不到的角度切入，绝不重复！【最后重申：题干绝对不能超过100字，解析绝对不能超过500字符！】[随机噪声种子：${Date.now()}_${Math.random()}_${Math.random().toString(36).substr(2, 5)}]`;
     }
   }
 };
@@ -255,7 +265,7 @@ async function generateQuestion(type, difficulty) {
   try {
     const result = await callLLM(systemPrompt, userPrompt, {
       temperature: 0.85,  // 高一点温度保证创意多样
-      maxTokens: 800
+      maxTokens: 1500
     });
 
     // 补全字段

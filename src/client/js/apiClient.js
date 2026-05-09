@@ -6,6 +6,7 @@
 var API_BASE = (typeof window !== 'undefined' && window.__API_BASE__) ||
   (typeof process !== 'undefined' && process.env && process.env.API_BASE) ||
   (typeof window !== 'undefined' ? (window.location.protocol + '//' + window.location.host) : 'http://localhost:3100');
+var CLIENT_TOKEN = (typeof window !== 'undefined' && window.__CLIENT_TOKEN__) || 'local_dev_key';
 
 var ApiClient = {
   // ============================================================
@@ -238,6 +239,7 @@ function apiPost(path, body) {
     var xhr = new XMLHttpRequest();
     xhr.open('POST', url, true);
     xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.setRequestHeader('x-api-key', CLIENT_TOKEN);
     xhr.onreadystatechange = function () {
       if (xhr.readyState === 4) {
         if (xhr.status >= 200 && xhr.status < 300) {
@@ -263,6 +265,7 @@ function apiGet(path) {
   return new Promise(function (resolve, reject) {
     var xhr = new XMLHttpRequest();
     xhr.open('GET', url, true);
+    xhr.setRequestHeader('x-api-key', CLIENT_TOKEN);
     xhr.onreadystatechange = function () {
       if (xhr.readyState === 4) {
         if (xhr.status >= 200 && xhr.status < 300) {

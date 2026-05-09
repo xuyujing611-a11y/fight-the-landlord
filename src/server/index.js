@@ -16,6 +16,7 @@ require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
+const compression = require('compression');
 const path = require('path');
 
 const aiRouter = require('./routes/ai');
@@ -29,11 +30,21 @@ const resultRouter = require('./routes/result');
 
 const app = express();
 const PORT = process.env.PORT || 3100;
+const rateLimit = require("express-rate-limit");
+
 
 // ============================================================
 // 中间件
 // ============================================================
 app.use(cors());
+app.use(compression());
+
+// 开发模式：禁用缓存，避免浏览器缓存旧版js
+app.use(function(req, res, next) {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  next();
+});
+
 app.use(express.json({ limit: '1mb' }));
 
 // 请求日志
@@ -49,25 +60,27 @@ app.use((req, res, next) => {
 // ============================================================
 // API 认证中间件
 // ============================================================
-const API_KEY = process.env.API_KEY;
+const CLIENT_TOKEN = process.env.CLIENT_TOKEN;
+const llmApiLimiter = rateLimit({ windowMs: 60000, max: 15 });
+const generalApiLimiter = rateLimit({ windowMs: 60000, max: 60 });
 
 /** 如果进程配置了 API_KEY，则所有 /api/* 请求必须携带 x-api-key 头 */
 function checkAuth(req, res, next) {
   // 健康检查跳过认证
   if (req.path === '/health') return next();
 
-  if (API_KEY) {
+  if (CLIENT_TOKEN) {
     const provided = req.headers['x-api-key'];
-    if (!provided || provided !== API_KEY) {
+    if (!provided || provided !== CLIENT_TOKEN) {
       return res.status(401).json({ error: 'Unauthorized', message: 'x-api-key header is required' });
     }
   }
   next();
 }
 
-if (!API_KEY) {
-  console.warn('⚠  WARNING: API_KEY not set. All API endpoints have no authentication.');
-  console.warn('   Set API_KEY in .env for production deployment.');
+if (!CLIENT_TOKEN) {
+  console.warn('⚠  WARNING: CLIENT_TOKEN not set. All API endpoints have no authentication.');
+  console.warn('   Set CLIENT_TOKEN in .env for production deployment.');
 }
 
 // ============================================================
@@ -80,14 +93,14 @@ app.use(express.static(clientPath));
 // 路由
 // ============================================================
 app.use('/api', checkAuth);
-app.use('/api/ai', aiRouter);
-app.use('/api/quiz', quizRouter);
-app.use('/api/verify', verifyRouter);
-app.use('/api/wrong-book', wrongbookRouter);
-app.use('/api/chaos', chaosRouter);
-app.use('/api/bidding', biddingRouter);
+app.use('/api/ai', llmApiLimiter, aiRouter);
+app.use('/api/quiz', llmApiLimiter, quizRouter);
+app.use('/api/verify', generalApiLimiter, verifyRouter);
+app.use('/api/wrong-book', generalApiLimiter, wrongbookRouter);
+app.use('/api/chaos', llmApiLimiter, chaosRouter);
+app.use('/api/bidding', generalApiLimiter, biddingRouter);
 app.use('/api/ai/dialogue', dialogueRouter);
-app.use('/api/game', resultRouter);
+app.use('/api/game', generalApiLimiter, resultRouter);
 
 // 健康检查
 app.get('/api/health', (req, res) => {

@@ -11,6 +11,7 @@
  */
 
 const fs = require('fs');
+const fsPromises = fs.promises;
 const path = require('path');
 const { callLLM } = require('./llmService');
 
@@ -335,9 +336,30 @@ function readEventLog() {
   }
 }
 
+// 写入锁
+let _evIsWriting = false;
+let _evPendingWrite = null;
+
+async function _evFlushWrite() {
+  if (_evIsWriting) return;
+  _evIsWriting = true;
+  while (_evPendingWrite) {
+    const data = _evPendingWrite;
+    _evPendingWrite = null;
+    try {
+      const dir = path.dirname(EVENT_LOG_PATH);
+      await fsPromises.mkdir(dir, { recursive: true });
+      await fsPromises.writeFile(EVENT_LOG_PATH, JSON.stringify(data, null, 2));
+    } catch (e) {
+      console.warn('[EventEngine] Save error:', e.message);
+    }
+  }
+  _evIsWriting = false;
+}
+
 function writeEventLog(logs) {
-  ensureLogFile();
-  fs.writeFileSync(EVENT_LOG_PATH, JSON.stringify(logs, null, 2));
+  _evPendingWrite = logs;
+  _evFlushWrite();
 }
 
 const MAX_EVENT_LOG = 500;
